@@ -1,9 +1,9 @@
 #pragma once
 
 #include "cpu_info_data.hpp"
+#include "logger.hpp"
 #include "measurer.hpp"
 #include "cache_measurer.hpp"
-#include "logger.hpp"
 #include <memory>
 #include <vector>
 #include <string>

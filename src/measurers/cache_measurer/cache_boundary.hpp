@@ -20,9 +20,8 @@ struct Statistics {
 };
 
 struct BoundaryAnalyzerConfig {
-    double growth_factor = 2.0;           // во сколько раз может вырасти latency, оставаясь в кэше
-    int baseline_samples = 5;
-    int test_samples = 3;
+    double growth_factor = 2.0;  // ratio threshold
+    int test_samples = 3;         // measurements per point
 };
 
 class BoundaryAnalyzer {
@@ -52,25 +51,12 @@ public:
         return stats;
     }
     
-    bool is_out_of_cache(double value, double baseline_mean) const {
-        if (value <= baseline_mean) return false;
-        
-        double ratio = value / baseline_mean;
-        bool result = ratio > config_.growth_factor;
-        
-        std::cout << "    ratio=" << ratio 
-                  << ", threshold=" << config_.growth_factor
-                  << " => " << (result ? "OUT" : "IN") << std::endl;
-        
-        return result;
-    }
-
     template<typename F>
     size_t refine_boundary(size_t left, size_t right, size_t precision, F measure_func,
                           double baseline_mean) {
         
-        std::cout << "[Boundary] Fixed baseline mean=" << baseline_mean 
-                  << ", growth threshold=" << config_.growth_factor << "x" << std::endl;
+        std::cout << "[Boundary] Baseline mean=" << baseline_mean 
+                  << ", threshold=" << config_.growth_factor << "x" << std::endl;
         
         size_t current_left = left;
         size_t current_right = right;
@@ -86,7 +72,10 @@ public:
             auto test_stats = compute_stats(test);
             
             std::cout << "[Boundary] Size " << mid << ": mean=" << test_stats.mean;
-            bool out = is_out_of_cache(test_stats.mean, baseline_mean);
+            double ratio = test_stats.mean / baseline_mean;
+            bool out = ratio > config_.growth_factor;
+            
+            std::cout << " ratio=" << ratio << " threshold=" << config_.growth_factor;
             
             if (!out) {
                 std::cout << "  --> IN cache (moving left)";
@@ -98,7 +87,10 @@ public:
             std::cout << std::endl;
         }
         
-        return (current_left + current_right) / 2;
+        size_t result = (current_left + current_right) / 2;
+        std::cout << "[Boundary] Final boundary: " << result << " bytes" << std::endl;
+        
+        return result;
     }
     
 private:

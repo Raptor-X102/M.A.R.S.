@@ -1,86 +1,76 @@
 #include "logger.hpp"
+#include <cstdio>
+#include <ctime>
+#include <cstring>
+#include <iostream>
+#include <mutex>
+#include <cstdarg>
 
 namespace logging {
 
-// --- LogStream Implementation ---
-
+// ---------- LogStream ----------
 LogStream::LogStream(Logger* logger, LogLevel level, const char* file, int line, const char* func)
     : logger_(logger), level_(level), file_(file), line_(line), func_(func) {}
 
 LogStream::~LogStream() {
     if (logger_) {
-        logger_->log(level_, oss_.str(), file_, line_, func_);
+        // Используем log() вместо vlog(), потому что у нас есть строка
+        logger_->log(level_, file_, line_, func_, "%s", oss_.str().c_str());
     }
 }
 
-// Move constructor
 LogStream::LogStream(LogStream&& other) noexcept
-    : logger_(other.logger_)
-    , level_(other.level_)
-    , file_(other.file_)
-    , line_(other.line_)
-    , func_(other.func_)
-    , oss_(std::move(other.oss_)) {
-    
-    other.logger_ = nullptr; // Invalidate source
+    : logger_(other.logger_), level_(other.level_), file_(other.file_), line_(other.line_),
+      func_(other.func_), oss_(std::move(other.oss_)) {
+    other.logger_ = nullptr;
 }
 
-// Move assignment
 LogStream& LogStream::operator=(LogStream&& other) noexcept {
     if (this != &other) {
-        // Flush current buffer before moving
         if (logger_) {
-            logger_->log(level_, oss_.str(), file_, line_, func_);
+            logger_->log(level_, file_, line_, func_, "%s", oss_.str().c_str());
         }
-        
         logger_ = other.logger_;
         level_ = other.level_;
         file_ = other.file_;
         line_ = other.line_;
         func_ = other.func_;
         oss_ = std::move(other.oss_);
-        
         other.logger_ = nullptr;
     }
     return *this;
 }
 
-// --- Logger Implementation ---
-
+// ---------- Logger ----------
 Logger& Logger::instance() {
     static Logger logger;
     return logger;
 }
 
 void Logger::initialize(const Config& config) {
-    Logger& logger = instance();
-    std::lock_guard<std::mutex> lock(logger.mutex_);
-    
-    logger.config_ = config;
-    
+    std::lock_guard<std::mutex> lock(instance().mutex_);
+    instance().config_ = config;
     if (!config.log_file.empty()) {
-        logger.file_stream_.open(config.log_file.c_str(), 
-                                  std::ios::out | std::ios::app);
-        if (!logger.file_stream_.is_open()) {
-            std::cerr << "[Logger] Failed to open log file: " 
-                      << config.log_file << std::endl;
+        instance().file_stream_ = std::fopen(config.log_file.c_str(), "a");
+        if (!instance().file_stream_) {
+            std::fprintf(stderr, "[Logger] Failed to open log file: %s\n", config.log_file.c_str());
         }
     }
-    
-    logger.initialized_ = true;
+    instance().initialized_ = true;
 }
 
 void Logger::shutdown() {
-    Logger& logger = instance();
+    auto& logger = instance();
     std::lock_guard<std::mutex> lock(logger.mutex_);
     logger.flush();
-    if (logger.file_stream_.is_open()) {
-        logger.file_stream_.close();
+    if (logger.file_stream_) {
+        std::fclose(logger.file_stream_);
+        logger.file_stream_ = nullptr;
     }
     logger.initialized_ = false;
 }
 
-Logger::Logger() : initialized_(false) {}
+Logger::Logger() : file_stream_(nullptr), initialized_(false) {}
 
 Logger::~Logger() {
     shutdown();
@@ -97,14 +87,12 @@ LogLevel Logger::get_level() const {
 
 void Logger::set_output_file(const std::string& filepath) {
     std::lock_guard<std::mutex> lock(mutex_);
-    
-    if (file_stream_.is_open()) {
-        file_stream_.close();
+    if (file_stream_) {
+        std::fclose(file_stream_);
     }
-    
-    file_stream_.open(filepath.c_str(), std::ios::out | std::ios::app);
-    if (!file_stream_.is_open()) {
-        std::cerr << "[Logger] Failed to open log file: " << filepath << std::endl;
+    file_stream_ = std::fopen(filepath.c_str(), "a");
+    if (!file_stream_) {
+        std::fprintf(stderr, "[Logger] Failed to open log file: %s\n", filepath.c_str());
     }
 }
 
@@ -118,20 +106,77 @@ void Logger::set_flush_on_write(bool flush) {
     config_.flush_on_write = flush;
 }
 
-void Logger::log(LogLevel level, const std::string& message,
-                 const char* file, int line, const char* func) {
-    if (level < config_.min_level) {
-        return;
+void Logger::log(LogLevel level, const char* file, int line, const char* func, const char* format, ...) {
+    if (level < config_.min_level) return;
+
+    va_list args;
+    va_start(args, format);
+    vlog(level, file, line, func, format, args);
+    va_end(args);
+}
+
+void Logger::vlog(LogLevel level, const char* file, int line, const char* func, const char* format, va_list args) {
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    // Префикс (время, уровень, место)
+    std::string prefix;
+    if (config_.include_timestamp) {
+        std::time_t t = std::time(nullptr);
+        char time_buf[32];
+        std::strftime(time_buf, sizeof(time_buf), "%Y-%m-%d %H:%M:%S", std::localtime(&t));
+        prefix += time_buf;
+        prefix += ' ';
+    }
+    if (config_.include_level) {
+        prefix += '[';
+        prefix += log_level_to_string(level);
+        prefix += "] ";
+    }
+    if (config_.include_location) {
+        const char* filename = std::strrchr(file, '/');
+        filename = filename ? filename + 1 : file;
+#ifdef _WIN32
+        const char* win_filename = std::strrchr(filename, '\\');
+        filename = win_filename ? win_filename + 1 : filename;
+#endif
+        prefix += '[';
+        prefix += filename;
+        prefix += ':';
+        prefix += std::to_string(line);
+        if (func) {
+            prefix += " (";
+            prefix += func;
+            prefix += ')';
+        }
+        prefix += "] ";
     }
 
-    std::string formatted;
-    {
-        std::lock_guard<std::mutex> lock(mutex_);
-        formatted = format_message(level, message, file, line, func, std::time(NULL));
-        write_output(formatted);
-        
+    // Форматируем тело
+    va_list args_copy;
+    va_copy(args_copy, args);
+    int needed = std::vsnprintf(nullptr, 0, format, args_copy);
+    va_end(args_copy);
+    if (needed < 0) return;
+
+    std::string body(needed + 1, '\0');
+    std::vsnprintf(&body[0], body.size(), format, args);
+    body.resize(needed);
+
+    write_formatted(prefix, body, level);
+}
+
+void Logger::write_formatted(const std::string& prefix, const std::string& body, LogLevel level) {
+    if (config_.console_output) {
+        std::fwrite(prefix.data(), 1, prefix.size(), stdout);
+        std::fwrite(body.data(), 1, body.size(), stdout);
+        std::fputc('\n', stdout);
+    }
+    if (file_stream_) {
+        std::fwrite(prefix.data(), 1, prefix.size(), file_stream_);
+        std::fwrite(body.data(), 1, body.size(), file_stream_);
+        std::fputc('\n', file_stream_);
         if (config_.flush_on_write || level >= LOG_ERROR) {
-            flush();
+            std::fflush(file_stream_);
         }
     }
 }
@@ -140,61 +185,12 @@ LogStream Logger::stream(LogLevel level, const char* file, int line, const char*
     return LogStream(this, level, file, line, func);
 }
 
-std::string Logger::format_message(LogLevel level, const std::string& message,
-                                   const char* file, int line, 
-                                   const char* func, std::time_t timestamp) {
-    std::ostringstream oss;
-    
-    if (config_.include_timestamp) {
-        oss << format_timestamp(timestamp) << " ";
-    }
-    
-    if (config_.include_level) {
-        oss << "[" << log_level_to_string(level) << "] ";
-    }
-    
-    if (config_.include_location) {
-        const char* filename = std::strrchr(file, '/');
-        filename = filename ? filename + 1 : file;
-#ifdef _WIN32
-        const char* win_filename = std::strrchr(filename, '\\');
-        filename = win_filename ? win_filename + 1 : filename;
-#endif
-        oss << "[" << filename << ":" << line;
-        if (func) {
-            oss << " (" << func << ")";
-        }
-        oss << "] ";
-    }
-    
-    oss << message;
-    
-    return oss.str();
-}
-
-std::string Logger::format_timestamp(std::time_t timestamp) {
-    std::tm* tm_info = std::localtime(&timestamp);
-    char buffer[26];
-    std::strftime(buffer, 26, "%Y-%m-%d %H:%M:%S", tm_info);
-    return std::string(buffer);
-}
-
-void Logger::write_output(const std::string& formatted_message) {
-    if (config_.console_output) {
-        std::cout << formatted_message << std::endl;
-    }
-    
-    if (file_stream_.is_open()) {
-        file_stream_ << formatted_message << std::endl;
-    }
-}
-
 void Logger::flush() {
     if (config_.console_output) {
-        std::cout.flush();
+        std::fflush(stdout);
     }
-    if (file_stream_.is_open()) {
-        file_stream_.flush();
+    if (file_stream_) {
+        std::fflush(file_stream_);
     }
 }
 

@@ -41,10 +41,15 @@ void CacheMeasurer::measure_l1(CPUInfoData& data) {
         config_.cache_min_size * cache_line_size_,
         config_.l1_max);
     
-    data.l1d_size = CacheMeasurer::refine_boundary(results, detect_boundary(results));
+    auto boundary = detect_boundary(results);
     
-    if (data.l1d_size) {
+    if (boundary.index > 0 && boundary.index < results.size()) {
+        data.l1d_size = refine_boundary(results, boundary);
+        data.cache_line_size = cache_line_size_;
         LOG_INFO_STREAM << "L1d size detected: " << *data.l1d_size << " bytes";
+    } else if (boundary.index == 0) {
+        data.l1d_size = results[0].size_bytes;
+        LOG_WARNING_STREAM << "L1d may be smaller than " << *data.l1d_size << " bytes";
     } else {
         LOG_WARNING("L1d size detection failed");
     }
@@ -57,10 +62,15 @@ void CacheMeasurer::measure_l2(CPUInfoData& data) {
         config_.l1_max,
         config_.l2_max);
     
-    data.l2_size = CacheMeasurer::refine_boundary(results, detect_boundary(results));
+    auto boundary = detect_boundary(results);
     
-    if (data.l2_size) {
+    if (boundary.index > 0 && boundary.index < results.size()) {
+        data.l2_size = refine_boundary(results, boundary);
+        data.cache_line_size = cache_line_size_;
         LOG_INFO_STREAM << "L2 size detected: " << *data.l2_size << " bytes";
+    } else if (boundary.index == 0) {
+        data.l2_size = results[0].size_bytes;
+        LOG_WARNING_STREAM << "L2 may be smaller than " << *data.l2_size << " bytes";
     } else {
         LOG_WARNING("L2 size detection failed");
     }
@@ -73,10 +83,15 @@ void CacheMeasurer::measure_l3(CPUInfoData& data) {
         config_.l2_max,
         config_.l3_max);
     
-    data.l3_size = CacheMeasurer::refine_boundary(results, detect_boundary(results));
-    
-    if (data.l3_size) {
+    auto boundary = detect_boundary(results);
+   
+    if (boundary.index > 0 && boundary.index < results.size()) {
+        data.l3_size = refine_boundary(results, boundary);
+        data.cache_line_size = cache_line_size_;
         LOG_INFO_STREAM << "L3 size detected: " << *data.l3_size << " bytes";
+    } else if (boundary.index == 0) {
+        data.l3_size = results[0].size_bytes;
+        LOG_WARNING_STREAM << "L3 may be smaller than " << *data.l3_size << " bytes";
     } else {
         LOG_WARNING("L3 size detection failed");
     }
@@ -113,75 +128,104 @@ std::vector<CacheMeasurer::MeasurementResult> CacheMeasurer::measure_range(
     return results;
 }
 
+BoundaryResult CacheMeasurer::detect_boundary(const std::vector<MeasurementResult>& results) const {
+    BoundaryResult res;
+    res.index = results.size();
+    res.baseline_latency = 0.0;
+    
+    if (results.size() < 3) return res;
+    
+    // First 3 points are definitely in L1
+    double sum = 0.0;
+    for (size_t i = 0; i < 3; ++i) {
+        sum += results[i].cycles_per_element;
+    }
+    res.baseline_latency = sum / 3.0;
+    
+    // Dynamic threshold based on current size
+    for (size_t i = 1; i < results.size(); ++i) {
+        double ratio = results[i].cycles_per_element / res.baseline_latency;
+        
+        // Determine threshold based on approximate cache level
+        double threshold;
+        if (results[i].size_bytes < L1_MAX_SIZE) {
+            threshold = L1_GROWTH_FACTOR;  // 2.0
+        } else if (results[i].size_bytes < L2_MAX_SIZE) {
+            threshold = L2_GROWTH_FACTOR;  // 2.2
+        } else {
+            threshold = L3_GROWTH_FACTOR;  // 2.5
+        }
+        
+        if (ratio >= threshold) {
+            res.index = i;
+            break;
+        }
+    }
+    
+    return res;
+}
+
 CacheMeasurer::MeasurementResult CacheMeasurer::do_single_measurement(size_t size) {
-
     size_t count = size / cache_line_size_;
+    
+    // Calculate iterations to achieve target total accesses
+    size_t iterations = TARGET_ACCESSES / count;
+    if (iterations < MIN_ITERATIONS) iterations = MIN_ITERATIONS;
+    if (iterations > MAX_ITERATIONS) iterations = MAX_ITERATIONS;
+    
     CacheProfilerList list(cache_line_size_, count, config_.seed);
-    volatile CacheProfilerList::Element* ptr = list.get_first();
-    size_t max_iterations = config_.measure_iterations;
-    if (size >= SIZE_WITH_DEF_ITER_SIZE) 
-        max_iterations /= size / SIZE_WITH_DEF_ITER_SIZE;
-
     flush_cache_and_warmup(list, count);
-
+    
+    volatile CacheProfilerList::Element* ptr = list.get_first();
     uint64_t start = arch::tick();
-    for (size_t iterations = 0; iterations < config_.measure_iterations; ++iterations) {
-        for (size_t elem_index = 0; elem_index < count; ++elem_index) {
+    for (size_t iter = 0; iter < iterations; ++iter) {
+        for (size_t i = 0; i < count; ++i) {
             ptr = ptr->next;
         }
     }
     uint64_t end = arch::tick();
     
-    double cpe = static_cast<double>(end - start) / count / config_.measure_iterations;
-    
+    double cpe = static_cast<double>(end - start) / (count * iterations);
     LOG_DEBUG_STREAM << "Size=" << size << ", cycles/elem=" << cpe;
     return MeasurementResult(size, cpe);
 }
 
-std::vector<CacheMeasurer::MeasurementResult>::const_iterator 
-CacheMeasurer::detect_boundary(const std::vector<MeasurementResult>& results) const {
+size_t CacheMeasurer::refine_boundary(const std::vector<MeasurementResult>& results,
+                                      BoundaryResult& result) {
     
-    if (results.size() < 3) {
-        return results.end();  
-    }
+    size_t left = results[result.index - 1].size_bytes;
+    size_t right = results[result.index].size_bytes;
     
-    double base = results[0].cycles_per_element;
+    // Collect stable baseline samples from points before boundary
+    std::vector<double> baseline_samples;
+    double prev = results[result.index - 1].cycles_per_element;
+    baseline_samples.push_back(prev);
     
-    for (auto it = results.begin(); it != results.end(); ++it) {
-        double ratio = it->cycles_per_element / base;
-        if (ratio > LATENCY_TRESHOLD) { 
-            return it;
+    for (size_t i = 2; i <= BASELINE_SAMPLES && i <= result.index; ++i) {
+        double cur = results[result.index - i].cycles_per_element;
+        if (std::abs(cur - prev) / prev < STABILITY_THRESHOLD) {
+            baseline_samples.push_back(cur);
+            prev = cur;
+        } else {
+            break;
         }
     }
     
-    LOG_WARNING_STREAM << "Measurements did not detect latency jump. Returning largest size";
-    return std::prev(results.end());
-}
-
-std::optional<size_t> CacheMeasurer::refine_boundary(
-    const std::vector<MeasurementResult>& results,
-    std::vector<MeasurementResult>::const_iterator boundary_it) {
+    double baseline_latency = std::accumulate(baseline_samples.begin(), baseline_samples.end(), 0.0)
+                              / baseline_samples.size();
     
-    if (boundary_it == results.begin() || boundary_it == results.end()) {
-        return std::nullopt; 
+    // Growth factor for refinement (more aggressive than detection)
+    double growth_factor;
+    if (right < L1_MAX_SIZE) {
+        growth_factor = L1_GROWTH_FACTOR;           // 2.0
+    } else if (right < L2_MAX_SIZE) {
+        growth_factor = L2_GROWTH_FACTOR * 1.5;    // 2.2 * 1.15 = 2.53
+    } else {
+        growth_factor = L3_GROWTH_FACTOR;           // 2.5
     }
     
-    size_t index = boundary_it - results.begin();
-    return refine_boundary(results, index);
-}
-
-size_t CacheMeasurer::refine_boundary(
-    const std::vector<MeasurementResult>& results,
-    size_t boundary_index) {
-    
-    size_t left = results[boundary_index - 1].size_bytes;
-    size_t right = results[boundary_index].size_bytes;
-    
-    // Фиксированный baseline - последний размер, который точно в кэше
-    double baseline = results[boundary_index - 1].cycles_per_element;
-    
     BoundaryAnalyzerConfig cfg;
-    cfg.growth_factor = 1.5;      // допустим рост до 2х раз (L1: 5→10, L2: 30→60, L3: 100→200)
+    cfg.growth_factor = growth_factor;
     cfg.test_samples = 3;
     
     BoundaryAnalyzer analyzer(cfg);
@@ -190,5 +234,5 @@ size_t CacheMeasurer::refine_boundary(
         return do_single_measurement(size).cycles_per_element;
     };
     
-    return analyzer.refine_boundary(left, right, config_.precision, measure, baseline);
+    return analyzer.refine_boundary(left, right, config_.precision, measure, baseline_latency);
 }
