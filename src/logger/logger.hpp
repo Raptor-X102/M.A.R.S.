@@ -5,8 +5,9 @@
 #include <cstdio>
 #include <mutex>
 #include <ctime>
-#include <iostream>
 #include <sstream>
+#include <memory>
+#include <iostream>
 
 namespace logging {
 
@@ -50,6 +51,36 @@ private:
     int line_;
     const char* func_;
     std::ostringstream oss_;
+};
+
+// Прокси-класс для условного логирования
+class LogStreamProxy {
+public:
+    LogStreamProxy(Logger* logger, LogLevel level, const char* file, int line, const char* func, bool active)
+        : active_(active) {
+        if (active_) {
+            stream_ = std::make_unique<LogStream>(logger, level, file, line, func);
+        }
+    }
+
+    template<typename T>
+    LogStreamProxy& operator<<(const T& val) {
+        if (active_) {
+            (*stream_) << val;
+        }
+        return *this;
+    }
+
+    LogStreamProxy& operator<<(std::ostream& (*manip)(std::ostream&)) {
+        if (active_) {
+            (*stream_) << manip;
+        }
+        return *this;
+    }
+
+private:
+    bool active_;
+    std::unique_ptr<LogStream> stream_;
 };
 
 // Основной класс логгера
@@ -129,10 +160,9 @@ private:
 #define LOG_FATAL(...) LOG(::logging::LOG_FATAL, __VA_ARGS__)
 
 // ---------- ПОТОКОВЫЕ МАКРОСЫ (ТОЖЕ НЕ ВЫЧИСЛЯЮТ АРГУМЕНТЫ) ----------
-#define LOG_STREAM(level)                                                        \
-    for (bool _logged = false; !_logged;)                                       \
-        for (bool _cond = ::logging::Logger::instance().get_level() <= (level); !_logged && _cond; _logged = true) \
-            ::logging::Logger::instance().stream((level), __FILE__, __LINE__, __FUNCTION__)
+#define LOG_STREAM(level) \
+    logging::LogStreamProxy(&::logging::Logger::instance(), (level), __FILE__, __LINE__, __FUNCTION__, \
+        ::logging::Logger::instance().get_level() <= (level))
 
 #define LOG_TRACE_STREAM LOG_STREAM(::logging::LOG_TRACE)
 #define LOG_DEBUG_STREAM LOG_STREAM(::logging::LOG_DEBUG)

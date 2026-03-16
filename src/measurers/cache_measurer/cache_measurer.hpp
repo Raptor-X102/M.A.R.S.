@@ -1,13 +1,14 @@
 #pragma once
 
-#include "measurer.hpp"
-#include "cache_profiler_list.hpp"
-#include "os.hpp"
-#include "arch.hpp"
 #include <vector>
 #include <optional>
 #include <cmath>
 #include <bitset>
+#include "measurer.hpp"
+#include "cache_profiler_list.hpp"
+#include "os.hpp"
+#include "arch.hpp"
+#include "logger.hpp"
 
 enum class CacheLevel {
     L1D = 0,

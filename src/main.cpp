@@ -4,11 +4,11 @@
 int main() {
     logging::Logger::Config config;
     config.min_level = logging::LOG_INFO;
+    config.console_output = true;
+    config.flush_on_write = true;
     config.include_timestamp = true;
     config.include_location = true;
     config.include_level = true;
-    config.console_output = true;
-    
     logging::Logger::initialize(config);
     
     try {

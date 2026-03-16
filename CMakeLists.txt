@@ -31,11 +31,30 @@ add_library(logger STATIC
     src/logger/logger.cpp
 )
 
+target_include_directories(logger PUBLIC ${CMAKE_SOURCE_DIR}/src/logger)
+
 # ------------------------------------------------------------------
-# OS - статическая библиотека (теперь с реализацией)
-add_library(os STATIC 
-    src/os/os_linux.cpp
-)
+# OS - статическая библиотека
+add_library(os STATIC)
+
+# Добавляем исходники в зависимости от платформы
+if(UNIX AND NOT APPLE)
+    target_sources(os PRIVATE src/os/os_linux.cpp)
+elseif(WIN32)
+    target_sources(os PRIVATE src/os/os_windows.cpp)
+elseif(APPLE)
+    target_sources(os PRIVATE src/os/os_macos.cpp)
+else()
+    message(FATAL_ERROR "Unsupported operating system")
+endif()
+
+target_include_directories(os PUBLIC ${CMAKE_SOURCE_DIR}/src/os)
+target_link_libraries(os PRIVATE logger)
+
+# Для Linux добавляем pthread
+if(UNIX AND NOT APPLE)
+    target_link_libraries(os PRIVATE pthread)
+endif()
 
 # ------------------------------------------------------------------
 # Cache Profiler - статическая библиотека
@@ -44,7 +63,10 @@ add_library(cache_profiler STATIC
     src/measurers/cache_measurer/cache_profiler_list.cpp
 )
 
-# Явно указываем зависимости для cache_profiler
+target_include_directories(cache_profiler PUBLIC 
+    ${CMAKE_SOURCE_DIR}/src/measurers/cache_measurer
+)
+
 target_link_libraries(cache_profiler 
     PUBLIC
         os
@@ -52,8 +74,12 @@ target_link_libraries(cache_profiler
 )
 
 # ------------------------------------------------------------------
-# Measurers - интерфейсная библиотека (объединяет все измерители)
+# Measurers - интерфейсная библиотека
 add_library(measurers INTERFACE)
+
+target_include_directories(measurers INTERFACE 
+    ${CMAKE_SOURCE_DIR}/src/measurers
+)
 
 target_link_libraries(measurers 
     INTERFACE
@@ -66,6 +92,10 @@ target_link_libraries(measurers
 # CPU Info - статическая библиотека
 add_library(cpu_info STATIC
     src/cpu_info/cpu_info.cpp
+)
+
+target_include_directories(cpu_info PUBLIC 
+    ${CMAKE_SOURCE_DIR}/src/cpu_info
 )
 
 target_link_libraries(cpu_info
@@ -93,6 +123,6 @@ target_link_libraries(silicon_probe
 )
 
 # ------------------------------------------------------------------
-# Если нужны тесты - раскомментировать
+# Тесты (опционально)
 # enable_testing()
 # add_subdirectory(tests)

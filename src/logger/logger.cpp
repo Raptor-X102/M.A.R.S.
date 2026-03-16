@@ -1,10 +1,10 @@
-#include "logger.hpp"
 #include <cstdio>
 #include <ctime>
 #include <cstring>
 #include <iostream>
 #include <mutex>
 #include <cstdarg>
+#include "logger.hpp"
 
 namespace logging {
 

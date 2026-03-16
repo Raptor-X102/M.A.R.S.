@@ -1,7 +1,3 @@
-#include "os_linux.hpp"
-#include "logger.hpp"
-#include "arch.hpp" // Included here for tick()
-
 #include <pthread.h>
 #include <sched.h>
 #include <unistd.h>
@@ -10,6 +6,10 @@
 #include <cpuid.h>
 #include <cstring>
 #include <ctime>
+#include <cerrno>
+#include "logger.hpp"  
+#include "arch.hpp"
+#include "os_linux.hpp"
 
 namespace os {
 
