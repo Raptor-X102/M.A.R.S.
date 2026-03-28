@@ -1,13 +1,13 @@
 #pragma once
 
+#include <cpuid.h>
 #include <cstdint>
 #include <x86intrin.h>
-#include <cpuid.h>
 
-namespace arch {
+namespace silicon_probe::platform::arch {
 
 inline uint64_t tick() {
-    unsigned int aux;
+    unsigned int aux = 0;
     return __rdtscp(&aux);
 }
 
@@ -27,4 +27,4 @@ inline void stream_store(void* ptr, uint32_t value) {
     _mm_stream_si32(static_cast<int*>(ptr), static_cast<int>(value));
 }
 
-} // namespace arch
+} // namespace silicon_probe::platform::arch

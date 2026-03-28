@@ -1,128 +1,158 @@
-cmake_minimum_required(VERSION 3.10)
-project(SiliconProbe CXX)
+cmake_minimum_required(VERSION 3.20)
 
-set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
+project(SiliconProbe
+  VERSION 0.1.0
+  LANGUAGES CXX
+)
+
+option(SP_BUILD_APPS        "Build command line applications" ON)
+option(SP_BUILD_TESTS       "Build tests" OFF)
+option(SP_ENABLE_SANITIZERS "Enable ASan/UBSan (non-MSVC)" OFF)
+option(SP_ENABLE_WERROR     "Treat warnings as errors" OFF)
+
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -pthread")
-set(CMAKE_CXX_FLAGS_RELEASE "-O3 -march=native -DNDEBUG")
-set(CMAKE_CXX_FLAGS_DEBUG "-g -O0 -DDEBUG")
+find_package(CLI11 CONFIG REQUIRED)
+find_package(spdlog CONFIG REQUIRED)
+find_package(Threads REQUIRED)
 
-if(NOT CMAKE_BUILD_TYPE)
-    set(CMAKE_BUILD_TYPE Release)
-endif()
+add_library(sp_options INTERFACE)
+add_library(sp::options ALIAS sp_options)
+target_compile_features(sp_options INTERFACE cxx_std_17)
+target_compile_definitions(sp_options INTERFACE SPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_TRACE)
 
-# ------------------------------------------------------------------
-# Базовые директории с заголовками для всех целей
-include_directories(
-    ${CMAKE_SOURCE_DIR}/src
-    ${CMAKE_SOURCE_DIR}/src/arch
-    ${CMAKE_SOURCE_DIR}/src/os
-    ${CMAKE_SOURCE_DIR}/src/logger
-    ${CMAKE_SOURCE_DIR}/src/measurers
-    ${CMAKE_SOURCE_DIR}/src/measurers/cache_measurer
-    ${CMAKE_SOURCE_DIR}/src/cpu_info
+add_library(sp_warnings INTERFACE)
+add_library(sp::warnings ALIAS sp_warnings)
+target_compile_options(sp_warnings INTERFACE
+  $<$<CXX_COMPILER_ID:MSVC>:/W4>
+  $<$<AND:$<CXX_COMPILER_ID:MSVC>,$<BOOL:${SP_ENABLE_WERROR}>>:/WX>
+  $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-Wall -Wextra -Wpedantic>
+  $<$<AND:$<NOT:$<CXX_COMPILER_ID:MSVC>>,$<BOOL:${SP_ENABLE_WERROR}>>:-Werror>
 )
 
-# ------------------------------------------------------------------
-# Logger - статическая библиотека
-add_library(logger STATIC 
-    src/logger/logger.cpp
+add_library(sp_sanitizers INTERFACE)
+add_library(sp::sanitizers ALIAS sp_sanitizers)
+target_compile_options(sp_sanitizers INTERFACE
+  $<$<AND:$<BOOL:${SP_ENABLE_SANITIZERS}>,$<NOT:$<CXX_COMPILER_ID:MSVC>>>:-fsanitize=address,undefined -fno-omit-frame-pointer>
+)
+target_link_options(sp_sanitizers INTERFACE
+  $<$<AND:$<BOOL:${SP_ENABLE_SANITIZERS}>,$<NOT:$<CXX_COMPILER_ID:MSVC>>>:-fsanitize=address,undefined>
 )
 
-target_include_directories(logger PUBLIC ${CMAKE_SOURCE_DIR}/src/logger)
+add_library(sp_infra_logging STATIC
+  src/infra/logging.cpp
+)
+add_library(sp::infra_logging ALIAS sp_infra_logging)
+target_link_libraries(sp_infra_logging
+  PUBLIC
+    sp::options
+    sp::sanitizers
+    spdlog::spdlog
+  PRIVATE
+    sp::warnings
+)
+target_include_directories(sp_infra_logging
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+)
 
-# ------------------------------------------------------------------
-# OS - статическая библиотека
-add_library(os STATIC)
-
-# Добавляем исходники в зависимости от платформы
+add_library(sp_platform STATIC)
+add_library(sp::platform ALIAS sp_platform)
 if(UNIX AND NOT APPLE)
-    target_sources(os PRIVATE src/os/os_linux.cpp)
-elseif(WIN32)
-    target_sources(os PRIVATE src/os/os_windows.cpp)
-elseif(APPLE)
-    target_sources(os PRIVATE src/os/os_macos.cpp)
+  target_sources(sp_platform PRIVATE src/platform/linux/os_linux.cpp)
 else()
-    message(FATAL_ERROR "Unsupported operating system")
+  message(FATAL_ERROR "Unsupported platform: SiliconProbe currently supports Linux only")
 endif()
-
-target_include_directories(os PUBLIC ${CMAKE_SOURCE_DIR}/src/os)
-target_link_libraries(os PRIVATE logger)
-
-# Для Linux добавляем pthread
-if(UNIX AND NOT APPLE)
-    target_link_libraries(os PRIVATE pthread)
-endif()
-
-# ------------------------------------------------------------------
-# Cache Profiler - статическая библиотека
-add_library(cache_profiler STATIC
-    src/measurers/cache_measurer/cache_measurer.cpp
-    src/measurers/cache_measurer/cache_profiler_list.cpp
+target_link_libraries(sp_platform
+  PUBLIC
+    sp::options
+    sp::sanitizers
+    sp::infra_logging
+    Threads::Threads
+  PRIVATE
+    sp::warnings
+)
+target_include_directories(sp_platform
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
 )
 
-target_include_directories(cache_profiler PUBLIC 
-    ${CMAKE_SOURCE_DIR}/src/measurers/cache_measurer
+add_library(sp_core STATIC
+  src/core/measurer_registry.cpp
+  src/core/probe_service.cpp
+  src/core/summary_printer.cpp
+)
+add_library(sp::core ALIAS sp_core)
+target_link_libraries(sp_core
+  PUBLIC
+    sp::options
+    sp::sanitizers
+    sp::infra_logging
+  PRIVATE
+    sp::warnings
+)
+target_include_directories(sp_core
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
 )
 
-target_link_libraries(cache_profiler 
-    PUBLIC
-        os
-        logger
+add_library(sp_cache STATIC
+  src/cache/cache_measurer.cpp
+  src/cache/cache_profiler_list.cpp
+)
+add_library(sp::cache ALIAS sp_cache)
+target_link_libraries(sp_cache
+  PUBLIC
+    sp::options
+    sp::sanitizers
+    sp::core
+    sp::platform
+    sp::infra_logging
+  PRIVATE
+    sp::warnings
+)
+target_include_directories(sp_cache
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
 )
 
-# ------------------------------------------------------------------
-# Measurers - интерфейсная библиотека
-add_library(measurers INTERFACE)
-
-target_include_directories(measurers INTERFACE 
-    ${CMAKE_SOURCE_DIR}/src/measurers
+add_library(sp_app STATIC
+  src/app/application.cpp
+  src/app/config.cpp
+)
+add_library(sp::app ALIAS sp_app)
+target_link_libraries(sp_app
+  PUBLIC
+    sp::options
+    sp::sanitizers
+    sp::cache
+    sp::core
+    sp::infra_logging
+    CLI11::CLI11
+  PRIVATE
+    sp::warnings
+)
+target_include_directories(sp_app
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
 )
 
-target_link_libraries(measurers 
-    INTERFACE
-        cache_profiler
-        os
-        logger
-)
-
-# ------------------------------------------------------------------
-# CPU Info - статическая библиотека
-add_library(cpu_info STATIC
-    src/cpu_info/cpu_info.cpp
-)
-
-target_include_directories(cpu_info PUBLIC 
-    ${CMAKE_SOURCE_DIR}/src/cpu_info
-)
-
-target_link_libraries(cpu_info
-    PUBLIC
-        measurers
-        logger
-    PRIVATE
-        cache_profiler
-        os
-)
-
-# ------------------------------------------------------------------
-# Исполняемый файл
-add_executable(silicon_probe
+if(SP_BUILD_APPS)
+  add_executable(silicon_probe
     src/main.cpp
-)
-
-target_link_libraries(silicon_probe
+  )
+  target_link_libraries(silicon_probe
     PRIVATE
-        cpu_info
-        measurers
-        cache_profiler
-        os
-        logger
-)
+      sp::app
+      sp::warnings
+  )
+endif()
 
-# ------------------------------------------------------------------
-# Тесты (опционально)
-# enable_testing()
-# add_subdirectory(tests)
+if(SP_BUILD_TESTS)
+  if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/tests/CMakeLists.txt)
+    enable_testing()
+    add_subdirectory(tests)
+  else()
+    message(STATUS "SP_BUILD_TESTS is ON, but tests/ is not present")
+  endif()
+endif()

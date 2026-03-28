@@ -1,36 +1,20 @@
-#include "cpu_info.hpp"
-#include "logger.hpp"
+#include "silicon_probe/app/application.hpp"
+#include "silicon_probe/app/config.hpp"
 
-int main() {
-    logging::Logger::Config config;
-    config.min_level = logging::LOG_INFO;
-    config.console_output = true;
-    config.flush_on_write = true;
-    config.include_timestamp = true;
-    config.include_location = true;
-    config.include_level = true;
-    logging::Logger::initialize(config);
-    
+#include <CLI/CLI.hpp>
+#include <exception>
+#include <iostream>
+
+int main(int argc, char** argv) {
+    silicon_probe::app::CommandLineParser parser;
+
     try {
-        CPUInfo cpu;
-        
-        cpu.measure_l1();
-        cpu.measure_l2();
-        cpu.measure_l3();
-        
-        cpu.print_summary();
-        
-    } catch (const os::PermissionError& e) {
-        LOG_ERROR_STREAM << "Permission error: " << e.what();
-        LOG_ERROR("Run with sudo for accurate measurements");
-        logging::Logger::shutdown();
-        return 1;
-    } catch (const std::exception& e) {
-        LOG_ERROR_STREAM << "Error: " << e.what();
-        logging::Logger::shutdown();
+        const auto config = parser.parse(argc, argv);
+        return silicon_probe::app::execute(config);
+    } catch (const CLI::ParseError& error) {
+        return parser.cli().exit(error);
+    } catch (const std::exception& error) {
+        std::cerr << "Fatal error: " << error.what() << '\n';
         return 1;
     }
-    
-    logging::Logger::shutdown();
-    return 0;
 }
