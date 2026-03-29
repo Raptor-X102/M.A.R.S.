@@ -29,7 +29,7 @@ std::string_view CacheMeasurer::name() const noexcept {
 
 void CacheMeasurer::measure(core::CpuInfoData& data) {
     SPDLOG_INFO("[{}] starting cache measurement", name());
-    platform::ScopedMeasurementEnvironment environment(config_.environment);
+    platform::ScopedMeasurementEnvironment environment{config_.environment};
 
     data.cache_line_size = cache_line_size_;
 
@@ -81,7 +81,7 @@ void CacheMeasurer::measure_level(core::CpuInfoData& data,
 }
 
 std::vector<CacheMeasurer::MeasurementResult> CacheMeasurer::measure_range(size_t min_size, size_t max_size) {
-    std::vector<MeasurementResult> results;
+    std::vector<MeasurementResult> results{};
     for (size_t size = min_size; size <= max_size; size *= 2) {
         results.push_back(do_single_measurement(size));
         SPDLOG_INFO("Size={}, cycles/elem={}", results.back().size_bytes, results.back().cycles_per_element);
@@ -103,7 +103,7 @@ CacheMeasurer::MeasurementResult CacheMeasurer::do_single_measurement(size_t siz
     iterations = std::max(iterations, config_.min_iterations);
     iterations = std::min(iterations, config_.max_iterations);
 
-    CacheProfilerList list(cache_line_size_, count, config_.seed);
+    CacheProfilerList list{cache_line_size_, count, config_.seed};
     flush_cache_and_warmup(list, count);
 
     volatile CacheProfilerList::Element* element = list.first();
@@ -119,7 +119,7 @@ CacheMeasurer::MeasurementResult CacheMeasurer::do_single_measurement(size_t siz
 }
 
 CacheMeasurer::BoundaryResult CacheMeasurer::detect_boundary(const std::vector<MeasurementResult>& results) const {
-    BoundaryResult boundary;
+    BoundaryResult boundary{};
     boundary.index = results.size();
 
     if (results.size() < 3) {
@@ -147,7 +147,7 @@ size_t CacheMeasurer::refine_boundary(const std::vector<MeasurementResult>& resu
     const size_t left = results[boundary.index - 1].size_bytes;
     const size_t right = results[boundary.index].size_bytes;
 
-    std::vector<double> baseline_samples;
+    std::vector<double> baseline_samples{};
     baseline_samples.push_back(results[boundary.index - 1].cycles_per_element);
 
     double previous = results[boundary.index - 1].cycles_per_element;
@@ -169,7 +169,7 @@ size_t CacheMeasurer::refine_boundary(const std::vector<MeasurementResult>& resu
         refinement_growth_factor *= 1.5;
     }
 
-    BoundaryAnalyzer analyzer(BoundaryAnalyzerConfig{refinement_growth_factor, 3});
+    BoundaryAnalyzer analyzer{BoundaryAnalyzerConfig{refinement_growth_factor, 3}};
     return analyzer.refine_boundary(left,
                                     right,
                                     config_.precision,

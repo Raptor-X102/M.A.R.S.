@@ -83,7 +83,7 @@ uint64_t calibrate_tsc() {
 namespace silicon_probe::platform {
 
 struct ScopedThreadAffinity::cpu_set_t_storage {
-    cpu_set_t set;
+    cpu_set_t set{};
 };
 
 bool tsc_is_invariant() {
@@ -96,7 +96,7 @@ bool tsc_is_invariant() {
 }
 
 void bind_thread_to_cpu(int cpu) {
-    cpu_set_t affinity;
+    cpu_set_t affinity{};
     CPU_ZERO(&affinity);
     CPU_SET(cpu, &affinity);
 
@@ -195,7 +195,7 @@ void lock_cpu_frequency() {
     }
 
     const std::string path = "/sys/devices/system/cpu/cpu" + std::to_string(cpu) + "/cpufreq/scaling_governor";
-    std::ifstream input(path);
+    std::ifstream input{path};
     if (!input.is_open()) {
         throw PermissionError("Failed to open governor file for reading: " + path);
     }
@@ -206,7 +206,7 @@ void lock_cpu_frequency() {
     }
     governor_saved() = true;
 
-    std::ofstream output(path);
+    std::ofstream output{path};
     if (!output.is_open()) {
         throw PermissionError("Failed to open governor file for writing: " + path);
     }
@@ -229,7 +229,7 @@ void restore_cpu_frequency() {
     }
 
     const std::string path = "/sys/devices/system/cpu/cpu" + std::to_string(cpu) + "/cpufreq/scaling_governor";
-    std::ofstream output(path);
+    std::ofstream output{path};
     if (!output.is_open()) {
         governor_saved() = false;
         throw SystemError("Failed to open governor file for restore: " + path);

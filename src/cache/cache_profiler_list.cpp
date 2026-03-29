@@ -14,7 +14,7 @@
 namespace {
 
 std::string build_error_message(const std::string& prefix, size_t value) {
-    std::ostringstream stream;
+    std::ostringstream stream{};
     stream << prefix << value;
     return stream.str();
 }
@@ -118,7 +118,7 @@ void CacheProfilerList::setup_random_cycle(unsigned int seed) {
         indices[index] = index;
     }
 
-    std::mt19937 generator(seed);
+    std::mt19937 generator{seed};
     std::shuffle(indices.begin(), indices.end(), generator);
 
     for (size_t index = 0; index + 1 < element_count_; ++index) {

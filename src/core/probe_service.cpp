@@ -4,9 +4,6 @@
 
 namespace silicon_probe::core {
 
-ProbeService::ProbeService(MeasurerRegistry registry)
-    : registry_(std::move(registry)) {}
-
 const CpuInfoData& ProbeService::run() {
     SPDLOG_INFO("Starting CPU measurement pipeline");
     data_ = CpuInfoData{};
@@ -22,10 +19,6 @@ const CpuInfoData& ProbeService::run() {
 
     measured_ = true;
     SPDLOG_INFO("CPU measurement pipeline complete");
-    return data_;
-}
-
-const CpuInfoData& ProbeService::data() const noexcept {
     return data_;
 }
 

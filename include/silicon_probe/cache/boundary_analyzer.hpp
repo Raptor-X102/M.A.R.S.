@@ -3,8 +3,6 @@
 #include "silicon_probe/infra/logging.hpp"
 
 #include <algorithm>
-#include <cmath>
-#include <numeric>
 #include <vector>
 
 namespace silicon_probe::cache {
@@ -21,29 +19,9 @@ struct BoundaryAnalyzerConfig {
 
 class BoundaryAnalyzer {
 public:
-    explicit BoundaryAnalyzer(BoundaryAnalyzerConfig config = {}) : config_(config) {}
+    explicit BoundaryAnalyzer(BoundaryAnalyzerConfig config = {});
 
-    Statistics compute_stats(const std::vector<double>& samples) const {
-        Statistics statistics;
-        if (samples.empty()) {
-            return statistics;
-        }
-
-        if (samples.size() == 1) {
-            statistics.mean = samples.front();
-            return statistics;
-        }
-
-        const double sum = std::accumulate(samples.begin(), samples.end(), 0.0);
-        statistics.mean = sum / static_cast<double>(samples.size());
-
-        double squared_sum = 0.0;
-        for (const double sample : samples) {
-            squared_sum += (sample - statistics.mean) * (sample - statistics.mean);
-        }
-        statistics.stddev = std::sqrt(squared_sum / static_cast<double>(samples.size() - 1));
-        return statistics;
-    }
+    Statistics compute_stats(const std::vector<double>& samples) const;
 
     template <typename MeasureFn>
     size_t refine_boundary(size_t left, size_t right, size_t precision, MeasureFn&& measure, double baseline_mean) const {

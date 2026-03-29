@@ -13,13 +13,13 @@
 namespace silicon_probe::app {
 
 int execute(const ApplicationConfig& config) {
-    infra::LoggingSession logging_session(config.logging);
+    infra::LoggingSession logging_session{config.logging};
 
     try {
-        core::MeasurerRegistry registry;
+        core::MeasurerRegistry registry{};
         registry.register_measurer(std::make_unique<cache::CacheMeasurer>(config.cache));
 
-        core::ProbeService probe_service(std::move(registry));
+        core::ProbeService probe_service{std::move(registry)};
         const auto& data = probe_service.run();
 
         if (config.print_summary) {

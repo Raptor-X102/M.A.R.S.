@@ -11,7 +11,7 @@
 namespace {
 
 std::string make_pattern(const silicon_probe::infra::LoggingConfig& config) {
-    std::string pattern;
+    std::string pattern{};
 
     if (config.include_timestamp) {
         pattern += "%Y-%m-%d %H:%M:%S ";
@@ -40,7 +40,7 @@ LoggingSession::~LoggingSession() {
 }
 
 void initialize_logging(const LoggingConfig& config) {
-    std::vector<spdlog::sink_ptr> sinks;
+    std::vector<spdlog::sink_ptr> sinks{};
     sinks.reserve(2);
 
     if (config.console_output) {

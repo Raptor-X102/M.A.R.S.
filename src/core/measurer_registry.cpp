@@ -26,13 +26,4 @@ void MeasurerRegistry::register_measurer(std::unique_ptr<Measurer> measurer) {
     measurers_.push_back(std::move(measurer));
 }
 
-const std::vector<std::unique_ptr<Measurer>>& MeasurerRegistry::measurers() const noexcept {
-    return measurers_;
-}
-
-const Measurer* MeasurerRegistry::find(std::string_view name) const noexcept {
-    const auto iterator = measurer_map_.find(std::string(name));
-    return iterator == measurer_map_.end() ? nullptr : iterator->second;
-}
-
 } // namespace silicon_probe::core

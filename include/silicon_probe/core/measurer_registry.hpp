@@ -4,6 +4,7 @@
 
 #include <memory>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <vector>
 
@@ -13,8 +14,14 @@ class MeasurerRegistry {
 public:
     void register_measurer(std::unique_ptr<Measurer> measurer);
 
-    const std::vector<std::unique_ptr<Measurer>>& measurers() const noexcept;
-    const Measurer* find(std::string_view name) const noexcept;
+    const std::vector<std::unique_ptr<Measurer>>& measurers() const noexcept {
+        return measurers_;
+    }
+
+    const Measurer* find(std::string_view name) const noexcept {
+        const auto iterator = measurer_map_.find(std::string(name));
+        return iterator == measurer_map_.end() ? nullptr : iterator->second;
+    }
 
 private:
     std::vector<std::unique_ptr<Measurer>> measurers_;
