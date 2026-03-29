@@ -11,7 +11,9 @@ public:
     virtual ~Measurer() = default;
 
     virtual std::string_view name() const noexcept = 0;
-    virtual bool is_available() const noexcept { return true; }
+    virtual bool is_available() const noexcept {
+        return true;
+    }
     virtual void measure(CpuInfoData& data) = 0;
 };
 

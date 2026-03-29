@@ -12,9 +12,11 @@ namespace {
 
 std::string to_ascii_lower_copy(std::string_view value) {
     std::string result(value);
+
     std::transform(result.begin(), result.end(), result.begin(), [](unsigned char ch) {
         return static_cast<char>(std::tolower(ch));
     });
+
     return result;
 }
 
@@ -27,6 +29,7 @@ YAML::Node require_node(const YAML::Node& parent, const char* key, const std::st
     if (!node) {
         throw config_error(path, "missing required node");
     }
+
     return node;
 }
 
@@ -114,14 +117,17 @@ int parse_int_scalar(const YAML::Node& node, const std::string& path) {
 
 void apply_levels(const YAML::Node& probe_node, silicon_probe::cache::CacheMeasurer::Config& config) {
     const YAML::Node levels{probe_node["levels"]};
+
     if (!levels) {
         return;
     }
+
     if (!levels.IsSequence()) {
         throw config_error("probe.levels", "expected sequence");
     }
 
     config.levels.reset();
+
     for (size_t index = 0; index < levels.size(); ++index) {
         const std::string level = to_ascii_lower_copy(read_scalar(levels[index], "probe.levels[" + std::to_string(index) + "]"));
         if (level == "l1" || level == "l1d") {
@@ -150,9 +156,11 @@ void apply_limits(const YAML::Node& probe_node, silicon_probe::cache::CacheMeasu
     if (const YAML::Node node = limits["l1_max"]) {
         config.l1_max = parse_size_scalar(node, "probe.limits.l1_max");
     }
+
     if (const YAML::Node node = limits["l2_max"]) {
         config.l2_max = parse_size_scalar(node, "probe.limits.l2_max");
     }
+
     if (const YAML::Node node = limits["l3_max"]) {
         config.l3_max = parse_size_scalar(node, "probe.limits.l3_max");
     }
@@ -167,21 +175,27 @@ void apply_measurement(const YAML::Node& probe_node, silicon_probe::cache::Cache
     if (const YAML::Node node = measurement["cache_min_lines"]) {
         config.cache_min_lines = parse_size_scalar(node, "probe.measurement.cache_min_lines");
     }
+
     if (const YAML::Node node = measurement["seed"]) {
         config.seed = parse_unsigned_scalar(node, "probe.measurement.seed");
     }
+
     if (const YAML::Node node = measurement["warmup_iterations"]) {
         config.warmup_iterations = parse_size_scalar(node, "probe.measurement.warmup_iterations");
     }
+
     if (const YAML::Node node = measurement["precision"]) {
         config.precision = parse_size_scalar(node, "probe.measurement.precision");
     }
+
     if (const YAML::Node node = measurement["target_accesses"]) {
         config.target_accesses = parse_size_scalar(node, "probe.measurement.target_accesses");
     }
+
     if (const YAML::Node node = measurement["min_iterations"]) {
         config.min_iterations = parse_size_scalar(node, "probe.measurement.min_iterations");
     }
+
     if (const YAML::Node node = measurement["max_iterations"]) {
         config.max_iterations = parse_size_scalar(node, "probe.measurement.max_iterations");
     }
@@ -196,9 +210,11 @@ void apply_environment(const YAML::Node& probe_node, silicon_probe::cache::Cache
     if (const YAML::Node node = environment["realtime_priority"]) {
         config.environment.realtime_priority = parse_bool_scalar(node, "probe.environment.realtime_priority");
     }
+
     if (const YAML::Node node = environment["lock_frequency"]) {
         config.environment.lock_frequency = parse_bool_scalar(node, "probe.environment.lock_frequency");
     }
+
     if (const YAML::Node node = environment["bind_cpu"]) {
         if (node.IsNull()) {
             config.environment.cpu.reset();
@@ -208,7 +224,7 @@ void apply_environment(const YAML::Node& probe_node, silicon_probe::cache::Cache
     }
 }
 
-silicon_probe::cache::CacheMeasurer::Config load_cache_config(const std::filesystem::path& path) {
+silicon_probe::cache::CacheMeasurer::Config load_cache_config_impl(const std::filesystem::path& path) {
     YAML::Node root{};
     try {
         root = YAML::LoadFile(path.string());
@@ -219,23 +235,21 @@ silicon_probe::cache::CacheMeasurer::Config load_cache_config(const std::filesys
     const YAML::Node probe{require_node(root, "probe", "probe")};
 
     auto config = silicon_probe::cache::CacheMeasurer::Config{};
+    
     apply_levels(probe, config);
     apply_limits(probe, config);
     apply_measurement(probe, config);
     apply_environment(probe, config);
+
     return config;
 }
 
 } // namespace
 
-namespace silicon_probe::app {
+namespace silicon_probe::app::detail {
 
-ApplicationConfig ApplicationConfigLoader::load(const BootstrapOptions& options) const {
-    ApplicationConfig config{};
-    config.logging = options.logging;
-    config.print_summary = options.print_summary;
-    config.cache = load_cache_config(options.config_path);
-    return config;
+cache::CacheMeasurer::Config load_cache_config(const std::filesystem::path& path) {
+    return load_cache_config_impl(path);
 }
 
-} // namespace silicon_probe::app
+} // namespace silicon_probe::app::detail

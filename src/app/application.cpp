@@ -13,7 +13,7 @@
 namespace silicon_probe::app {
 
 int execute(const ApplicationConfig& config) {
-    infra::LoggingSession logging_session{config.logging};
+    infra::Logger logger{config.logging};
 
     try {
         core::MeasurerRegistry registry{};
