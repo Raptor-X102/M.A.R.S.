@@ -1,128 +1,215 @@
-cmake_minimum_required(VERSION 3.10)
-project(SiliconProbe CXX)
+cmake_minimum_required(VERSION 3.20)
+
+project(MARS
+  VERSION 0.1.0
+  LANGUAGES CXX
+)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
+#####################################
+# Options
+#####################################
+
+option(MARS_BUILD_APPS        "Build command line applications" ON)
+option(MARS_BUILD_TESTS       "Build tests" OFF)
+option(MARS_ENABLE_SANITIZERS "Enable ASan/UBSan (non-MSVC)" OFF)
+option(MARS_ENABLE_WERROR     "Treat warnings as errors" OFF)
+
+#####################################
+# Global settings
+#####################################
+
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+set(MARS_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -pthread")
-set(CMAKE_CXX_FLAGS_RELEASE "-O3 -march=native -DNDEBUG")
-set(CMAKE_CXX_FLAGS_DEBUG "-g -O0 -DDEBUG")
+#####################################
+# Dependencies
+#####################################
 
-if(NOT CMAKE_BUILD_TYPE)
-    set(CMAKE_BUILD_TYPE Release)
-endif()
+find_package(CLI11 CONFIG REQUIRED)
+find_package(spdlog CONFIG REQUIRED)
+find_package(yaml-cpp CONFIG REQUIRED)
+find_package(Threads REQUIRED)
 
-# ------------------------------------------------------------------
-# Базовые директории с заголовками для всех целей
-include_directories(
-    ${CMAKE_SOURCE_DIR}/src
-    ${CMAKE_SOURCE_DIR}/src/arch
-    ${CMAKE_SOURCE_DIR}/src/os
-    ${CMAKE_SOURCE_DIR}/src/logger
-    ${CMAKE_SOURCE_DIR}/src/measurers
-    ${CMAKE_SOURCE_DIR}/src/measurers/cache_measurer
-    ${CMAKE_SOURCE_DIR}/src/cpu_info
+#####################################
+# Common target defaults
+#####################################
+
+function(mars_apply_target_defaults target_name)
+  target_include_directories(${target_name}
+    PUBLIC
+      $<BUILD_INTERFACE:${MARS_INCLUDE_DIR}>
+      $<INSTALL_INTERFACE:include>
+  )
+
+  target_link_libraries(${target_name}
+    PUBLIC
+      mars::options
+      mars::sanitizers
+    PRIVATE
+      mars::warnings
+  )
+endfunction()
+
+#####################################
+# Compile options
+#####################################
+
+add_library(mars_options INTERFACE)
+add_library(mars::options ALIAS mars_options)
+target_compile_features(mars_options INTERFACE cxx_std_17)
+target_compile_definitions(mars_options INTERFACE SPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_TRACE)
+
+#####################################
+# Warnings
+#####################################
+
+add_library(mars_warnings INTERFACE)
+add_library(mars::warnings ALIAS mars_warnings)
+target_compile_options(mars_warnings INTERFACE
+  $<$<CXX_COMPILER_ID:MSVC>:/W4>
+  $<$<AND:$<CXX_COMPILER_ID:MSVC>,$<BOOL:${MARS_ENABLE_WERROR}>>:/WX>
+  $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-Wall -Wextra -Wpedantic>
+  $<$<AND:$<NOT:$<CXX_COMPILER_ID:MSVC>>,$<BOOL:${MARS_ENABLE_WERROR}>>:-Werror>
 )
 
-# ------------------------------------------------------------------
-# Logger - статическая библиотека
-add_library(logger STATIC 
-    src/logger/logger.cpp
+#####################################
+# Sanitizers
+#####################################
+
+add_library(mars_sanitizers INTERFACE)
+add_library(mars::sanitizers ALIAS mars_sanitizers)
+target_compile_options(mars_sanitizers INTERFACE
+  $<$<AND:$<BOOL:${MARS_ENABLE_SANITIZERS}>,$<NOT:$<CXX_COMPILER_ID:MSVC>>>:-fsanitize=address,undefined -fno-omit-frame-pointer>
+)
+target_link_options(mars_sanitizers INTERFACE
+  $<$<AND:$<BOOL:${MARS_ENABLE_SANITIZERS}>,$<NOT:$<CXX_COMPILER_ID:MSVC>>>:-fsanitize=address,undefined>
 )
 
-target_include_directories(logger PUBLIC ${CMAKE_SOURCE_DIR}/src/logger)
+#####################################
+# Infra: logging
+#####################################
 
-# ------------------------------------------------------------------
-# OS - статическая библиотека
-add_library(os STATIC)
+add_library(mars_infra_logging INTERFACE)
+add_library(mars::infra_logging ALIAS mars_infra_logging)
+target_include_directories(mars_infra_logging
+  INTERFACE
+    $<BUILD_INTERFACE:${MARS_INCLUDE_DIR}>
+    $<INSTALL_INTERFACE:include>
+)
+target_link_libraries(mars_infra_logging
+  INTERFACE
+    mars::options
+    mars::sanitizers
+    mars::warnings
+    spdlog::spdlog
+)
 
-# Добавляем исходники в зависимости от платформы
+#####################################
+# Platform
+#####################################
+
+add_library(mars_platform STATIC)
+add_library(mars::platform ALIAS mars_platform)
 if(UNIX AND NOT APPLE)
-    target_sources(os PRIVATE src/os/os_linux.cpp)
-elseif(WIN32)
-    target_sources(os PRIVATE src/os/os_windows.cpp)
-elseif(APPLE)
-    target_sources(os PRIVATE src/os/os_macos.cpp)
+  target_sources(mars_platform PRIVATE src/platform/linux/os_linux.cpp)
 else()
-    message(FATAL_ERROR "Unsupported operating system")
+  message(FATAL_ERROR "Unsupported platform: MARS currently supports Linux only")
+endif()
+mars_apply_target_defaults(mars_platform)
+target_link_libraries(mars_platform
+  PUBLIC
+    mars::infra_logging
+    Threads::Threads
+)
+
+#####################################
+# Core
+#####################################
+
+add_library(mars_core INTERFACE)
+add_library(mars::core ALIAS mars_core)
+target_include_directories(mars_core
+  INTERFACE
+    $<BUILD_INTERFACE:${MARS_INCLUDE_DIR}>
+    $<INSTALL_INTERFACE:include>
+)
+target_link_libraries(mars_core
+  INTERFACE
+    mars::options
+    mars::sanitizers
+    mars::warnings
+    mars::infra_logging
+)
+
+#####################################
+# Cache
+#####################################
+
+add_library(mars_cache INTERFACE)
+add_library(mars::cache ALIAS mars_cache)
+target_include_directories(mars_cache
+  INTERFACE
+    $<BUILD_INTERFACE:${MARS_INCLUDE_DIR}>
+    $<INSTALL_INTERFACE:include>
+)
+target_link_libraries(mars_cache
+  INTERFACE
+    mars::options
+    mars::sanitizers
+    mars::warnings
+    mars::core
+    mars::platform
+    mars::infra_logging
+)
+
+#####################################
+# App
+#####################################
+
+add_library(mars_app STATIC
+  src/app/application.cpp
+  src/app/config_loader.cpp
+)
+add_library(mars::app ALIAS mars_app)
+mars_apply_target_defaults(mars_app)
+target_link_libraries(mars_app
+  PUBLIC
+    mars::cache
+    mars::core
+    mars::infra_logging
+    CLI11::CLI11
+  PRIVATE
+    yaml-cpp
+)
+
+#####################################
+# CLI applications
+#####################################
+
+if(MARS_BUILD_APPS)
+  add_executable(mars
+    src/cli/main.cpp
+  )
+  target_link_libraries(mars
+    PRIVATE
+      mars::app
+      mars::warnings
+  )
 endif()
 
-target_include_directories(os PUBLIC ${CMAKE_SOURCE_DIR}/src/os)
-target_link_libraries(os PRIVATE logger)
+#####################################
+# Tests
+#####################################
 
-# Для Linux добавляем pthread
-if(UNIX AND NOT APPLE)
-    target_link_libraries(os PRIVATE pthread)
+if(MARS_BUILD_TESTS)
+  if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/tests/CMakeLists.txt)
+    enable_testing()
+    add_subdirectory(tests)
+  else()
+    message(STATUS "MARS_BUILD_TESTS is ON, but tests/ is not present")
+  endif()
 endif()
-
-# ------------------------------------------------------------------
-# Cache Profiler - статическая библиотека
-add_library(cache_profiler STATIC
-    src/measurers/cache_measurer/cache_measurer.cpp
-    src/measurers/cache_measurer/cache_profiler_list.cpp
-)
-
-target_include_directories(cache_profiler PUBLIC 
-    ${CMAKE_SOURCE_DIR}/src/measurers/cache_measurer
-)
-
-target_link_libraries(cache_profiler 
-    PUBLIC
-        os
-        logger
-)
-
-# ------------------------------------------------------------------
-# Measurers - интерфейсная библиотека
-add_library(measurers INTERFACE)
-
-target_include_directories(measurers INTERFACE 
-    ${CMAKE_SOURCE_DIR}/src/measurers
-)
-
-target_link_libraries(measurers 
-    INTERFACE
-        cache_profiler
-        os
-        logger
-)
-
-# ------------------------------------------------------------------
-# CPU Info - статическая библиотека
-add_library(cpu_info STATIC
-    src/cpu_info/cpu_info.cpp
-)
-
-target_include_directories(cpu_info PUBLIC 
-    ${CMAKE_SOURCE_DIR}/src/cpu_info
-)
-
-target_link_libraries(cpu_info
-    PUBLIC
-        measurers
-        logger
-    PRIVATE
-        cache_profiler
-        os
-)
-
-# ------------------------------------------------------------------
-# Исполняемый файл
-add_executable(silicon_probe
-    src/main.cpp
-)
-
-target_link_libraries(silicon_probe
-    PRIVATE
-        cpu_info
-        measurers
-        cache_profiler
-        os
-        logger
-)
-
-# ------------------------------------------------------------------
-# Тесты (опционально)
-# enable_testing()
-# add_subdirectory(tests)

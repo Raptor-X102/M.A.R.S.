@@ -1,0 +1,24 @@
+probe:
+  levels:
+    - l1
+    - l2
+    - l3
+
+  limits:
+    l1_max: 128KiB
+    l2_max: 2MiB
+    l3_max: 128MiB
+
+  measurement:
+    cache_min_lines: 16
+    seed: 48815
+    warmup_iterations: 4
+    precision: 64
+    target_accesses: 2000000
+    min_iterations: 1
+    max_iterations: 1000
+
+  environment:
+    bind_cpu: null
+    realtime_priority: false
+    lock_frequency: false

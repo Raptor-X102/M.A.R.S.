@@ -1,10 +1,12 @@
 #pragma once
 
-#include <optional>
 #include <cstddef>
+#include <optional>
 #include <string>
 
-struct CPUInfoData {
+namespace silicon_probe::core {
+
+struct CpuInfoData {
     std::optional<size_t> l1d_size;
     std::optional<size_t> l1i_size;
     std::optional<size_t> l2_size;
@@ -28,3 +30,5 @@ struct CPUInfoData {
     std::optional<size_t> cpu_model;
     std::optional<std::string> cpu_name;
 };
+
+} // namespace silicon_probe::core
