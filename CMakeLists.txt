@@ -29,24 +29,7 @@ find_package(CLI11 CONFIG REQUIRED)
 find_package(spdlog CONFIG REQUIRED)
 find_package(yaml-cpp CONFIG REQUIRED)
 find_package(Threads REQUIRED)
-
-# Asmjit
 find_package(asmjit REQUIRED)
-
-# Libpfm4 (Manual find because pkg-config name varies on Arch/Manjaro)
-find_library(LIBPFM_LIBRARY NAMES pfm libpfm PATHS /usr/lib /usr/local/lib)
-find_path(LIBPFM_INCLUDE_DIR NAMES perfmon/pfmlib.h PATHS /usr/include /usr/local/include)
-
-if(NOT LIBPFM_LIBRARY OR NOT LIBPFM_INCLUDE_DIR)
-    message(FATAL_ERROR "libpfm4 not found. Install 'libpfm' package and ensure headers are present.")
-endif()
-
-add_library(libpfm_imported INTERFACE IMPORTED)
-set_target_properties(libpfm_imported PROPERTIES
-    INTERFACE_INCLUDE_DIRECTORIES "${LIBPFM_INCLUDE_DIR}"
-    INTERFACE_LINK_LIBRARIES "${LIBPFM_LIBRARY}"
-)
-add_library(libpfm::libpfm ALIAS libpfm_imported)
 
 #####################################
 # Common target defaults
@@ -139,7 +122,6 @@ target_link_libraries(mars_platform
         Threads::Threads
     PRIVATE
         asmjit::asmjit
-        libpfm::libpfm
 )
 
 #####################################
@@ -196,7 +178,6 @@ target_link_libraries(mars_rob
         mars::platform
         mars::cache
         asmjit::asmjit
-        libpfm::libpfm
 )
 
 #####################################
@@ -220,7 +201,6 @@ target_link_libraries(mars_app
     PRIVATE
         yaml-cpp
         asmjit::asmjit
-        libpfm::libpfm
 )
 
 #####################################

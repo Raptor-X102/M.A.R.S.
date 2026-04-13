@@ -1,8 +1,6 @@
 // rob_measurer.hpp
 #pragma once
 
-#include "silicon_probe/cache/boundary_analyzer.hpp"
-#include "silicon_probe/cache/cache_profiler_list.hpp"
 #include "silicon_probe/infra/logging.hpp"
 #include "silicon_probe/core/measurer.hpp"
 #include "silicon_probe/platform/arch.hpp"

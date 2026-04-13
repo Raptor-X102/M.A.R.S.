@@ -2,6 +2,7 @@
 
 #include "silicon_probe/cache/cache_measurer.hpp"
 #include "silicon_probe/rob/rob_measurer.hpp"
+#include "silicon_probe/branch_history_table/branch_history_table_measurer.hpp"
 #include "silicon_probe/infra/logging.hpp"
 
 #include <CLI/CLI.hpp>
@@ -22,6 +23,7 @@ struct ApplicationConfig {
     infra::LoggingConfig logging;
     cache::CacheMeasurer::Config cache;
     rob::RobMeasurer::Config rob;
+    branch_history_table::BranchHistoryTableMeasurer::Config bht;
     bool print_summary = true;
 };
 
@@ -29,6 +31,7 @@ namespace detail {
 
 cache::CacheMeasurer::Config load_cache_config(const std::filesystem::path& path);
 rob::RobMeasurer::Config load_rob_config(const std::filesystem::path& path);
+branch_history_table::BranchHistoryTableMeasurer::Config load_bht_config(const std::filesystem::path& path);
 
 } // namespace detail
 

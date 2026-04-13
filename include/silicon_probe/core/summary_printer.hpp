@@ -26,6 +26,9 @@ public:
         if (data.rob_size) {
             stream << "Rob size: " << *data.rob_size << " instructions\n";
         }
+        if (data.bht_size) {
+            stream << "Branch History Table size: " << *data.bht_size << " entries\n";
+        }
 
         stream << "========================\n\n";
     }

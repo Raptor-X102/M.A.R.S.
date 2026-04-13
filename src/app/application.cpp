@@ -20,6 +20,7 @@ int execute(const ApplicationConfig& config) {
         core::MeasurerRegistry registry{};
         registry.register_measurer(std::make_unique<cache::CacheMeasurer>(config.cache));
         registry.register_measurer(std::make_unique<rob::RobMeasurer>(config.rob));
+        registry.register_measurer(std::make_unique<branch_history_table::BranchHistoryTableMeasurer>(config.bht));
 
         core::ProbeService probe_service{std::move(registry)};
         const auto& data = probe_service.run();
