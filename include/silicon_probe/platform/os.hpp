@@ -26,6 +26,8 @@ void set_realtime_priority();
 void restore_priority();
 void lock_cpu_frequency();
 void restore_cpu_frequency();
+void disable_turbo_boost();
+void restore_turbo_boost();
 
 class ScopedThreadAffinity {
 public:

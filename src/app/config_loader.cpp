@@ -224,6 +224,29 @@ void apply_environment(const YAML::Node& probe_node, silicon_probe::cache::Cache
     }
 }
 
+void apply_environment(const YAML::Node& probe_node, silicon_probe::rob::RobMeasurer::Config& config) {
+    const YAML::Node environment{probe_node["environment"]};
+    if (!environment) {
+        return;
+    }
+
+    if (const YAML::Node node = environment["realtime_priority"]) {
+        config.environment.realtime_priority = parse_bool_scalar(node, "probe.environment.realtime_priority");
+    }
+
+    if (const YAML::Node node = environment["lock_frequency"]) {
+        config.environment.lock_frequency = parse_bool_scalar(node, "probe.environment.lock_frequency");
+    }
+
+    if (const YAML::Node node = environment["bind_cpu"]) {
+        if (node.IsNull()) {
+            config.environment.cpu.reset();
+        } else {
+            config.environment.cpu = parse_int_scalar(node, "probe.environment.bind_cpu");
+        }
+    }
+}
+
 silicon_probe::cache::CacheMeasurer::Config load_cache_config_impl(const std::filesystem::path& path) {
     YAML::Node root{};
     try {
@@ -244,12 +267,37 @@ silicon_probe::cache::CacheMeasurer::Config load_cache_config_impl(const std::fi
     return config;
 }
 
+silicon_probe::rob::RobMeasurer::Config load_rob_config_impl(const std::filesystem::path& path) {
+    YAML::Node root{};
+    try {
+        root = YAML::LoadFile(path.string());
+    } catch (const YAML::Exception& error) {
+        throw std::runtime_error("Failed to load configuration file '" + path.string() + "': " + error.what());
+    }
+
+    const YAML::Node probe{require_node(root, "probe", "probe")};
+
+    auto config = silicon_probe::rob::RobMeasurer::Config{};
+    
+    // TODO: make config parse for rob
+    //apply_levels(probe, config);
+    //apply_limits(probe, config);
+    //apply_measurement(probe, config);
+    apply_environment(probe, config);
+
+    return config;
+}
+
 } // namespace
 
 namespace silicon_probe::app::detail {
 
 cache::CacheMeasurer::Config load_cache_config(const std::filesystem::path& path) {
     return load_cache_config_impl(path);
+}
+
+rob::RobMeasurer::Config load_rob_config(const std::filesystem::path& path) {
+    return load_rob_config_impl(path);
 }
 
 } // namespace silicon_probe::app::detail

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "silicon_probe/cache/cache_measurer.hpp"
+#include "silicon_probe/rob/rob_measurer.hpp"
 #include "silicon_probe/infra/logging.hpp"
 
 #include <CLI/CLI.hpp>
@@ -20,12 +21,14 @@ struct BootstrapOptions {
 struct ApplicationConfig {
     infra::LoggingConfig logging;
     cache::CacheMeasurer::Config cache;
+    rob::RobMeasurer::Config rob;
     bool print_summary = true;
 };
 
 namespace detail {
 
 cache::CacheMeasurer::Config load_cache_config(const std::filesystem::path& path);
+rob::RobMeasurer::Config load_rob_config(const std::filesystem::path& path);
 
 } // namespace detail
 

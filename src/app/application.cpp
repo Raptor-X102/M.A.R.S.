@@ -1,6 +1,7 @@
 #include "silicon_probe/app/application.hpp"
 
 #include "silicon_probe/cache/cache_measurer.hpp"
+#include "silicon_probe/rob/rob_measurer.hpp"
 #include "silicon_probe/core/measurer_registry.hpp"
 #include "silicon_probe/core/probe_service.hpp"
 #include "silicon_probe/core/summary_printer.hpp"
@@ -18,6 +19,7 @@ int execute(const ApplicationConfig& config) {
     try {
         core::MeasurerRegistry registry{};
         registry.register_measurer(std::make_unique<cache::CacheMeasurer>(config.cache));
+        registry.register_measurer(std::make_unique<rob::RobMeasurer>(config.rob));
 
         core::ProbeService probe_service{std::move(registry)};
         const auto& data = probe_service.run();
