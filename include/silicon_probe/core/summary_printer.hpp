@@ -23,6 +23,9 @@ public:
         if (data.cache_line_size) {
             stream << "Cache line: " << *data.cache_line_size << " bytes\n";
         }
+        if (data.rob_size) {
+            stream << "Rob size: " << *data.rob_size << " instructions\n";
+        }
 
         stream << "========================\n\n";
     }

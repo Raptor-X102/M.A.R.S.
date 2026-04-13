@@ -19,6 +19,6 @@ probe:
     max_iterations: 1000
 
   environment:
-    bind_cpu: null
+    bind_cpu: 0
     realtime_priority: false
-    lock_frequency: false
+    lock_frequency: true
