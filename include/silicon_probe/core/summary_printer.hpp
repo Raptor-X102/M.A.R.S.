@@ -29,6 +29,9 @@ public:
         if (data.bht_size) {
             stream << "Branch History Table size: " << *data.bht_size << " entries\n";
         }
+        if (data.ras_size) {
+            stream << "Return Address Stack size: " << *data.ras_size << " entries\n";
+        }
 
         stream << "========================\n\n";
     }

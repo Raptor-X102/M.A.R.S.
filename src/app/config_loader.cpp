@@ -270,6 +270,29 @@ void apply_environment(const YAML::Node& probe_node, silicon_probe::branch_histo
     }
 }
 
+void apply_environment(const YAML::Node& probe_node, silicon_probe::return_address_stack::ReturnAddressStackMeasurer::Config& config) {
+    const YAML::Node environment{probe_node["environment"]};
+    if (!environment) {
+        return;
+    }
+
+    if (const YAML::Node node = environment["realtime_priority"]) {
+        config.environment.realtime_priority = parse_bool_scalar(node, "probe.environment.realtime_priority");
+    }
+
+    if (const YAML::Node node = environment["lock_frequency"]) {
+        config.environment.lock_frequency = parse_bool_scalar(node, "probe.environment.lock_frequency");
+    }
+
+    if (const YAML::Node node = environment["bind_cpu"]) {
+        if (node.IsNull()) {
+            config.environment.cpu.reset();
+        } else {
+            config.environment.cpu = parse_int_scalar(node, "probe.environment.bind_cpu");
+        }
+    }
+}
+
 silicon_probe::cache::CacheMeasurer::Config load_cache_config_impl(const std::filesystem::path& path) {
     YAML::Node root{};
     try {
@@ -332,6 +355,28 @@ silicon_probe::branch_history_table::BranchHistoryTableMeasurer::Config load_bht
     return config;
 }
 
+// TODO: make config parse for ras
+silicon_probe::return_address_stack::ReturnAddressStackMeasurer::Config load_ras_config_impl(const std::filesystem::path& path) {
+    YAML::Node root{};
+    try {
+        root = YAML::LoadFile(path.string());
+    } catch (const YAML::Exception& error) {
+        throw std::runtime_error("Failed to load configuration file '" + path.string() + "': " + error.what());
+    }
+
+    const YAML::Node probe{require_node(root, "probe", "probe")};
+
+    auto config = silicon_probe::return_address_stack::ReturnAddressStackMeasurer::Config{};
+    
+    //apply_levels(probe, config);
+    //apply_limits(probe, config);
+    //apply_measurement(probe, config);
+    apply_environment(probe, config);
+
+    return config;
+}
+
+
 } // namespace
 
 namespace silicon_probe::app::detail {
@@ -346,5 +391,9 @@ rob::RobMeasurer::Config load_rob_config(const std::filesystem::path& path) {
 
 branch_history_table::BranchHistoryTableMeasurer::Config load_bht_config(const std::filesystem::path& path) {
     return load_bht_config_impl(path);
+}
+
+return_address_stack::ReturnAddressStackMeasurer::Config load_ras_config(const std::filesystem::path& path) {
+    return load_ras_config_impl(path);
 }
 } // namespace silicon_probe::app::detail

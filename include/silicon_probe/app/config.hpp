@@ -3,6 +3,7 @@
 #include "silicon_probe/cache/cache_measurer.hpp"
 #include "silicon_probe/rob/rob_measurer.hpp"
 #include "silicon_probe/branch_history_table/branch_history_table_measurer.hpp"
+#include "silicon_probe/return_address_stack/return_address_stack_measurer.hpp"
 #include "silicon_probe/infra/logging.hpp"
 
 #include <CLI/CLI.hpp>
@@ -24,6 +25,7 @@ struct ApplicationConfig {
     cache::CacheMeasurer::Config cache;
     rob::RobMeasurer::Config rob;
     branch_history_table::BranchHistoryTableMeasurer::Config bht;
+    return_address_stack::ReturnAddressStackMeasurer::Config ras;
     bool print_summary = true;
 };
 
@@ -32,6 +34,7 @@ namespace detail {
 cache::CacheMeasurer::Config load_cache_config(const std::filesystem::path& path);
 rob::RobMeasurer::Config load_rob_config(const std::filesystem::path& path);
 branch_history_table::BranchHistoryTableMeasurer::Config load_bht_config(const std::filesystem::path& path);
+return_address_stack::ReturnAddressStackMeasurer::Config load_ras_config(const std::filesystem::path& path);
 
 } // namespace detail
 
@@ -108,6 +111,9 @@ public:
         config.logging = options.logging;
         config.print_summary = options.print_summary;
         config.cache = load_cache_config(options.config_path);
+        config.rob = load_rob_config(options.config_path);
+        config.bht = load_bht_config(options.config_path);
+        config.ras = load_ras_config(options.config_path);
 
         return config;
     }
@@ -115,6 +121,15 @@ public:
 private:
     static cache::CacheMeasurer::Config load_cache_config(const std::filesystem::path& path) {
         return detail::load_cache_config(path);
+    }
+    static rob::RobMeasurer::Config load_rob_config(const std::filesystem::path& path) {
+        return detail::load_rob_config(path);
+    }
+    static branch_history_table::BranchHistoryTableMeasurer::Config load_bht_config(const std::filesystem::path& path) {
+        return detail::load_bht_config(path);
+    }
+    static return_address_stack::ReturnAddressStackMeasurer::Config load_ras_config(const std::filesystem::path& path) {
+        return detail::load_ras_config(path);
     }
 };
 
