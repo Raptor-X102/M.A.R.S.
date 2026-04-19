@@ -177,7 +177,7 @@ public:
     PmcGroupRawLinux(std::vector<int> fds, std::vector<std::string> names)
         : fds_(std::move(fds)), event_names_(std::move(names)) {
         if (!valid()) cleanup();
-        print_initial_values();
+        //print_initial_values();
     }
 
     ~PmcGroupRawLinux() override { cleanup(); }

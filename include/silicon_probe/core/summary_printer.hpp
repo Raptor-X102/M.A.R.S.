@@ -32,6 +32,9 @@ public:
         if (data.ras_size) {
             stream << "Return Address Stack size: " << *data.ras_size << " entries\n";
         }
+        if (data.execution_ports_independent) {
+            stream << "Execution ports independent: " << *data.execution_ports_independent << "\n";
+        }
 
         stream << "========================\n\n";
     }

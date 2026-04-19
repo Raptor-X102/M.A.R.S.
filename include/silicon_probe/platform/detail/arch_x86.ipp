@@ -17,8 +17,11 @@
 namespace silicon_probe::platform::arch {
 
 inline uint64_t tick() {
+    _mm_lfence();
     unsigned int aux = 0;
-    return __rdtscp(&aux);
+    uint64_t t = __rdtscp(&aux);
+    _mm_lfence();
+    return t;
 }
 
 inline void mfence() { _mm_mfence(); }
@@ -387,14 +390,8 @@ public:
         return gen;
     }
 
-    void* generate(size_t instr_cnt, InstrType type) {
-        std::vector<InstrType> types(1, type);
-        return generate(instr_cnt, types);
-    }
-
     void* generate(size_t instr_cnt, const std::vector<InstrType>& types) {
         if (types.empty() || instr_cnt == 0) return nullptr;
-        release_current();
 
         std::vector<EmitterFunc> emitters;
         emitters.reserve(types.size());
@@ -413,7 +410,6 @@ public:
             for (auto t : types) fprintf(log_file_, "%d ", (int)t);
             fprintf(log_file_, ")\n;;; ========================================\n");
             fflush(log_file_);
-            
             logger = std::make_unique<asmjit::FileLogger>(log_file_);
             code.set_logger(logger.get());
         }
@@ -431,7 +427,7 @@ public:
         a.mov(asmjit::x86::rcx, asmjit::imm(dbuf1_addr));
         a.mov(asmjit::x86::rdx, asmjit::imm(dbuf2_addr));
 
-        a.mov(asmjit::x86::eax, asmjit::imm(0x3F8147AE)); // loading 1.01 for mul
+        a.mov(asmjit::x86::eax, asmjit::imm(0x3F8147AE));
         a.movd(asmjit::x86::xmm(15), asmjit::x86::eax);
         a.shl(asmjit::x86::rax, asmjit::imm(32));
         a.movd(asmjit::x86::xmm(15), asmjit::x86::eax);
@@ -451,24 +447,23 @@ public:
         a.pop(asmjit::x86::rbx);
         a.ret();
 
-        if (runtime_.add(&current_fn_, &code) != asmjit::kErrorOk)
-            current_fn_ = nullptr;
-
-        if (current_fn_) {
-            __builtin___clear_cache(reinterpret_cast<char*>(current_fn_),
-                                    reinterpret_cast<char*>(current_fn_) + code.code_size());
+        void* fn = nullptr;
+        if (runtime_.add(&fn, &code) == asmjit::kErrorOk) {
+            functions_.push_back(fn);
+            __builtin___clear_cache(reinterpret_cast<char*>(fn),
+                                    reinterpret_cast<char*>(fn) + code.code_size());
         }
-
-        
-        return current_fn_;
+        return fn;
     }
 
-    void release_current() {
-        if (current_fn_) {
-            runtime_.release(current_fn_);
-            current_fn_ = nullptr;
+    void release_all() {
+        for (void* fn : functions_) {
+            if (fn) runtime_.release(fn);
         }
+        functions_.clear();
     }
+
+    void release_current() { release_all(); }
 
 private:
     static constexpr size_t kBufEntries = 4 * 1024 * 1024;
@@ -498,7 +493,6 @@ private:
             p2[i] = &p2[i];
         }
 
-        // Random permutation to avoid predictable access patterns
         std::mt19937_64 rng(12345);
         const size_t cycle_len = 8192 / sizeof(void*);
         for (size_t i = kBufEntries - 1; i > 0; --i) {
@@ -523,7 +517,7 @@ private:
     }
 
     ~ExecPortsCodeGenerator() {
-        release_current();
+        release_all();
         if (dbuf1_) munmap(dbuf1_, dbuf_size_);
         if (dbuf2_orig_) munmap(dbuf2_orig_, dbuf_size_);
         if (log_file_) fclose(log_file_);
@@ -531,11 +525,8 @@ private:
 
     using EmitterFunc = void(*)(asmjit::x86::Assembler&, size_t idx);
 
-    ExecPortsCodeGenerator(const ExecPortsCodeGenerator&) = delete;
-    ExecPortsCodeGenerator& operator=(const ExecPortsCodeGenerator&) = delete;
-
     static constexpr asmjit::x86::Gp kAllRegs[] = {
-        asmjit::x86::rax, /*asmjit::x86::rcx, asmjit::x86::rdx,*/ asmjit::x86::rbx,
+        asmjit::x86::rax, asmjit::x86::rbx,
         asmjit::x86::rbp, asmjit::x86::rsi, asmjit::x86::rdi,
         asmjit::x86::r8,  asmjit::x86::r9,  asmjit::x86::r10, asmjit::x86::r11,
         asmjit::x86::r12, asmjit::x86::r13, asmjit::x86::r14, asmjit::x86::r15
@@ -548,12 +539,10 @@ private:
     static auto src_xmm(size_t idx) { return asmjit::x86::xmm((idx + 1) % 16); }
 
     static void emit_nop(asmjit::x86::Assembler& a, size_t) { a.nop(); }
-    static void emit_add_imm1(asmjit::x86::Assembler& a, size_t idx) { a.add(dst_reg(idx), asmjit::imm(1)); }
+    static void emit_add_imm1(asmjit::x86::Assembler& a, size_t) { a.add(dst_reg(0), asmjit::imm(1)); }
     static void emit_sub_imm1(asmjit::x86::Assembler& a, size_t idx) { a.sub(dst_reg(idx), asmjit::imm(1)); }
-    static void emit_mul_float(asmjit::x86::Assembler& a, size_t idx) { 
-        a.mulss(dst_xmm(idx), asmjit::x86::xmm(15));
-    }
-    static void emit_add_reg(asmjit::x86::Assembler& a, size_t idx) { a.add(dst_reg(idx), src_reg(idx)); }
+    static void emit_mul_float(asmjit::x86::Assembler& a, size_t) { a.mulss(dst_xmm(1), asmjit::x86::xmm(15)); }
+    static void emit_add_reg(asmjit::x86::Assembler& a, size_t) { a.add(asmjit::x86::rax, asmjit::x86::rax); }
     static void emit_mov_imm(asmjit::x86::Assembler& a, size_t idx) { a.mov(dst_reg(idx), asmjit::imm(static_cast<int64_t>(idx))); }
     static void emit_xor_zero(asmjit::x86::Assembler& a, size_t idx) { a.xor_(dst_reg(idx), dst_reg(idx)); }
     static void emit_inc(asmjit::x86::Assembler& a, size_t idx) { a.inc(dst_reg(idx)); }
@@ -566,18 +555,10 @@ private:
     static void emit_shr_imm1(asmjit::x86::Assembler& a, size_t idx) { a.shr(dst_reg(idx), asmjit::imm(1)); }
     static void emit_not(asmjit::x86::Assembler& a, size_t idx) { a.not_(dst_reg(idx)); }
     static void emit_neg(asmjit::x86::Assembler& a, size_t idx) { a.neg(dst_reg(idx)); }
-    static void emit_load_from_rcx(asmjit::x86::Assembler& a, size_t idx) {
-        a.mov(dst_reg(idx), asmjit::x86::ptr(asmjit::x86::rcx));
-    }
-    static void emit_store_to_rcx(asmjit::x86::Assembler& a, size_t idx) {
-        a.mov(asmjit::x86::ptr(asmjit::x86::rcx), src_reg(idx));
-    }
-    static void emit_load_from_rdx(asmjit::x86::Assembler& a, size_t idx) {
-        a.mov(dst_reg(idx), asmjit::x86::ptr(asmjit::x86::rdx));
-    }
-    static void emit_store_to_rdx(asmjit::x86::Assembler& a, size_t idx) {
-        a.mov(asmjit::x86::ptr(asmjit::x86::rdx), src_reg(idx));
-    }
+    static void emit_load_from_rcx(asmjit::x86::Assembler& a, size_t) { a.add(asmjit::x86::rbx, asmjit::x86::ptr(asmjit::x86::rcx)); }
+    static void emit_store_to_rcx(asmjit::x86::Assembler& a, size_t idx) { a.mov(asmjit::x86::ptr(asmjit::x86::rcx), src_reg(idx)); }
+    static void emit_load_from_rdx(asmjit::x86::Assembler& a, size_t) { a.add(asmjit::x86::rbx, asmjit::x86::ptr(asmjit::x86::rdx)); }
+    static void emit_store_to_rdx(asmjit::x86::Assembler& a, size_t idx) { a.mov(asmjit::x86::ptr(asmjit::x86::rdx), src_reg(idx)); }
 
     static EmitterFunc get_emitter(InstrType type) {
         static const EmitterFunc table[] = {
@@ -598,16 +579,16 @@ private:
             emit_shr_imm1,      // SHR_IMM1
             emit_not,           // NOT
             emit_neg,           // NEG
-            emit_load_from_rcx,
-            emit_load_from_rcx, 
-            emit_load_from_rdx,
-            emit_store_to_rdx
+            emit_load_from_rcx, // LOAD_FROM_RCX
+            emit_store_to_rcx,  // STORE_TO_RCX
+            emit_load_from_rdx, // LOAD_FROM_RDX
+            emit_store_to_rdx   // STORE_TO_RDX
         };
         return table[static_cast<int>(type)];
     }
 
     asmjit::JitRuntime runtime_;
-    void* current_fn_ = nullptr;
+    std::vector<void*> functions_;
 };
 
 } // namespace x86_exec_ports_detail
@@ -617,7 +598,7 @@ inline void* generate_exec_ports_codegenerate(size_t instr_cnt, const std::vecto
 }
 
 inline void release_exec_ports_code() {
-    x86_exec_ports_detail::ExecPortsCodeGenerator::instance().release_current();
+    x86_exec_ports_detail::ExecPortsCodeGenerator::instance().release_all();
 }
 
 } // namespace silicon_probe::platform::arch
