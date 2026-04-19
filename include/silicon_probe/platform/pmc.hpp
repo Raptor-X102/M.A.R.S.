@@ -30,6 +30,7 @@ public:
 
     // Create a group of counters for the given event types
     static std::unique_ptr<PmcGroup> create(const std::vector<EventType>& events);
+    static std::unique_ptr<PmcGroup> create_raw(const std::vector<std::string>& event_names);
 
     virtual void reset() = 0;
     virtual void enable() = 0;

@@ -46,6 +46,4 @@ struct CpuEvents {
         : issued_event(std::move(i)), retired_event(std::move(r)), stalls_event(std::move(s)) {}
 };
 
-CpuEvents map_events_names(const CpuVendor& vendor);
-
 } // namespace silicon_probe::platform

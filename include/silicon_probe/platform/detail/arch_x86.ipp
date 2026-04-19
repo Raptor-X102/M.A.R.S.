@@ -42,7 +42,6 @@ inline void serialize_pipeline() noexcept {
 }
 
 using CpuVendor = silicon_probe::platform::cpu_vendor::CpuVendor;
-
 inline CpuVendor detect_vendor() noexcept {
     uint32_t eax = 0, ebx = 0, ecx = 0, edx = 0;
     __cpuid_count(0, 0, eax, ebx, ecx, edx);
@@ -50,7 +49,7 @@ inline CpuVendor detect_vendor() noexcept {
     char vendor[13] = {0};
     std::memcpy(vendor, &ebx, 4);
     std::memcpy(vendor + 4, &edx, 4);
-    std::memcpy(vendor + 8, &ecx, 3);
+    std::memcpy(vendor + 8, &ecx, 4);
      
     using CpuVendorID = CpuVendor::CpuVendorID;
     CpuVendorID id = CpuVendorID::Unknown;
@@ -353,6 +352,272 @@ inline void release_rob_code() {
 
 inline void set_rob_inner_iterations(size_t its) {
     x86_rob_detail::RobCodeGenerator::instance().set_iterations(its);
+}
+
+enum InstrType : int {
+    NOP,
+    ADD_IMM1,
+    SUB_IMM1,
+    MUL_FLOAT,
+    ADD_REG,
+    MOV_IMM,
+    XOR_ZERO,
+    INC,
+    DEC,
+    SUB_REG,
+    IMUL_REG,
+    AND_REG,
+    OR_REG,
+    SHL_IMM1,
+    SHR_IMM1,
+    NOT,
+    NEG,
+    LOAD_FROM_RCX,   // mov reg, [rcx]
+    STORE_TO_RCX,    // mov [rcx], reg
+    LOAD_FROM_RDX,   // mov reg, [rdx]
+    STORE_TO_RDX
+};
+
+namespace x86_exec_ports_detail {
+
+class ExecPortsCodeGenerator {
+public:
+    static ExecPortsCodeGenerator& instance() {
+        static ExecPortsCodeGenerator gen;
+        return gen;
+    }
+
+    void* generate(size_t instr_cnt, InstrType type) {
+        std::vector<InstrType> types(1, type);
+        return generate(instr_cnt, types);
+    }
+
+    void* generate(size_t instr_cnt, const std::vector<InstrType>& types) {
+        if (types.empty() || instr_cnt == 0) return nullptr;
+        release_current();
+
+        std::vector<EmitterFunc> emitters;
+        emitters.reserve(types.size());
+        for (InstrType t : types) {
+            emitters.push_back(get_emitter(t));
+        }
+
+        asmjit::CodeHolder code;
+        code.init(runtime_.environment());
+        asmjit::x86::Assembler a(&code);
+        std::unique_ptr<asmjit::FileLogger> logger;
+        if (log_file_) {
+            ++gen_call_count_;
+            fprintf(log_file_, "\n\n;;; ========================================\n");
+            fprintf(log_file_, ";;; Generated function #%d (instr_cnt=%zu, types: ", gen_call_count_, instr_cnt);
+            for (auto t : types) fprintf(log_file_, "%d ", (int)t);
+            fprintf(log_file_, ")\n;;; ========================================\n");
+            fflush(log_file_);
+            
+            logger = std::make_unique<asmjit::FileLogger>(log_file_);
+            code.set_logger(logger.get());
+        }
+
+        a.push(asmjit::x86::rbx);
+        a.push(asmjit::x86::rbp);
+        a.push(asmjit::x86::rsi);
+        a.push(asmjit::x86::rdi);
+        a.push(asmjit::x86::r12);
+        a.push(asmjit::x86::r13);
+        a.push(asmjit::x86::r14);
+        a.push(asmjit::x86::r15);
+        uint64_t dbuf1_addr = reinterpret_cast<uint64_t>(dbuf1_);
+        uint64_t dbuf2_addr = reinterpret_cast<uint64_t>(dbuf2_);
+        a.mov(asmjit::x86::rcx, asmjit::imm(dbuf1_addr));
+        a.mov(asmjit::x86::rdx, asmjit::imm(dbuf2_addr));
+
+        a.mov(asmjit::x86::eax, asmjit::imm(0x3F8147AE)); // loading 1.01 for mul
+        a.movd(asmjit::x86::xmm(15), asmjit::x86::eax);
+        a.shl(asmjit::x86::rax, asmjit::imm(32));
+        a.movd(asmjit::x86::xmm(15), asmjit::x86::eax);
+
+        size_t num_types = emitters.size();
+        for (size_t i = 0; i < instr_cnt; ++i) {
+            emitters[i % num_types](a, i);
+        }
+
+        a.pop(asmjit::x86::r15);
+        a.pop(asmjit::x86::r14);
+        a.pop(asmjit::x86::r13);
+        a.pop(asmjit::x86::r12);
+        a.pop(asmjit::x86::rdi);
+        a.pop(asmjit::x86::rsi);
+        a.pop(asmjit::x86::rbp);
+        a.pop(asmjit::x86::rbx);
+        a.ret();
+
+        if (runtime_.add(&current_fn_, &code) != asmjit::kErrorOk)
+            current_fn_ = nullptr;
+
+        if (current_fn_) {
+            __builtin___clear_cache(reinterpret_cast<char*>(current_fn_),
+                                    reinterpret_cast<char*>(current_fn_) + code.code_size());
+        }
+
+        
+        return current_fn_;
+    }
+
+    void release_current() {
+        if (current_fn_) {
+            runtime_.release(current_fn_);
+            current_fn_ = nullptr;
+        }
+    }
+
+private:
+    static constexpr size_t kBufEntries = 4 * 1024 * 1024;
+
+    void* dbuf1_ = nullptr;
+    void* dbuf2_ = nullptr;
+    void* dbuf2_orig_ = nullptr;
+    size_t dbuf_size_ = 0;
+    FILE* log_file_ = nullptr;
+    int gen_call_count_ = 0;
+
+    void init_buffers() {
+        dbuf_size_ = kBufEntries * sizeof(void*);
+        dbuf1_ = mmap(nullptr, dbuf_size_, PROT_READ | PROT_WRITE,
+                      MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+        dbuf2_orig_ = mmap(nullptr, dbuf_size_, PROT_READ | PROT_WRITE,
+                           MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+
+        if (dbuf1_ == MAP_FAILED || dbuf2_orig_ == MAP_FAILED) {
+            throw std::runtime_error("Failed to allocate buffers for ExecPortsCodeGenerator");
+        }
+
+        void** p1 = static_cast<void**>(dbuf1_);
+        void** p2 = static_cast<void**>(dbuf2_orig_);
+        for (size_t i = 0; i < kBufEntries; ++i) {
+            p1[i] = &p1[i];
+            p2[i] = &p2[i];
+        }
+
+        // Random permutation to avoid predictable access patterns
+        std::mt19937_64 rng(12345);
+        const size_t cycle_len = 8192 / sizeof(void*);
+        for (size_t i = kBufEntries - 1; i > 0; --i) {
+            if ((i & 0x1ff) == 0 && i >= cycle_len) {
+                size_t k = (rng() % (i / cycle_len)) * cycle_len + (i % cycle_len);
+                std::swap(p1[i], p1[k]);
+                std::swap(p2[i], p2[k]);
+            }
+        }
+
+        size_t offset = (kBufEntries / 4) * sizeof(void*);
+        offset -= offset % 64;
+        dbuf2_ = static_cast<char*>(dbuf2_orig_) + offset;
+    }
+
+    ExecPortsCodeGenerator() {
+        init_buffers();
+        log_file_ = fopen("exec_ports_code_dump.txt", "w");
+        if (!log_file_) {
+            SPDLOG_WARN("failed to open logging file");
+        }
+    }
+
+    ~ExecPortsCodeGenerator() {
+        release_current();
+        if (dbuf1_) munmap(dbuf1_, dbuf_size_);
+        if (dbuf2_orig_) munmap(dbuf2_orig_, dbuf_size_);
+        if (log_file_) fclose(log_file_);
+    }
+
+    using EmitterFunc = void(*)(asmjit::x86::Assembler&, size_t idx);
+
+    ExecPortsCodeGenerator(const ExecPortsCodeGenerator&) = delete;
+    ExecPortsCodeGenerator& operator=(const ExecPortsCodeGenerator&) = delete;
+
+    static constexpr asmjit::x86::Gp kAllRegs[] = {
+        asmjit::x86::rax, /*asmjit::x86::rcx, asmjit::x86::rdx,*/ asmjit::x86::rbx,
+        asmjit::x86::rbp, asmjit::x86::rsi, asmjit::x86::rdi,
+        asmjit::x86::r8,  asmjit::x86::r9,  asmjit::x86::r10, asmjit::x86::r11,
+        asmjit::x86::r12, asmjit::x86::r13, asmjit::x86::r14, asmjit::x86::r15
+    };
+    static constexpr size_t kNumRegs = sizeof(kAllRegs) / sizeof(kAllRegs[0]);
+
+    static auto dst_reg(size_t idx) { return kAllRegs[idx % kNumRegs]; }
+    static auto src_reg(size_t idx) { return kAllRegs[(idx + 1) % kNumRegs]; }
+    static auto dst_xmm(size_t idx) { return asmjit::x86::xmm(idx % 16); }
+    static auto src_xmm(size_t idx) { return asmjit::x86::xmm((idx + 1) % 16); }
+
+    static void emit_nop(asmjit::x86::Assembler& a, size_t) { a.nop(); }
+    static void emit_add_imm1(asmjit::x86::Assembler& a, size_t idx) { a.add(dst_reg(idx), asmjit::imm(1)); }
+    static void emit_sub_imm1(asmjit::x86::Assembler& a, size_t idx) { a.sub(dst_reg(idx), asmjit::imm(1)); }
+    static void emit_mul_float(asmjit::x86::Assembler& a, size_t idx) { 
+        a.mulss(dst_xmm(idx), asmjit::x86::xmm(15));
+    }
+    static void emit_add_reg(asmjit::x86::Assembler& a, size_t idx) { a.add(dst_reg(idx), src_reg(idx)); }
+    static void emit_mov_imm(asmjit::x86::Assembler& a, size_t idx) { a.mov(dst_reg(idx), asmjit::imm(static_cast<int64_t>(idx))); }
+    static void emit_xor_zero(asmjit::x86::Assembler& a, size_t idx) { a.xor_(dst_reg(idx), dst_reg(idx)); }
+    static void emit_inc(asmjit::x86::Assembler& a, size_t idx) { a.inc(dst_reg(idx)); }
+    static void emit_dec(asmjit::x86::Assembler& a, size_t idx) { a.dec(dst_reg(idx)); }
+    static void emit_sub_reg(asmjit::x86::Assembler& a, size_t idx) { a.sub(dst_reg(idx), src_reg(idx)); }
+    static void emit_imul_reg(asmjit::x86::Assembler& a, size_t idx) { a.imul(dst_reg(idx), src_reg(idx)); }
+    static void emit_and_reg(asmjit::x86::Assembler& a, size_t idx) { a.and_(dst_reg(idx), src_reg(idx)); }
+    static void emit_or_reg(asmjit::x86::Assembler& a, size_t idx) { a.or_(dst_reg(idx), src_reg(idx)); }
+    static void emit_shl_imm1(asmjit::x86::Assembler& a, size_t idx) { a.shl(dst_reg(idx), asmjit::imm(1)); }
+    static void emit_shr_imm1(asmjit::x86::Assembler& a, size_t idx) { a.shr(dst_reg(idx), asmjit::imm(1)); }
+    static void emit_not(asmjit::x86::Assembler& a, size_t idx) { a.not_(dst_reg(idx)); }
+    static void emit_neg(asmjit::x86::Assembler& a, size_t idx) { a.neg(dst_reg(idx)); }
+    static void emit_load_from_rcx(asmjit::x86::Assembler& a, size_t idx) {
+        a.mov(dst_reg(idx), asmjit::x86::ptr(asmjit::x86::rcx));
+    }
+    static void emit_store_to_rcx(asmjit::x86::Assembler& a, size_t idx) {
+        a.mov(asmjit::x86::ptr(asmjit::x86::rcx), src_reg(idx));
+    }
+    static void emit_load_from_rdx(asmjit::x86::Assembler& a, size_t idx) {
+        a.mov(dst_reg(idx), asmjit::x86::ptr(asmjit::x86::rdx));
+    }
+    static void emit_store_to_rdx(asmjit::x86::Assembler& a, size_t idx) {
+        a.mov(asmjit::x86::ptr(asmjit::x86::rdx), src_reg(idx));
+    }
+
+    static EmitterFunc get_emitter(InstrType type) {
+        static const EmitterFunc table[] = {
+            emit_nop,           // NOP
+            emit_add_imm1,      // ADD_IMM1
+            emit_sub_imm1,      // SUB_IMM1
+            emit_mul_float,     // MUL_FLOAT
+            emit_add_reg,       // ADD_REG
+            emit_mov_imm,       // MOV_IMM
+            emit_xor_zero,      // XOR_ZERO
+            emit_inc,           // INC
+            emit_dec,           // DEC
+            emit_sub_reg,       // SUB_REG
+            emit_imul_reg,      // IMUL_REG
+            emit_and_reg,       // AND_REG
+            emit_or_reg,        // OR_REG
+            emit_shl_imm1,      // SHL_IMM1
+            emit_shr_imm1,      // SHR_IMM1
+            emit_not,           // NOT
+            emit_neg,           // NEG
+            emit_load_from_rcx,
+            emit_load_from_rcx, 
+            emit_load_from_rdx,
+            emit_store_to_rdx
+        };
+        return table[static_cast<int>(type)];
+    }
+
+    asmjit::JitRuntime runtime_;
+    void* current_fn_ = nullptr;
+};
+
+} // namespace x86_exec_ports_detail
+
+inline void* generate_exec_ports_codegenerate(size_t instr_cnt, const std::vector<InstrType>& types) {
+    return x86_exec_ports_detail::ExecPortsCodeGenerator::instance().generate(instr_cnt, types);
+}
+
+inline void release_exec_ports_code() {
+    x86_exec_ports_detail::ExecPortsCodeGenerator::instance().release_current();
 }
 
 } // namespace silicon_probe::platform::arch

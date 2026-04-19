@@ -30,6 +30,17 @@ find_package(spdlog CONFIG REQUIRED)
 find_package(yaml-cpp CONFIG REQUIRED)
 find_package(Threads REQUIRED)
 find_package(asmjit REQUIRED)
+find_path(PFM_INCLUDE_DIRS
+    NAMES perfmon/pfmlib.h
+    PATH_SUFFIXES include
+)
+find_library(PFM_LIBRARIES
+    NAMES pfm
+    PATH_SUFFIXES lib
+)
+if(NOT PFM_INCLUDE_DIRS OR NOT PFM_LIBRARIES)
+    message(FATAL_ERROR "libpfm4 not found. Please install libpfm4-dev")
+endif()
 
 #####################################
 # Common target defaults
@@ -109,7 +120,7 @@ if(UNIX AND NOT APPLE)
     target_sources(mars_platform PRIVATE 
         src/platform/linux/os_linux.cpp
         src/platform/linux/pmc_linux.cpp
-        src/platform/cpu_vendor.cpp
+        src/platform/port_events_discovery.cpp
     )
 else()
     message(FATAL_ERROR "Unsupported platform: MARS currently supports Linux only")
@@ -122,7 +133,10 @@ target_link_libraries(mars_platform
         Threads::Threads
     PRIVATE
         asmjit::asmjit
+        ${PFM_LIBRARIES}
 )
+
+target_include_directories(mars_platform PRIVATE ${PFM_INCLUDE_DIRS})
 
 #####################################
 # Core

@@ -25,6 +25,8 @@ struct CpuInfoData {
     std::optional<size_t> rob_size; // reorder buffer
     std::optional<size_t> pipeline_depth;
 
+    std::optional<bool> execution_ports_independent; // for now only for add & mul instructions
+
     std::optional<size_t> cpu_family;
     std::optional<size_t> cpu_model;
     std::optional<std::string> cpu_name;
