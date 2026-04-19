@@ -170,6 +170,8 @@ void set_realtime_priority() {
     if (mlockall(MCL_CURRENT | MCL_FUTURE) != 0) {
         SPDLOG_WARN("mlockall failed, memory may still be paged");
     }
+
+    SPDLOG_INFO("Priority set: realtime");
 }
 
 void restore_priority() {
@@ -244,6 +246,66 @@ void restore_cpu_frequency() {
     governor_saved() = false;
 }
 
+namespace TurboBoostDetails {
+bool& turbo_boost_saved() {
+    static bool saved = false;
+    return saved;
+}
+std::string& turbo_boost_path() {
+    static std::string path;
+    return path;
+}
+}
+
+void disable_turbo_boost() {
+    if (TurboBoostDetails::turbo_boost_saved()) return;
+
+    // Try generic path first, then vendor-specific
+    const std::vector<std::string> paths = {
+        "/sys/devices/system/cpu/cpufreq/boost",
+        "/sys/devices/system/cpu/intel_pstate/no_turbo"
+    };
+
+    for (const auto& p : paths) {
+        std::ifstream in{p};
+        if (in.is_open()) {
+            std::string val; in >> val;
+            TurboBoostDetails::turbo_boost_path() = p;
+            
+            std::ofstream out{p};
+            if (!out.is_open()) {
+                throw PermissionError("Cannot open boost control file: " + p);
+            }
+            out << "0"; // 0 = disable
+            if (out.fail()) {
+                throw PermissionError("Failed to disable turbo boost at " + p);
+            }
+            TurboBoostDetails::turbo_boost_saved() = true;
+            SPDLOG_INFO("Turbo boost disabled via {}", p);
+            return;
+        }
+    }
+    SPDLOG_WARN("Turbo boost control file not found. Measurements may suffer from frequency jitter.");
+}
+
+void restore_turbo_boost() {
+    if (!TurboBoostDetails::turbo_boost_saved()) return;
+    const std::string& path = TurboBoostDetails::turbo_boost_path();
+    
+    std::ofstream out{path};
+    if (!out.is_open()) {
+        SPDLOG_ERROR("Cannot restore turbo boost: {} is unavailable", path);
+        return;
+    }
+    out << "1"; // Re-enable
+    if (out.fail()) {
+        SPDLOG_ERROR("Failed to re-enable turbo boost at {}", path);
+    } else {
+        SPDLOG_INFO("Turbo boost restored");
+    }
+    TurboBoostDetails::turbo_boost_saved() = false;
+}
+
 ScopedThreadAffinity::ScopedThreadAffinity(int cpu)
     : previous_affinity_(new cpu_set_t_storage{}) {
     CPU_ZERO(&previous_affinity_->set);
@@ -289,11 +351,17 @@ ScopedPriority::~ScopedPriority() {
 
 ScopedFrequencyLock::ScopedFrequencyLock() {
     lock_cpu_frequency();
+    disable_turbo_boost();
 }
 
 ScopedFrequencyLock::~ScopedFrequencyLock() {
     try {
         restore_cpu_frequency();
+        try { 
+            restore_turbo_boost(); 
+        } catch (const std::exception& e) { 
+            SPDLOG_ERROR("Turbo restore failed: {}", e.what()); 
+        }
     } catch (const std::exception& error) {
         SPDLOG_ERROR("Failed to restore CPU frequency governor: {}", error.what());
     }

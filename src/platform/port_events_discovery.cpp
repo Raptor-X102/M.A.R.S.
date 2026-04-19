@@ -1,0 +1,110 @@
+#include "silicon_probe/platform/port_events_discovery.hpp"
+#include "silicon_probe/infra/logging.hpp"
+#include <perfmon/pfmlib.h>
+#include <perfmon/pfmlib_perf_event.h>
+#include <mutex>
+#include <cstring>
+#include "silicon_probe/platform/arch.hpp"
+
+namespace silicon_probe::platform {
+
+static bool ensure_pfm() {
+    static std::once_flag flag;
+    static bool initialized = false;
+    std::call_once(flag, []() {
+        initialized = (pfm_initialize() == PFM_SUCCESS);
+        if (!initialized) {
+            SPDLOG_ERROR("libpfm4 initialization failed");
+        }
+    });
+    return initialized;
+}
+
+static bool event_exists(const std::string& name) {
+    if (!ensure_pfm()) return false;
+    return pfm_find_event(name.c_str()) >= 0;
+}
+
+std::vector<std::string> discover_port_events() {
+    if (!ensure_pfm()) return {};
+
+    using CpuVendor = silicon_probe::platform::cpu_vendor::CpuVendor;
+    CpuVendor vendor = arch::detect_vendor();
+    std::vector<std::string> candidates;
+
+    if (vendor == CpuVendor::CpuVendorID::Intel) {
+        // Try modern names first (uops_dispatched.port_X)
+        for (int port = 0; port <= 7; ++port) {
+            std::string name = "uops_dispatched.port_" + std::to_string(port);
+            if (event_exists(name))
+                candidates.push_back(name);
+        }
+        
+        // Load ports (grouped)
+        std::vector<std::string> load_port_names = {
+            "uops_dispatched.port_2_3_10",
+            "uops_dispatched.port_2_3",
+            "uops_dispatched.port_2",
+            "uops_dispatched.port_3"
+        };
+        for (const auto& name : load_port_names) {
+            if (event_exists(name)) {
+                candidates.push_back(name);
+                break; // take first available
+            }
+        }
+        // Store ports
+        std::vector<std::string> store_port_names = {
+            "uops_dispatched.port_4_9",
+            "uops_dispatched.port_4",
+            "uops_dispatched.port_7_8",
+            "uops_dispatched.port_7"
+        };
+        for (const auto& name : store_port_names) {
+            if (event_exists(name)) {
+                candidates.push_back(name);
+                break;
+            }
+        }
+        // If none found, try older naming (UOPS_DISPATCHED_PORT.PORT_X)
+        if (candidates.empty()) {
+            for (int port = 0; port <= 7; ++port) {
+                std::string name = "UOPS_DISPATCHED_PORT.PORT_" + std::to_string(port);
+                if (event_exists(name))
+                    candidates.push_back(name);
+            }
+        }
+        // Fallback to lowercase alternative
+        if (candidates.empty()) {
+            for (int port = 0; port <= 7; ++port) {
+                std::string name = "uops_dispatched_port.port_" + std::to_string(port);
+                if (event_exists(name))
+                    candidates.push_back(name);
+            }
+        }
+    }
+    else if (vendor == CpuVendor::CpuVendorID::AMD) {
+        // AMD Zen: EX_RET_UOPS_RETIRE.PORTS_0 .. PORTS_3
+        for (int port = 0; port <= 3; ++port) {
+            std::string name = "EX_RET_UOPS_RETIRE.PORTS_" + std::to_string(port);
+            if (event_exists(name))
+                candidates.push_back(name);
+            else {
+                name = "ex_ret_uops_retire.ports_" + std::to_string(port);
+                if (event_exists(name))
+                    candidates.push_back(name);
+            }
+        }
+        // fallback: aggregated port event
+        if (candidates.empty() && event_exists("EX_RET_UOPS_RETIRE.PORTS")) {
+            candidates.push_back("EX_RET_UOPS_RETIRE.PORTS");
+        }
+    }
+    else {
+        SPDLOG_WARN("Unsupported CPU vendor ({}) for port event discovery", vendor.name());
+    }
+
+    return candidates;
+}
+
+} // namespace silicon_probe::platform

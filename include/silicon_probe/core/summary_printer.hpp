@@ -23,6 +23,18 @@ public:
         if (data.cache_line_size) {
             stream << "Cache line: " << *data.cache_line_size << " bytes\n";
         }
+        if (data.rob_size) {
+            stream << "Rob size: " << *data.rob_size << " instructions\n";
+        }
+        if (data.bht_size) {
+            stream << "Branch History Table size: " << *data.bht_size << " entries\n";
+        }
+        if (data.ras_size) {
+            stream << "Return Address Stack size: " << *data.ras_size << " entries\n";
+        }
+        if (data.execution_ports_independent) {
+            stream << "Execution ports independent: " << *data.execution_ports_independent << "\n";
+        }
 
         stream << "========================\n\n";
     }

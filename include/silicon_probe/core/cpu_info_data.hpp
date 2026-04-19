@@ -17,14 +17,15 @@ struct CpuInfoData {
     std::optional<size_t> tlb_l1_size;
     std::optional<size_t> tlb_l2_size;
 
-    std::optional<size_t> btb_size;
-    std::optional<size_t> ras_size;
-    std::optional<size_t> bp_history_size;
+    std::optional<size_t> btb_size; // branch target buffer
+    std::optional<size_t> ras_size; // return address stack
+    std::optional<size_t> bht_size; // branch history table
     std::optional<size_t> microop_cache_size;
 
-    std::optional<size_t> rob_size;
-    std::optional<size_t> reorder_buffer_size;
+    std::optional<size_t> rob_size; // reorder buffer
     std::optional<size_t> pipeline_depth;
+
+    std::optional<bool> execution_ports_independent; // for now only for add & mul instructions
 
     std::optional<size_t> cpu_family;
     std::optional<size_t> cpu_model;
