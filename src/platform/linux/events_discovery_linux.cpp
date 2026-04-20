@@ -3,6 +3,7 @@
 #include <perfmon/pfmlib.h>
 #include <perfmon/pfmlib_perf_event.h>
 #include <mutex>
+#include <optional>
 #include <cstring>
 #include "silicon_probe/platform/arch.hpp"
 
@@ -126,6 +127,25 @@ std::vector<std::string> discover_uops_events() {
     }
 
     return candidates;
+}
+
+std::optional<std::string> discover_branch_target_buffer_events() {
+    if (!ensure_pfm()) return {};
+
+    using CpuVendor = silicon_probe::platform::cpu_vendor::CpuVendor;
+    CpuVendor vendor = arch::detect_vendor();
+
+    if (vendor == CpuVendor::CpuVendorID::Intel) {
+        std::string br_misp_retired_inderect = "br_misp_retired.indirect"; 
+        if (event_exists(br_misp_retired_inderect )) {
+            return br_misp_retired_inderect;
+        }
+    }
+    else {
+        SPDLOG_WARN("Unsupported CPU vendor ({}) for port event discovery", vendor.name());
+    }
+
+    return std::nullopt;
 }
 
 } // namespace silicon_probe::platform

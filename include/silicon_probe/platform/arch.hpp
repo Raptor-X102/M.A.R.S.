@@ -28,7 +28,10 @@ inline void* generate_uops_cache_codegenerate(size_t instr_cnt,
                                               size_t iterations, 
                                               const std::vector<InstrType>& types);
 inline void release_uops_cache_code();
-
+inline std::vector<void*> generate_branch_target_buffer_code(size_t blocks_cnt, 
+                                                             size_t iterations, 
+                                                             int alignment);
+inline void release_branch_target_buffer_code();
 } // namespace silicon_probe::platform::arch
 
 #if defined(__x86_64__) || defined(_M_X64)

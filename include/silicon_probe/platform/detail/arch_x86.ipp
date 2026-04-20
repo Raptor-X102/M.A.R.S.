@@ -746,7 +746,7 @@ private:
     }
 };
 
-} // namespace x86_exec_ports_detail
+} // namespace x86_uops_cache_detail
 
 inline void* generate_uops_cache_codegenerate(size_t instr_cnt, 
                                               size_t iterations, 
@@ -758,4 +758,136 @@ inline void release_uops_cache_code() {
     x86_uops_cache_detail::UopsCacheCodeGenerator::instance().release_current();
 }
 
+namespace x86_branch_target_buffer_detail {
+
+class BranchTargetBufferCodeGenerator {
+public:
+    static BranchTargetBufferCodeGenerator& instance() {
+        static BranchTargetBufferCodeGenerator gen;
+        return gen;
+    }
+
+    std::vector<void*> generate(size_t blocks_cnt, size_t iterations, int alignment) {
+        release_all();
+        
+        std::unique_ptr<asmjit::FileLogger> logger;
+        if (log_file_) {
+            ++gen_call_count_;
+            fprintf(log_file_, "\n\n;;; ========================================\n");
+            fprintf(log_file_, ";;; Generated function #%d (blocks_cnt=%zu, alignment=%d", gen_call_count_, blocks_cnt, alignment);
+            fprintf(log_file_, ")\n;;; ========================================\n");
+            fflush(log_file_);
+            logger = std::make_unique<asmjit::FileLogger>(log_file_);
+        }
+
+        auto generate_body_func = [&](asmjit::x86::Assembler& a) {
+            std::vector<asmjit::Label> labels(blocks_cnt);
+            for (auto& label : labels) {
+                label = a.new_label();
+                a.lea(asmjit::x86::r11, asmjit::x86::ptr(label));
+                a.jmp(asmjit::x86::r11);
+                a.align(asmjit::AlignMode::kCode, alignment);
+                a.bind(label);
+            }
+        };
+
+        auto generate_warmup = [&]() -> void* {
+            asmjit::CodeHolder code;
+            code.init(runtime_.environment());
+            code.set_logger(logger.get());
+            asmjit::x86::Assembler a(&code);
+
+            a.align(asmjit::AlignMode::kCode, alignment);
+            generate_body_func(a);
+            a.ret();
+            void* fn = nullptr;
+            if (runtime_.add(&fn, &code) == asmjit::kErrorOk) {
+                warmup_function_ = fn;
+                __builtin___clear_cache(reinterpret_cast<char*>(fn),
+                                        reinterpret_cast<char*>(fn) + code.code_size());
+            }
+
+            return fn;
+        };
+
+        auto generate_measure = [&]() -> void* {
+            asmjit::CodeHolder code;
+            code.init(runtime_.environment());
+            code.set_logger(logger.get());
+            asmjit::x86::Assembler a(&code);
+
+            a.mov(asmjit::x86::rcx, asmjit::imm(iterations));
+            a.align(asmjit::AlignMode::kCode, alignment);
+            asmjit::Label loop_start = a.new_label();
+            a.bind(loop_start);
+            generate_body_func(a);
+            a.dec(asmjit::x86::rcx);
+            a.jnz(loop_start);
+            a.ret();
+
+            void* fn = nullptr;
+            if (runtime_.add(&fn, &code) == asmjit::kErrorOk) {
+                warmup_function_ = fn;
+                __builtin___clear_cache(reinterpret_cast<char*>(fn),
+                                        reinterpret_cast<char*>(fn) + code.code_size());
+            }
+
+            return fn;
+        };
+        
+        return {generate_warmup(), generate_measure()};
+    }
+
+    void release_measure_func() {
+        if (measure_function_) {
+            runtime_.release(measure_function_);
+            measure_function_ = nullptr;
+        }
+    }
+
+    void release_warmup_func() {
+        if (warmup_function_) {
+            runtime_.release(warmup_function_);
+            warmup_function_ = nullptr;
+        }
+    }
+
+    void release_all() {
+        release_warmup_func();
+        release_measure_func();
+    }
+
+private:
+    FILE* log_file_ = nullptr;
+    int gen_call_count_ = 0;
+    void* warmup_function_ = nullptr;  
+    void* measure_function_ = nullptr;  
+    asmjit::JitRuntime runtime_;
+
+    BranchTargetBufferCodeGenerator() {
+        log_file_ = fopen("branch_target_buffer_code_dump.txt", "w");
+        if (!log_file_) {
+            SPDLOG_WARN("failed to open logging file");
+        }
+    }
+
+    ~BranchTargetBufferCodeGenerator() {
+        release_all();
+        if (log_file_) fclose(log_file_);
+    }
+};
+
+} // namespace x86_branch_target_buffer_detail
+
+inline std::vector<void*> generate_branch_target_buffer_code(size_t blocks_cnt, 
+                                                             size_t iterations, 
+                                                             int alignment) {
+    return x86_branch_target_buffer_detail::BranchTargetBufferCodeGenerator::instance().generate(blocks_cnt,
+                                                                                                 iterations,
+                                                                                                 alignment);
+}
+
+inline void release_branch_target_buffer_code() {
+    x86_branch_target_buffer_detail::BranchTargetBufferCodeGenerator::instance().release_all();
+}
 } // namespace silicon_probe::platform::arch

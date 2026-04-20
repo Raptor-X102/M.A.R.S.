@@ -38,6 +38,9 @@ public:
         if (data.uops_cache_size) {
             stream << "Uops cache size: " << *data.uops_cache_size << " uops\n";
         }
+        if (data.btb_size) {
+            stream << "Uops cache size: " << *data.btb_size << " addresses\n";
+        }
 
         stream << "========================\n\n";
     }
