@@ -6,7 +6,7 @@
 #include "silicon_probe/platform/arch.hpp"
 #include "silicon_probe/platform/pmc.hpp"
 #include "silicon_probe/platform/os.hpp"
-#include "silicon_probe/platform/port_events_discovery.hpp"
+#include "silicon_probe/platform/events_discovery.hpp"
 #include <vector>
 #include <string>
 #include <algorithm>
@@ -53,8 +53,10 @@ public:
     ExecPortsMeasurer() : ExecPortsMeasurer(Config{}) {}
     explicit ExecPortsMeasurer(Config config)
         : config_(std::move(config)) {
-        SPDLOG_INFO("[{}] configured: instr_cnt={}, iterations={}, repeats={}",
-                    name(), config_.instr_cnt, config_.iterations, config_.repeats);
+        SPDLOG_INFO("[{}] configured: instr_cnt={}, iterations={}, repeats={}, instr1 = [{}, {}], instr2 = [{}, {}]",
+                    name(), config_.instr_cnt, config_.iterations, config_.repeats, 
+                    static_cast<int>(config_.instr1.instr_type), config_.instr1.instr_name, 
+                    static_cast<int>(config_.instr2.instr_type), config_.instr2.instr_name);
     }
 
     std::string_view name() const noexcept override { return "execution ports"; }

@@ -601,4 +601,161 @@ inline void release_exec_ports_code() {
     x86_exec_ports_detail::ExecPortsCodeGenerator::instance().release_all();
 }
 
+namespace x86_uops_cache_detail {
+
+class UopsCacheCodeGenerator {
+public:
+    static UopsCacheCodeGenerator& instance() {
+        static UopsCacheCodeGenerator gen;
+        return gen;
+    }
+
+    void* generate(size_t instr_cnt, size_t iterations, const std::vector<InstrType>& types) {
+        release_current();
+
+        if (types.empty() || instr_cnt == 0) return nullptr;
+
+        std::vector<EmitterFunc> emitters;
+        emitters.reserve(types.size());
+        for (InstrType t : types) {
+            emitters.push_back(get_emitter(t));
+        }
+
+        asmjit::CodeHolder code;
+        code.init(runtime_.environment());
+        asmjit::x86::Assembler a(&code);
+        std::unique_ptr<asmjit::FileLogger> logger;
+        if (log_file_) {
+            ++gen_call_count_;
+            fprintf(log_file_, "\n\n;;; ========================================\n");
+            fprintf(log_file_, ";;; Generated function #%d (instr_cnt=%zu, types: ", gen_call_count_, instr_cnt);
+            for (auto t : types) fprintf(log_file_, "%d ", (int)t);
+            fprintf(log_file_, ")\n;;; ========================================\n");
+            fflush(log_file_);
+            logger = std::make_unique<asmjit::FileLogger>(log_file_);
+            code.set_logger(logger.get());
+        }
+
+        a.push(asmjit::x86::rbx);
+        a.push(asmjit::x86::rbp);
+        a.push(asmjit::x86::rsi);
+        a.push(asmjit::x86::rdi);
+        a.push(asmjit::x86::r12);
+        a.push(asmjit::x86::r13);
+        a.push(asmjit::x86::r14);
+        a.push(asmjit::x86::r15);
+        a.mov(asmjit::x86::rcx, asmjit::imm(iterations));
+        a.align(asmjit::AlignMode::kCode, 16);
+        asmjit::Label loop_start = a.new_label();
+        a.bind(loop_start);
+
+        size_t num_types = emitters.size();
+        for (size_t i = 0; i < instr_cnt; ++i) {
+            emitters[i % num_types](a, i);
+        }
+
+        a.dec(asmjit::x86::rcx);
+        a.jnz(loop_start);
+        a.pop(asmjit::x86::r15);
+        a.pop(asmjit::x86::r14);
+        a.pop(asmjit::x86::r13);
+        a.pop(asmjit::x86::r12);
+        a.pop(asmjit::x86::rdi);
+        a.pop(asmjit::x86::rsi);
+        a.pop(asmjit::x86::rbp);
+        a.pop(asmjit::x86::rbx);
+        a.ret();
+
+        void* fn = nullptr;
+        if (runtime_.add(&fn, &code) == asmjit::kErrorOk) {
+            current_function_ = fn;
+            __builtin___clear_cache(reinterpret_cast<char*>(fn),
+                                    reinterpret_cast<char*>(fn) + code.code_size());
+        }
+        return fn;
+    }
+
+    void release_current() {
+        if (current_function_) {
+            runtime_.release(current_function_);
+            current_function_ = nullptr;
+        }
+    }
+
+private:
+    FILE* log_file_ = nullptr;
+    int gen_call_count_ = 0;
+    void* current_function_ = nullptr;  
+    asmjit::JitRuntime runtime_;
+
+    UopsCacheCodeGenerator() {
+        log_file_ = fopen("uops_cache_code_dump.txt", "w");
+        if (!log_file_) {
+            SPDLOG_WARN("failed to open logging file");
+        }
+    }
+
+    ~UopsCacheCodeGenerator() {
+        release_current();
+        if (log_file_) fclose(log_file_);
+    }
+
+    using EmitterFunc = void(*)(asmjit::x86::Assembler&, size_t idx);
+
+    static constexpr asmjit::x86::Gp kAllRegs[] = {
+        asmjit::x86::rax, asmjit::x86::rbx,
+        asmjit::x86::rbp, asmjit::x86::rsi, asmjit::x86::rdi,
+        asmjit::x86::r8,  asmjit::x86::r9,  asmjit::x86::r10, asmjit::x86::r11,
+        asmjit::x86::r12, asmjit::x86::r13, asmjit::x86::r14, asmjit::x86::r15
+    };
+    static constexpr size_t kNumRegs = sizeof(kAllRegs) / sizeof(kAllRegs[0]);
+
+    static auto dst_reg(size_t idx) { return kAllRegs[idx % kNumRegs]; }
+    static auto src_reg(size_t idx) { return kAllRegs[(idx + 1) % kNumRegs]; }
+
+    static void emit_add_reg(asmjit::x86::Assembler& a, size_t /*idx*/) { a.add(dst_reg(0), dst_reg(0)); }
+    static void emit_add_imm1(asmjit::x86::Assembler& a, size_t idx) { a.add(dst_reg(idx), asmjit::imm(1)); }
+    static void emit_nop(asmjit::x86::Assembler& a, size_t) { a.nop(); }
+
+    // TODO: either change logic, or add more emitters
+    static EmitterFunc get_emitter(InstrType type) {
+        static const EmitterFunc table[] = {
+            emit_nop,           // NOP
+            emit_add_imm1,      // ADD_IMM1
+            emit_nop,           // NOP
+            emit_nop,           // NOP
+            emit_add_reg,       // ADD_REG
+            emit_nop,           // NOP
+            emit_nop,           // NOP
+            emit_nop,           // NOP
+            emit_nop,           // NOP
+            emit_nop,           // NOP
+            emit_nop,           // NOP
+            emit_nop,           // NOP
+            emit_nop,           // NOP
+            emit_nop,           // NOP
+            emit_nop,           // NOP
+            emit_nop,           // NOP
+            emit_nop,           // NOP
+            emit_nop,           // NOP
+            emit_nop,           // NOP
+            emit_nop,           // NOP
+            emit_nop,           // NOP
+        };
+        return table[static_cast<int>(type)];
+    }
+};
+
+} // namespace x86_exec_ports_detail
+
+inline void* generate_uops_cache_codegenerate(size_t instr_cnt, 
+                                              size_t iterations, 
+                                              const std::vector<InstrType>& types) {
+    return x86_uops_cache_detail::UopsCacheCodeGenerator::instance().generate(instr_cnt,iterations, types);
+}
+
+inline void release_uops_cache_code() {
+    x86_uops_cache_detail::UopsCacheCodeGenerator::instance().release_current();
+}
+
 } // namespace silicon_probe::platform::arch

@@ -120,7 +120,7 @@ if(UNIX AND NOT APPLE)
     target_sources(mars_platform PRIVATE 
         src/platform/linux/os_linux.cpp
         src/platform/linux/pmc_linux.cpp
-        src/platform/port_events_discovery.cpp
+        src/platform/linux/events_discovery_linux.cpp
     )
 else()
     message(FATAL_ERROR "Unsupported platform: MARS currently supports Linux only")

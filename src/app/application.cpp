@@ -22,7 +22,8 @@ int execute(const ApplicationConfig& config) {
         //registry.register_measurer(std::make_unique<rob::RobMeasurer>(config.rob));
         //registry.register_measurer(std::make_unique<branch_history_table::BranchHistoryTableMeasurer>(config.bht));
         //registry.register_measurer(std::make_unique<return_address_stack::ReturnAddressStackMeasurer>(config.ras));
-        registry.register_measurer(std::make_unique<exec_ports::ExecPortsMeasurer>(config.exec_ports));
+        //registry.register_measurer(std::make_unique<exec_ports::ExecPortsMeasurer>(config.exec_ports));
+        registry.register_measurer(std::make_unique<uops_cache::UopsCacheMeasurer>(config.uops_cache));
 
         core::ProbeService probe_service{std::move(registry)};
         const auto& data = probe_service.run();

@@ -24,6 +24,10 @@ inline void release_rob_code();
 inline void set_rob_inner_iterations(size_t its);
 inline void* generate_exec_ports_codegenerate(size_t instr_cnt, const std::vector<InstrType>& types);
 inline void release_exec_ports_code();
+inline void* generate_uops_cache_codegenerate(size_t instr_cnt, 
+                                              size_t iterations, 
+                                              const std::vector<InstrType>& types);
+inline void release_uops_cache_code();
 
 } // namespace silicon_probe::platform::arch
 

@@ -35,6 +35,9 @@ public:
         if (data.execution_ports_independent) {
             stream << "Execution ports independent: " << *data.execution_ports_independent << "\n";
         }
+        if (data.uops_cache_size) {
+            stream << "Uops cache size: " << *data.uops_cache_size << " uops\n";
+        }
 
         stream << "========================\n\n";
     }

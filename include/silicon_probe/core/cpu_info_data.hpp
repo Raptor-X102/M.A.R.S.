@@ -20,7 +20,7 @@ struct CpuInfoData {
     std::optional<size_t> btb_size; // branch target buffer
     std::optional<size_t> ras_size; // return address stack
     std::optional<size_t> bht_size; // branch history table
-    std::optional<size_t> microop_cache_size;
+    std::optional<size_t> uops_cache_size;
 
     std::optional<size_t> rob_size; // reorder buffer
     std::optional<size_t> pipeline_depth;

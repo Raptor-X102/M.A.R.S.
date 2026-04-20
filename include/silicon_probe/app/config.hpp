@@ -5,6 +5,7 @@
 #include "silicon_probe/branch_history_table/branch_history_table_measurer.hpp"
 #include "silicon_probe/return_address_stack/return_address_stack_measurer.hpp"
 #include "silicon_probe/exec_ports/exec_ports_measurer.hpp"
+#include "silicon_probe/uops_cache/uops_cache_measurer.hpp"
 #include "silicon_probe/infra/logging.hpp"
 
 #include <CLI/CLI.hpp>
@@ -28,6 +29,7 @@ struct ApplicationConfig {
     branch_history_table::BranchHistoryTableMeasurer::Config bht;
     return_address_stack::ReturnAddressStackMeasurer::Config ras;
     exec_ports::ExecPortsMeasurer::Config exec_ports;
+    uops_cache::UopsCacheMeasurer::Config uops_cache;
     bool print_summary = true;
 };
 
@@ -38,6 +40,7 @@ rob::RobMeasurer::Config load_rob_config(const std::filesystem::path& path);
 branch_history_table::BranchHistoryTableMeasurer::Config load_bht_config(const std::filesystem::path& path);
 return_address_stack::ReturnAddressStackMeasurer::Config load_ras_config(const std::filesystem::path& path);
 exec_ports::ExecPortsMeasurer::Config load_exec_ports_config(const std::filesystem::path& path);
+uops_cache::UopsCacheMeasurer::Config load_uops_cache_config(const std::filesystem::path& path);
 
 } // namespace detail
 
@@ -118,6 +121,7 @@ public:
         config.bht = load_bht_config(options.config_path);
         config.ras = load_ras_config(options.config_path);
         config.exec_ports = load_exec_ports_config(options.config_path);
+        config.uops_cache = load_uops_cache_config(options.config_path);
 
         return config;
     }
@@ -137,6 +141,9 @@ private:
     }
     static exec_ports::ExecPortsMeasurer::Config load_exec_ports_config(const std::filesystem::path& path) {
         return detail::load_exec_ports_config(path);
+    }
+    static uops_cache::UopsCacheMeasurer::Config load_uops_cache_config(const std::filesystem::path& path) {
+        return detail::load_uops_cache_config(path);
     }
 };
 

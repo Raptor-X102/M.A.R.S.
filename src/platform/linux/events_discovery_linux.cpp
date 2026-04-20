@@ -1,4 +1,4 @@
-#include "silicon_probe/platform/port_events_discovery.hpp"
+#include "silicon_probe/platform/events_discovery.hpp"
 #include "silicon_probe/infra/logging.hpp"
 #include <perfmon/pfmlib.h>
 #include <perfmon/pfmlib_perf_event.h>
@@ -83,21 +83,42 @@ std::vector<std::string> discover_port_events() {
             }
         }
     }
-    else if (vendor == CpuVendor::CpuVendorID::AMD) {
-        // AMD Zen: EX_RET_UOPS_RETIRE.PORTS_0 .. PORTS_3
-        for (int port = 0; port <= 3; ++port) {
-            std::string name = "EX_RET_UOPS_RETIRE.PORTS_" + std::to_string(port);
-            if (event_exists(name))
-                candidates.push_back(name);
-            else {
-                name = "ex_ret_uops_retire.ports_" + std::to_string(port);
-                if (event_exists(name))
-                    candidates.push_back(name);
-            }
-        }
-        // fallback: aggregated port event
-        if (candidates.empty() && event_exists("EX_RET_UOPS_RETIRE.PORTS")) {
-            candidates.push_back("EX_RET_UOPS_RETIRE.PORTS");
+   // else if (vendor == CpuVendor::CpuVendorID::AMD) {
+   //     for (int port = 0; port <= 3; ++port) {
+   //         std::string name = "EX_RET_UOPS_RETIRE.PORTS_" + std::to_string(port);
+   //         if (event_exists(name))
+   //             candidates.push_back(name);
+   //         else {
+   //             name = "ex_ret_uops_retire.ports_" + std::to_string(port);
+   //             if (event_exists(name))
+   //                 candidates.push_back(name);
+   //         }
+   //     }
+   //     // fallback: aggregated port event
+   //     if (candidates.empty() && event_exists("EX_RET_UOPS_RETIRE.PORTS")) {
+   //         candidates.push_back("EX_RET_UOPS_RETIRE.PORTS");
+   //     }
+   // }
+    else {
+        SPDLOG_WARN("Unsupported CPU vendor ({}) for port event discovery", vendor.name());
+    }
+
+    return candidates;
+}
+
+std::vector<std::string> discover_uops_events() {
+    if (!ensure_pfm()) return {};
+
+    using CpuVendor = silicon_probe::platform::cpu_vendor::CpuVendor;
+    CpuVendor vendor = arch::detect_vendor();
+    std::vector<std::string> candidates;
+
+    if (vendor == CpuVendor::CpuVendorID::Intel) {
+        const std::string MITE_UOPS = "idq.mite_uops"; 
+        const std::string DSB_UOPS = "idq.dsb_uops"; 
+        if (event_exists(MITE_UOPS) && event_exists(DSB_UOPS)) {
+            candidates.push_back(MITE_UOPS);
+            candidates.push_back(DSB_UOPS);
         }
     }
     else {
