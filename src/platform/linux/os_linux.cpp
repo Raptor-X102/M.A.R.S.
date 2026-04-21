@@ -170,6 +170,8 @@ void set_realtime_priority() {
     if (mlockall(MCL_CURRENT | MCL_FUTURE) != 0) {
         SPDLOG_WARN("mlockall failed, memory may still be paged");
     }
+
+    SPDLOG_INFO("Priority set: realtime");
 }
 
 void restore_priority() {

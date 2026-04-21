@@ -20,5 +20,5 @@ probe:
 
   environment:
     bind_cpu: 0
-    realtime_priority: false
+    realtime_priority: true
     lock_frequency: true
