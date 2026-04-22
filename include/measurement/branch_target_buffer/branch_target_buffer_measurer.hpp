@@ -27,7 +27,7 @@ struct BranchTargetBufferResult {
 };
 
 class BranchTargetBufferMeasurer final : public core::Measurer {
-public:
+  public:
     static constexpr size_t kDefaultMinBlocksCnt = 3500;
     static constexpr size_t kDefaultMaxBlocksCnt = 5000;
     static constexpr size_t kDefaultBlocksStep = 100;
@@ -37,20 +37,28 @@ public:
     static constexpr size_t kDefaultAlignment = 16;
 
     struct Config {
+        bool enabled = true;
         platform::MeasurementEnvironmentOptions environment;
         size_t min_blocks_cnt = kDefaultMinBlocksCnt;
         size_t max_blocks_cnt = kDefaultMaxBlocksCnt;
         size_t blocks_step = kDefaultBlocksStep;
         size_t iterations = kDefaultIterations;
         size_t repeats = kDefaultRepeats;
+        size_t warmup_iterations = kDefaultWarmupIterations;
         int alignment = kDefaultAlignment;
+        double misprediction_saturation_threshold = 0.01;
+        double misprediction_growth_threshold = 0.005;
+        double time_growth_ratio = 1.20;
+        size_t time_stability_points = 3;
+        size_t coarse_ignore_first = 2;
     };
 
     BranchTargetBufferMeasurer() : BranchTargetBufferMeasurer(Config{}) {}
     explicit BranchTargetBufferMeasurer(Config config) : config_(std::move(config)) {
-        SPDLOG_INFO("[{}] configured: min_blocks_cnt = {}, max_blocks_cnt = {}, blocks_step = {}, iterations={}, repeats={}, alignment={}",
-                    name(), config_.min_blocks_cnt, config_.max_blocks_cnt,
-                    config_.blocks_step, config_.iterations, config_.repeats, config_.alignment);
+        SPDLOG_INFO("[{}] configured: min_blocks_cnt = {}, max_blocks_cnt = {}, blocks_step = {}, iterations={}, "
+                    "repeats={}, alignment={}",
+                    name(), config_.min_blocks_cnt, config_.max_blocks_cnt, config_.blocks_step, config_.iterations, config_.repeats,
+                    config_.alignment);
     }
 
     std::string_view name() const noexcept override { return "branch target buffer"; }
@@ -88,9 +96,9 @@ public:
 
             if (use_events && !saturation_detected) {
                 double rate = computeMispredictionRate(res, blocks_cnt);
-                if (rate > kMispredictionSaturationThreshold) {
-                    SPDLOG_INFO("[{}] Saturation detected (misprediction rate = {:.4f} > {:.4f}) at blocks_cnt = {}",
-                                name(), rate, kMispredictionSaturationThreshold, blocks_cnt);
+                if (rate > config_.misprediction_saturation_threshold) {
+                    SPDLOG_INFO("[{}] Saturation detected (misprediction rate = {:.4f} > {:.4f}) at blocks_cnt = {}", name(), rate,
+                                config_.misprediction_saturation_threshold, blocks_cnt);
                     saturation_detected = true;
                     first_bad_point = blocks_cnt;
                     break;
@@ -124,13 +132,7 @@ public:
         SPDLOG_INFO("[{}] Measurement complete", name());
     }
 
-private:
-    // Tunable thresholds
-    double kMispredictionSaturationThreshold = 0.01;   // 1% misprediction rate indicates saturation
-    double kTimeGrowthRatio = 1.20;                    // 20% growth indicates step
-    size_t kTimeStabilityPoints = 3;                   // confirm step with 3 subsequent points
-    size_t kCoarseIgnoreFirst = 2;                     // ignore first N coarse points (warmup)
-
+  private:
     Config config_;
 
     BranchTargetBufferResult run_test(size_t blocks_cnt, platform::pmc::PmcGroup* pmc) {
@@ -141,18 +143,16 @@ private:
         std::vector<uint64_t> all_counts;
         all_counts.reserve(config_.repeats);
 
-        auto funcs = platform::arch::generate_branch_target_buffer_code(blocks_cnt,
-                                                                        config_.iterations,
-                                                                        config_.alignment);
+        auto funcs = platform::arch::generate_branch_target_buffer_code(blocks_cnt, config_.iterations, config_.alignment);
         if (funcs.size() < 2 || !funcs[0] || !funcs[1]) {
             SPDLOG_ERROR("[{}] Failed to generate functions for blocks_cnt={}", name(), blocks_cnt);
             return {};
         }
 
-        auto warmup_func = reinterpret_cast<void(*)()>(funcs[0]);
-        auto measure_func = reinterpret_cast<void(*)()>(funcs[1]);
+        auto warmup_func = reinterpret_cast<void (*)()>(funcs[0]);
+        auto measure_func = reinterpret_cast<void (*)()>(funcs[1]);
 
-        for (size_t i = 0; i < kDefaultWarmupIterations; ++i) {
+        for (size_t i = 0; i < config_.warmup_iterations; ++i) {
             warmup_func();
         }
 
@@ -200,11 +200,10 @@ private:
 
         if (pmc) {
             double rate = static_cast<double>(avg_events_counts) / (blocks_cnt * config_.iterations);
-            SPDLOG_INFO("[{}]\nblocks_cnt={}: avg_ticks_per_block={:.4e} (std={:.4e}), misprediction_rate={:.4f}",
-                        name(), blocks_cnt, avg_ticks_per_block, ticks_std, rate);
+            SPDLOG_INFO("[{}]\nblocks_cnt={}: avg_ticks_per_block={:.4e} (std={:.4e}), misprediction_rate={:.4f}", name(), blocks_cnt,
+                        avg_ticks_per_block, ticks_std, rate);
         } else {
-            SPDLOG_INFO("[{}]\nblocks_cnt={}: avg_ticks_per_block={:.4e} (std={:.4e})",
-                        name(), blocks_cnt, avg_ticks_per_block, ticks_std);
+            SPDLOG_INFO("[{}]\nblocks_cnt={}: avg_ticks_per_block={:.4e} (std={:.4e})", name(), blocks_cnt, avg_ticks_per_block, ticks_std);
         }
 
         return {avg_ticks_per_block, avg_raw_ticks, ticks_std, avg_events_counts};
@@ -216,27 +215,23 @@ private:
         return static_cast<double>(res.avg_events_counts) / total_branches;
     }
 
-    double computeTimePerBlock(const BranchTargetBufferResult& res) const {
-        return res.avg_ticks_per_block;
-    }
+    double computeTimePerBlock(const BranchTargetBufferResult& res) const { return res.avg_ticks_per_block; }
 
-    size_t findApproxSaturation(const std::vector<size_t>& counts,
-                                const std::vector<BranchTargetBufferResult>& results,
-                                bool use_events) {
+    size_t findApproxSaturation(const std::vector<size_t>& counts, const std::vector<BranchTargetBufferResult>& results, bool use_events) {
         if (counts.size() < 4) return 0;
 
         if (use_events) {
             // Event-based: find first index where rate exceeds threshold
-            for (size_t i = kCoarseIgnoreFirst; i < results.size(); ++i) {
+            for (size_t i = config_.coarse_ignore_first; i < results.size(); ++i) {
                 double rate = computeMispredictionRate(results[i], counts[i]);
-                if (rate > kMispredictionSaturationThreshold) {
+                if (rate > config_.misprediction_saturation_threshold) {
                     return counts[i - 1];
                 }
             }
             // Fallback: max growth
             double max_growth = 0.0;
             size_t growth_idx = 0;
-            for (size_t i = kCoarseIgnoreFirst; i < results.size(); ++i) {
+            for (size_t i = config_.coarse_ignore_first; i < results.size(); ++i) {
                 double cur_rate = computeMispredictionRate(results[i], counts[i]);
                 double prev_rate = computeMispredictionRate(results[i - 1], counts[i - 1]);
                 double growth = cur_rate - prev_rate;
@@ -245,7 +240,7 @@ private:
                     growth_idx = i;
                 }
             }
-            if (max_growth > 0.005 && growth_idx > 0) {
+            if (max_growth > config_.misprediction_growth_threshold && growth_idx > 0) {
                 return counts[growth_idx - 1];
             }
             return 0;
@@ -266,8 +261,8 @@ private:
 
             // Find first index where time exceeds baseline * growth ratio
             size_t jump_idx = 0;
-            for (size_t i = kCoarseIgnoreFirst; i < times.size(); ++i) {
-                if (times[i] > baseline * kTimeGrowthRatio) {
+            for (size_t i = config_.coarse_ignore_first; i < times.size(); ++i) {
+                if (times[i] > baseline * config_.time_growth_ratio) {
                     jump_idx = i;
                     break;
                 }
@@ -276,12 +271,12 @@ private:
 
             // Verify stability: next points also exceed threshold
             size_t stable = 0;
-            for (size_t i = jump_idx; i < std::min(times.size(), jump_idx + kTimeStabilityPoints); ++i) {
-                if (times[i] > baseline * kTimeGrowthRatio) {
+            for (size_t i = jump_idx; i < std::min(times.size(), jump_idx + config_.time_stability_points); ++i) {
+                if (times[i] > baseline * config_.time_growth_ratio) {
                     stable++;
                 }
             }
-            if (stable >= kTimeStabilityPoints) {
+            if (stable >= config_.time_stability_points) {
                 return counts[jump_idx - 1];
             }
             return 0;
@@ -299,7 +294,7 @@ private:
             BranchTargetBufferResult res = run_test(mid, pmc);
             double rate = computeMispredictionRate(res, mid);
 
-            if (rate <= kMispredictionSaturationThreshold) {
+            if (rate <= config_.misprediction_saturation_threshold) {
                 answer = mid;
                 left = mid;
             } else {
@@ -337,7 +332,7 @@ private:
             size_t mid = left + (right - left) / 2;
             BranchTargetBufferResult res = run_test(mid, pmc);
 
-            if (res.avg_ticks_per_block <= baseline * kTimeGrowthRatio) {
+            if (res.avg_ticks_per_block <= baseline * config_.time_growth_ratio) {
                 answer = mid;
                 left = mid + 1;
             } else {

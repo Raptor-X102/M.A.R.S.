@@ -18,13 +18,27 @@ int execute(const ApplicationConfig& config) {
 
     try {
         core::MeasurerRegistry registry{};
-        //registry.register_measurer(std::make_unique<cache::CacheMeasurer>(config.cache));
-        //registry.register_measurer(std::make_unique<rob::RobMeasurer>(config.rob));
-        //registry.register_measurer(std::make_unique<branch_history_table::BranchHistoryTableMeasurer>(config.bht));
-        //registry.register_measurer(std::make_unique<return_address_stack::ReturnAddressStackMeasurer>(config.ras));
-        //registry.register_measurer(std::make_unique<exec_ports::ExecPortsMeasurer>(config.exec_ports));
-        //registry.register_measurer(std::make_unique<uops_cache::UopsCacheMeasurer>(config.uops_cache));
-        registry.register_measurer(std::make_unique<branch_target_buffer::BranchTargetBufferMeasurer>(config.btb));
+        if (config.cache.enabled) {
+            registry.register_measurer(std::make_unique<cache::CacheMeasurer>(config.cache));
+        }
+        if (config.rob.enabled) {
+            registry.register_measurer(std::make_unique<rob::RobMeasurer>(config.rob));
+        }
+        if (config.bht.enabled) {
+            registry.register_measurer(std::make_unique<branch_history_table::BranchHistoryTableMeasurer>(config.bht));
+        }
+        if (config.ras.enabled) {
+            registry.register_measurer(std::make_unique<return_address_stack::ReturnAddressStackMeasurer>(config.ras));
+        }
+        if (config.exec_ports.enabled) {
+            registry.register_measurer(std::make_unique<exec_ports::ExecPortsMeasurer>(config.exec_ports));
+        }
+        if (config.uops_cache.enabled) {
+            registry.register_measurer(std::make_unique<uops_cache::UopsCacheMeasurer>(config.uops_cache));
+        }
+        if (config.btb.enabled) {
+            registry.register_measurer(std::make_unique<branch_target_buffer::BranchTargetBufferMeasurer>(config.btb));
+        }
 
         core::ProbeService probe_service{std::move(registry)};
         const auto& data = probe_service.run();

@@ -20,12 +20,11 @@ struct BoundaryAnalyzerConfig {
 };
 
 class BoundaryAnalyzer {
-private:
+  private:
     BoundaryAnalyzerConfig config_;
 
-public:
-    explicit BoundaryAnalyzer(BoundaryAnalyzerConfig config = {})
-        : config_(config) {}
+  public:
+    explicit BoundaryAnalyzer(BoundaryAnalyzerConfig config = {}) : config_(config) {}
 
     Statistics compute_stats(const std::vector<double>& samples) const {
         Statistics statistics{};
@@ -69,12 +68,8 @@ public:
             const double ratio = baseline_mean > 0.0 ? statistics.mean / baseline_mean : 0.0;
             const bool out_of_cache = ratio > config_.growth_factor;
 
-            SPDLOG_DEBUG("[boundary] size={}, mean={}, ratio={}, threshold={}, decision={}",
-                         midpoint,
-                         statistics.mean,
-                         ratio,
-                         config_.growth_factor,
-                         out_of_cache ? "out" : "in");
+            SPDLOG_DEBUG("[boundary] size={}, mean={}, ratio={}, threshold={}, decision={}", midpoint, statistics.mean, ratio,
+                         config_.growth_factor, out_of_cache ? "out" : "in");
 
             if (out_of_cache) {
                 current_right = midpoint;
