@@ -30,6 +30,12 @@ find_package(spdlog CONFIG REQUIRED)
 find_package(yaml-cpp CONFIG REQUIRED)
 find_package(Threads REQUIRED)
 find_package(asmjit REQUIRED)
+if(TARGET yaml-cpp::yaml-cpp)
+    set(MARS_YAMLCPP_TARGET yaml-cpp::yaml-cpp)
+else()
+    set(MARS_YAMLCPP_TARGET yaml-cpp)
+endif()
+
 find_path(PFM_INCLUDE_DIRS
     NAMES perfmon/pfmlib.h
     PATH_SUFFIXES include
@@ -93,160 +99,36 @@ target_link_options(mars_sanitizers INTERFACE
 )
 
 #####################################
-# Infra: logging
-#####################################
-add_library(mars_infra_logging INTERFACE)
-add_library(mars::infra_logging ALIAS mars_infra_logging)
-target_include_directories(mars_infra_logging
-    INTERFACE
-        $<BUILD_INTERFACE:${MARS_INCLUDE_DIR}>
-        $<INSTALL_INTERFACE:include>
-)
-target_link_libraries(mars_infra_logging
-    INTERFACE
-        mars::options
-        mars::sanitizers
-        mars::warnings
-        spdlog::spdlog
-)
-
-#####################################
-# Platform
-#####################################
-add_library(mars_platform STATIC)
-add_library(mars::platform ALIAS mars_platform)
-
-if(UNIX AND NOT APPLE)
-    target_sources(mars_platform PRIVATE 
-        src/platform/linux/os_linux.cpp
-        src/platform/linux/pmc_linux.cpp
-        src/platform/linux/events_discovery_linux.cpp
-    )
-else()
-    message(FATAL_ERROR "Unsupported platform: MARS currently supports Linux only")
-endif()
-
-mars_apply_target_defaults(mars_platform)
-target_link_libraries(mars_platform
-    PUBLIC
-        mars::infra_logging
-        Threads::Threads
-    PRIVATE
-        asmjit::asmjit
-        ${PFM_LIBRARIES}
-)
-
-target_include_directories(mars_platform PRIVATE ${PFM_INCLUDE_DIRS})
-
-#####################################
-# Core
-#####################################
-add_library(mars_core INTERFACE)
-add_library(mars::core ALIAS mars_core)
-target_include_directories(mars_core
-    INTERFACE
-        $<BUILD_INTERFACE:${MARS_INCLUDE_DIR}>
-        $<INSTALL_INTERFACE:include>
-)
-target_link_libraries(mars_core
-    INTERFACE
-        mars::options
-        mars::sanitizers
-        mars::warnings
-        mars::infra_logging
-)
-
-#####################################
-# Cache
-#####################################
-add_library(mars_cache INTERFACE)
-add_library(mars::cache ALIAS mars_cache)
-target_include_directories(mars_cache
-    INTERFACE
-        $<BUILD_INTERFACE:${MARS_INCLUDE_DIR}>
-        $<INSTALL_INTERFACE:include>
-)
-target_link_libraries(mars_cache
-    INTERFACE
-        mars::options
-        mars::sanitizers
-        mars::warnings
-        mars::core
-        mars::platform
-        mars::infra_logging
-)
-
-#####################################
-# ROB (Reorder Buffer Measurement)
-#####################################
-add_library(mars_rob INTERFACE)
-add_library(mars::rob ALIAS mars_rob)
-target_include_directories(mars_rob
-    INTERFACE
-        $<BUILD_INTERFACE:${MARS_INCLUDE_DIR}>
-        $<INSTALL_INTERFACE:include>
-)
-target_link_libraries(mars_rob
-    INTERFACE
-        mars::core
-        mars::platform
-        mars::cache
-        asmjit::asmjit
-)
-
-#####################################
-# App
-#####################################
-add_library(mars_app STATIC
-    src/app/application.cpp
-    src/app/config_loader.cpp
-)
-add_library(mars::app ALIAS mars_app)
-
-mars_apply_target_defaults(mars_app)
-
-target_link_libraries(mars_app
-    PUBLIC
-        mars::cache
-        mars::core
-        mars::infra_logging
-        mars::rob
-        CLI11::CLI11
-    PRIVATE
-        yaml-cpp
-        asmjit::asmjit
-)
-
-#####################################
-# CLI applications
-#####################################
-if(MARS_BUILD_APPS)
-    add_executable(mars
-        src/cli/main.cpp
-    )
-    target_link_libraries(mars
-        PRIVATE
-            mars::app
-            mars::warnings
-    )
-endif()
-
-find_program(SETCAP_PATH setcap)
-if(SETCAP_PATH)
-    add_custom_command(TARGET mars POST_BUILD
-        COMMAND sudo ${SETCAP_PATH} cap_perfmon=eip $<TARGET_FILE:mars>
-        COMMENT "Setting cap_perfmon capability for PMC access"
-    )
-endif()
-
-#####################################
 # Tests
 #####################################
 if(MARS_BUILD_TESTS)
-    if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/tests/CMakeLists.txt)
-        enable_testing()
-        add_subdirectory(tests)
-    else()
-        message(STATUS "MARS_BUILD_TESTS is ON, but tests/ is not present")
+    find_package(GTest CONFIG QUIET)
+    if(NOT GTest_FOUND)
+        find_package(GTest REQUIRED)
     endif()
+
+    include(GoogleTest)
+
+    function(mars_add_test target_name)
+        add_executable(${target_name} ${ARGN})
+        target_link_libraries(${target_name}
+            PRIVATE
+                GTest::gtest_main
+                mars::options
+                mars::sanitizers
+                mars::warnings
+        )
+        gtest_discover_tests(${target_name})
+    endfunction()
+
+    enable_testing()
+endif()
+
+add_subdirectory(include/infra)
+add_subdirectory(include/platform)
+add_subdirectory(include/measurement)
+add_subdirectory(src/app)
+
+if(MARS_BUILD_APPS)
+    add_subdirectory(src/cli)
 endif()

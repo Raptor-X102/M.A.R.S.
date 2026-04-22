@@ -1,0 +1,8 @@
+add_subdirectory(core)
+add_subdirectory(cache)
+add_subdirectory(rob)
+add_subdirectory(branch_history_table)
+add_subdirectory(return_address_stack)
+add_subdirectory(exec_ports)
+add_subdirectory(uops_cache)
+add_subdirectory(branch_target_buffer)

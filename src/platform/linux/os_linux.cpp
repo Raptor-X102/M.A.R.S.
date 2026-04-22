@@ -1,7 +1,7 @@
-#include "silicon_probe/platform/os.hpp"
+#include "platform/os.hpp"
 
-#include "silicon_probe/infra/logging.hpp"
-#include "silicon_probe/platform/arch.hpp"
+#include "infra/logging.hpp"
+#include "platform/arch.hpp"
 
 #include <cpuid.h>
 #include <cerrno>

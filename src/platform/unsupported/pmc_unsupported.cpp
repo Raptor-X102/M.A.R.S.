@@ -1,5 +1,5 @@
-#include "silicon_probe/platform/pmc.hpp"
-#include "silicon_probe/infra/logging.hpp"
+#include "platform/pmc.hpp"
+#include "infra/logging.hpp"
 
 namespace silicon_probe::platform::pmc {
 
