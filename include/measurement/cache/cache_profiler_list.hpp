@@ -17,7 +17,7 @@
 namespace silicon_probe::cache {
 
 class CacheProfilerList {
-public:
+  public:
     enum class MemoryType {
         aligned,
         huge_page,
@@ -44,7 +44,7 @@ public:
         }
     };
 
-private:
+  private:
     size_t line_size_ = 0;
     size_t element_count_ = 0;
     std::unique_ptr<char, MemoryDeleter> memory_;
@@ -120,14 +120,12 @@ private:
         }
     }
 
-public:
-    explicit CacheProfilerList(size_t cache_line_size,
-                               size_t count,
-                               unsigned int seed = 12345,
+  public:
+    explicit CacheProfilerList(size_t cache_line_size, size_t count, unsigned int seed = 12345,
                                MemoryType memory_type = MemoryType::aligned)
-        : line_size_(cache_line_size)
-        , memory_(nullptr, MemoryDeleter{memory_type, 0})
-        , memory_type_(memory_type) {
+        : line_size_(cache_line_size),
+          memory_(nullptr, MemoryDeleter{memory_type, 0}),
+          memory_type_(memory_type) {
         if (cache_line_size == 0) {
             throw std::invalid_argument("Cache line size cannot be zero");
         }
@@ -135,9 +133,7 @@ public:
             throw std::invalid_argument("Element count cannot be zero");
         }
 
-        SPDLOG_DEBUG("Creating cache profiler list: count={}, line_size={}, total_size={}",
-                     count,
-                     cache_line_size,
+        SPDLOG_DEBUG("Creating cache profiler list: count={}, line_size={}, total_size={}", count, cache_line_size,
                      count * cache_line_size);
 
         allocate(count);
@@ -145,30 +141,20 @@ public:
         verify_cycle();
     }
 
-    ~CacheProfilerList() {
-        SPDLOG_DEBUG("Destroying cache profiler list with {} elements", element_count_);
-    }
+    ~CacheProfilerList() { SPDLOG_DEBUG("Destroying cache profiler list with {} elements", element_count_); }
 
     CacheProfilerList(const CacheProfilerList&) = delete;
     CacheProfilerList& operator=(const CacheProfilerList&) = delete;
     CacheProfilerList(CacheProfilerList&&) noexcept = default;
     CacheProfilerList& operator=(CacheProfilerList&&) noexcept = default;
 
-    Element* first() const noexcept {
-        return elements_;
-    }
+    Element* first() const noexcept { return elements_; }
 
-    size_t element_count() const noexcept {
-        return element_count_;
-    }
+    size_t element_count() const noexcept { return element_count_; }
 
-    size_t line_size() const noexcept {
-        return line_size_;
-    }
+    size_t line_size() const noexcept { return line_size_; }
 
-    size_t total_size() const noexcept {
-        return element_count_ * line_size_;
-    }
+    size_t total_size() const noexcept { return element_count_ * line_size_; }
 
     void flush_from_cache() const {
         char* current = reinterpret_cast<char*>(elements_);

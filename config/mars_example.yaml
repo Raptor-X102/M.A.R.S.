@@ -1,24 +1,134 @@
-probe:
-  levels:
-    - l1
-    - l2
-    - l3
-
-  limits:
-    l1_max: 128KiB
-    l2_max: 2MiB
-    l3_max: 128MiB
-
-  measurement:
-    cache_min_lines: 16
-    seed: 48815
-    warmup_iterations: 4
-    precision: 64
-    target_accesses: 2000000
-    min_iterations: 1
-    max_iterations: 1000
-
+common:
   environment:
     bind_cpu: 0
     realtime_priority: true
     lock_frequency: true
+
+benchmarks:
+  cache:
+    enabled: true
+    levels: [l1, l2, l3]
+    limits:
+      l1_max: 128KiB
+      l2_max: 2MiB
+      l3_max: 128MiB
+
+    measurement:
+      cache_min_lines: 16
+      seed: 48815
+      warmup_iterations: 4
+      precision: 64
+      target_accesses: 2000000
+      min_iterations: 1
+      max_iterations: 1000
+
+    detection:
+      refinement_samples: 3
+      baseline_stability_threshold: 0.20
+      l1_growth_factor: 1.5
+      l2_growth_factor: 2.0
+      l3_growth_factor: 2.2
+      l2_refinement_growth_multiplier: 1.5
+
+  rob:
+    enabled: true
+
+    measurement:
+      min_instr_cnt: 50
+      max_instr_cnt: 600
+      instr_cnt_step: 10
+      warmup_iterations: 2
+      inner_iterations: 8192
+      outer_iterations: 64
+      instr_type: add_reg
+
+    detection:
+      baseline_fraction: 0.20
+      baseline_min_samples: 5
+      required_consecutive_points: 3
+      saturation_threshold_ratio: 1.15
+      fallback_jump_ratio: 0.50
+
+  branch_history_table:
+    enabled: false
+
+    measurement:
+      min_period: 16
+      max_period: 32768
+      period_coeff: 2
+      iterations: 100000000
+
+  return_address_stack:
+    enabled: true
+
+    measurement:
+      min_recursion_depth: 1
+      max_recursion_depth: 48
+      recursion_depth_step: 1
+      iterations: 1000000
+
+    detection:
+      trim_ratio: 0.02
+      baseline_min_depth: 8
+      baseline_max_depth: 16
+      saturation_threshold_ratio: 1.5
+      required_consecutive_points: 3
+
+  exec_ports:
+    enabled: false
+
+    measurement:
+      instr_cnt: 100000
+      iterations: 10000
+      repeats: 10
+      warmup_iterations: 100
+      instr1:
+        type: add_reg
+        name: integer add
+      instr2:
+        type: mul_float
+        name: scalar float mul
+
+    # environment:
+    #   bind_cpu: 2
+    #   realtime_priority: true
+    #   lock_frequency: true
+
+  uops_cache:
+    enabled: false
+
+    measurement:
+      min_instr_cnt: 1200
+      max_instr_cnt: 5000
+      instr_step: 100
+      iterations: 100000
+      repeats: 10
+      warmup_iterations: 100
+      instr:
+        type: add_reg
+        name: add reg
+
+    detection:
+      dsb_share_stop: 0.30
+      dsb_share_refine: 0.80
+      dsb_drop_significant: 0.20
+      coarse_ignore_first: 3
+
+  branch_target_buffer:
+    enabled: true
+
+    measurement:
+      min_blocks_cnt: 3500
+      max_blocks_cnt: 5000
+      blocks_step: 100
+      iterations: 100000
+      repeats: 10
+      warmup_iterations: 100
+      alignment: 16
+
+    detection:
+      misprediction_saturation_threshold: 0.01
+      misprediction_growth_threshold: 0.005
+      time_growth_ratio: 1.20
+      time_stability_points: 3
+      coarse_ignore_first: 2

@@ -33,7 +33,7 @@ struct UopsCacheSaturationPoint {
 };
 
 class UopsCacheMeasurer final : public core::Measurer {
-public:
+  public:
     using InstrType = platform::arch::InstrType;
 
     static constexpr size_t kDefaultMinInstrCnt = 1200;
@@ -44,20 +44,26 @@ public:
     static constexpr size_t kDefaultWarmupIterations = 100;
 
     struct Config {
+        bool enabled = true;
         platform::MeasurementEnvironmentOptions environment;
         size_t min_instr_cnt = kDefaultMinInstrCnt;
         size_t max_instr_cnt = kDefaultMaxInstrCnt;
         size_t instr_step = kDefaultInstrStep;
         size_t iterations = kDefaultIterations;
         size_t repeats = kDefaultRepeats;
-        IstructionData instr = { InstrType::ADD_REG, "add reg" };
+        size_t warmup_iterations = kDefaultWarmupIterations;
+        IstructionData instr = {InstrType::ADD_REG, "add reg"};
+        double dsb_share_stop = 0.3;
+        double dsb_share_refine = 0.8;
+        double dsb_drop_significant = 0.2;
+        size_t coarse_ignore_first = 3;
     };
 
     UopsCacheMeasurer() : UopsCacheMeasurer(Config{}) {}
     explicit UopsCacheMeasurer(Config config) : config_(std::move(config)) {
-        SPDLOG_INFO("[{}] configured: min_instr_cnt = {}, max_instr_cnt = {}, instr_step = {}, iterations={}, repeats={}, instr = [{}, {}]",
-                    name(), config_.min_instr_cnt, config_.max_instr_cnt, 
-                    config_.instr_step, config_.iterations, config_.repeats, 
+        SPDLOG_INFO("[{}] configured: min_instr_cnt = {}, max_instr_cnt = {}, instr_step = {}, iterations={}, "
+                    "repeats={}, instr = [{}, {}]",
+                    name(), config_.min_instr_cnt, config_.max_instr_cnt, config_.instr_step, config_.iterations, config_.repeats,
                     static_cast<int>(config_.instr.instr_type), config_.instr.instr_name);
     }
 
@@ -107,7 +113,7 @@ public:
                 uint64_t dsb = res.avg_events_counts[dsb_idx];
                 uint64_t mite = res.avg_events_counts[mite_idx];
                 double share = (dsb + mite) > 0 ? static_cast<double>(dsb) / (dsb + mite) : 0.0;
-                if (share < kDSBShareStop && coarse_counts.size() >= kCoarseIgnoreFirst) {
+                if (share < config_.dsb_share_stop && coarse_counts.size() >= config_.coarse_ignore_first) {
                     saturation_reached = true;
                     SPDLOG_INFO("[{}] DSB share dropped to {:.3f} at instr_cnt={}, stopping coarse scan", name(), share, instr_cnt);
                     break;
@@ -135,7 +141,7 @@ public:
         SPDLOG_INFO("[{}] measurement complete", name());
     }
 
-private:
+  private:
     static constexpr double kDSBShareHigh = 0.9;       // share above this is considered "good"
     static constexpr double kDSBShareLow = 0.5;        // share below this indicates saturation
     static constexpr double kDSBShareStop = 0.3;       // stop coarse scan when share falls below this
@@ -143,19 +149,17 @@ private:
     static constexpr double kDSBDropSignificant = 0.2; // minimum drop to detect saturation
     static constexpr size_t kCoarseIgnoreFirst = 3;    // ignore first N coarse points (warmup)
 
-    UopsCacheResult run_test(size_t instr_cnt, platform::pmc::PmcGroup* pmc,
-                             const std::vector<std::string>& uops_events) {
-        void* func = platform::arch::generate_uops_cache_codegenerate(instr_cnt, 
-                                                                      config_.iterations, 
-                                                                      {config_.instr.instr_type});
+    UopsCacheResult run_test(size_t instr_cnt, platform::pmc::PmcGroup* pmc, const std::vector<std::string>& uops_events) {
+        void* func = platform::arch::generate_uops_cache_codegenerate(instr_cnt, config_.iterations, {config_.instr.instr_type});
         if (!func) {
             SPDLOG_ERROR("[{}] failed to generate test function for instr_cnt={}", name(), instr_cnt);
             return {};
         }
 
-        auto f = reinterpret_cast<void(*)()>(func);
-        for (size_t i = 0; i < kDefaultWarmupIterations; ++i) f();
-        
+        auto f = reinterpret_cast<void (*)()>(func);
+        for (size_t i = 0; i < config_.warmup_iterations; ++i)
+            f();
+
         std::vector<double> ticks_per_instr;
         std::vector<uint64_t> raw_ticks;
         std::vector<std::vector<uint64_t>> all_counts;
@@ -221,8 +225,7 @@ private:
     }
 
     // Find approximate saturation point by locating the largest drop in DSB share
-    size_t findApproxSaturation(const std::vector<size_t>& counts,
-                                const std::vector<UopsCacheResult>& results,
+    size_t findApproxSaturation(const std::vector<size_t>& counts, const std::vector<UopsCacheResult>& results,
                                 const std::vector<std::string>& uops_events) {
         if (counts.size() < 3) return 0;
 
@@ -245,15 +248,15 @@ private:
         // Find the largest drop between consecutive points, ignoring first few
         double max_drop = 0.0;
         size_t drop_idx = 0;
-        for (size_t i = kCoarseIgnoreFirst; i < dsb_share.size(); ++i) {
-            double drop = dsb_share[i-1] - dsb_share[i];
+        for (size_t i = config_.coarse_ignore_first; i < dsb_share.size(); ++i) {
+            double drop = dsb_share[i - 1] - dsb_share[i];
             if (drop > max_drop) {
                 max_drop = drop;
-                drop_idx = i;   // i is the index where share becomes low
+                drop_idx = i; // i is the index where share becomes low
             }
         }
 
-        if (max_drop > kDSBDropSignificant) {
+        if (max_drop > config_.dsb_drop_significant) {
             // Return the instruction count at the point before the drop
             return counts[drop_idx - 1];
         }
@@ -261,8 +264,7 @@ private:
     }
 
     // Binary search for the largest N where DSB share >= kDSBShareRefine
-    size_t refineSaturation(size_t approx, platform::pmc::PmcGroup* pmc,
-                            const std::vector<std::string>& uops_events) {
+    size_t refineSaturation(size_t approx, platform::pmc::PmcGroup* pmc, const std::vector<std::string>& uops_events) {
         size_t left = (approx > config_.instr_step) ? approx - config_.instr_step : config_.min_instr_cnt;
         size_t right = approx + config_.instr_step;
         if (right > config_.max_instr_cnt) right = config_.max_instr_cnt;
@@ -284,7 +286,7 @@ private:
             uint64_t mite = res.avg_events_counts[mite_idx];
             double share = (dsb + mite) > 0 ? static_cast<double>(dsb) / (dsb + mite) : 0.0;
 
-            if (share >= kDSBShareRefine) {
+            if (share >= config_.dsb_share_refine) {
                 answer = mid;
                 left = mid + 1;
             } else {

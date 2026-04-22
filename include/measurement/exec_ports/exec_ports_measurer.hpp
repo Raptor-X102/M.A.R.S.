@@ -17,8 +17,8 @@ namespace silicon_probe::exec_ports {
 
 struct ExecPortsResult {
     std::string test_name;
-    double avg_ticks;                 // average ticks per repeat
-    double ticks_std;                 // standard deviation of ticks
+    double avg_ticks; // average ticks per repeat
+    double ticks_std; // standard deviation of ticks
     std::vector<uint64_t> avg_port_counts;
 };
 
@@ -34,7 +34,7 @@ struct IstructionData {
 };
 
 class ExecPortsMeasurer final : public core::Measurer {
-public:
+  public:
     using InstrType = platform::arch::InstrType;
 
     static constexpr size_t kDefaultInstrCnt = 100000;
@@ -42,21 +42,21 @@ public:
     static constexpr size_t kDefaultRepeats = 10;
 
     struct Config {
+        bool enabled = true;
         platform::MeasurementEnvironmentOptions environment;
         size_t instr_cnt = kDefaultInstrCnt;
         size_t iterations = kDefaultIterations;
         size_t repeats = kDefaultRepeats;
-        IstructionData instr1 = { InstrType::ADD_REG, "add reg" };
-        IstructionData instr2 = { InstrType::MUL_FLOAT, "mul float" };
+        size_t warmup_iterations = 100;
+        IstructionData instr1 = {InstrType::ADD_REG, "add reg"};
+        IstructionData instr2 = {InstrType::MUL_FLOAT, "mul float"};
     };
 
     ExecPortsMeasurer() : ExecPortsMeasurer(Config{}) {}
-    explicit ExecPortsMeasurer(Config config)
-        : config_(std::move(config)) {
-        SPDLOG_INFO("[{}] configured: instr_cnt={}, iterations={}, repeats={}, instr1 = [{}, {}], instr2 = [{}, {}]",
-                    name(), config_.instr_cnt, config_.iterations, config_.repeats, 
-                    static_cast<int>(config_.instr1.instr_type), config_.instr1.instr_name, 
-                    static_cast<int>(config_.instr2.instr_type), config_.instr2.instr_name);
+    explicit ExecPortsMeasurer(Config config) : config_(std::move(config)) {
+        SPDLOG_INFO("[{}] configured: instr_cnt={}, iterations={}, repeats={}, instr1 = [{}, {}], instr2 = [{}, {}]", name(),
+                    config_.instr_cnt, config_.iterations, config_.repeats, static_cast<int>(config_.instr1.instr_type),
+                    config_.instr1.instr_name, static_cast<int>(config_.instr2.instr_type), config_.instr2.instr_name);
     }
 
     std::string_view name() const noexcept override { return "execution ports"; }
@@ -74,7 +74,8 @@ public:
         bool has_ports = false;
         if (port_events.empty()) {
             SPDLOG_WARN("[{}] No port events found. Check libpfm4, CPU vendor, and kernel support. "
-                        "Falling back to time-only measurement.", name());
+                        "Falling back to time-only measurement.",
+                        name());
         } else {
             SPDLOG_INFO("[{}] Found {} port events", name(), port_events.size());
             has_ports = true;
@@ -95,7 +96,7 @@ public:
         std::vector<InstrType> mixed = {config_.instr1.instr_type, config_.instr2.instr_type};
 
         void* instr1_func = generate_exec_ports_codegenerate(config_.instr_cnt, instr1_only);
-        void* instr2_func  = generate_exec_ports_codegenerate(config_.instr_cnt, instr2_only);
+        void* instr2_func = generate_exec_ports_codegenerate(config_.instr_cnt, instr2_only);
         void* mix_func = generate_exec_ports_codegenerate(config_.instr_cnt, mixed);
 
         if (!instr1_func || !instr2_func || !mix_func) {
@@ -106,10 +107,11 @@ public:
 
         // Helper to run one test and collect averaged results
         auto run_test = [&](void* func, const std::string& test_name) -> ExecPortsResult {
-            auto f = reinterpret_cast<void(*)()>(func);
+            auto f = reinterpret_cast<void (*)()>(func);
 
             // Warm-up
-            for (size_t i = 0; i < 100; ++i) f();
+            for (size_t i = 0; i < config_.warmup_iterations; ++i)
+                f();
 
             std::vector<uint64_t> ticks_samples;
             std::vector<std::vector<uint64_t>> all_counts;
@@ -122,7 +124,8 @@ public:
 
                 uint64_t start_ticks = platform::arch::tick();
 
-                for (size_t i = 0; i < config_.iterations; ++i) f();
+                for (size_t i = 0; i < config_.iterations; ++i)
+                    f();
 
                 uint64_t end_ticks = platform::arch::tick();
 
@@ -174,10 +177,7 @@ public:
         std::vector<ExecPortsResult> results;
         results.push_back(run_test(instr1_func, config_.instr1.instr_name));
         results.push_back(run_test(instr2_func, config_.instr2.instr_name));
-        results.push_back(run_test(mix_func, config_.instr1.instr_name + 
-                                             " + "                     + 
-                                             config_.instr2.instr_name + 
-                                             " interleaved"));
+        results.push_back(run_test(mix_func, config_.instr1.instr_name + " + " + config_.instr2.instr_name + " interleaved"));
 
         // Release all generated functions after measurements
         platform::arch::release_exec_ports_code();
@@ -186,14 +186,14 @@ public:
         PortContentionDecision decision = detectPortContention(results, port_events);
         data.execution_ports_independent = decision.different_ports;
 
-        SPDLOG_INFO("[{}] decision: instruction1 ({}) and instruction2 ({}) use {} ports (confidence {:.2f}) - {}",
-                    name(), config_.instr1.instr_name, config_.instr2.instr_name, decision.different_ports ? "different" : "the same",
+        SPDLOG_INFO("[{}] decision: instruction1 ({}) and instruction2 ({}) use {} ports (confidence {:.2f}) - {}", name(),
+                    config_.instr1.instr_name, config_.instr2.instr_name, decision.different_ports ? "different" : "the same",
                     decision.confidence, decision.reasoning);
 
         SPDLOG_INFO("[{}] measurement complete", name());
     }
 
-private:
+  private:
     PortContentionDecision detectPortContention(const std::vector<ExecPortsResult>& results,
                                                 const std::vector<std::string>& port_events) const {
         if (results.size() < 3) {
@@ -210,14 +210,14 @@ private:
 
         // ===== TIME ANALYSIS =====
         double t_indep = 0.5 * std::max(t1, t2);
-        double t_dep   = 0.5 * (t1 + t2);
+        double t_dep = 0.5 * (t1 + t2);
         double k = 0.5;
         if (t_dep > t_indep) {
             k = (tm - t_indep) / (t_dep - t_indep);
             k = std::clamp(k, 0.0, 1.0);
         }
         double time_conf_indep = 1.0 - k;
-        double time_conf_dep   = k;
+        double time_conf_dep = k;
 
         std::string time_summary;
         if (k <= 0.1) {
@@ -234,13 +234,12 @@ private:
 
         // ===== PMC ANALYSIS =====
         double pmc_conf_indep = 0.5;
-        double pmc_conf_dep   = 0.5;
+        double pmc_conf_dep = 0.5;
         std::string pmc_summary;
         std::string ports1_str, ports2_str, inter_str;
         double overlap = 0.5;
 
-        if (!port_events.empty() && !r1.avg_port_counts.empty() &&
-            !r2.avg_port_counts.empty()) {
+        if (!port_events.empty() && !r1.avg_port_counts.empty() && !r2.avg_port_counts.empty()) {
 
             auto active_ports = [&](const std::vector<uint64_t>& counts) -> std::vector<size_t> {
                 if (counts.empty()) return {};
@@ -274,15 +273,13 @@ private:
                 ports2_str = port_names(ports2);
 
                 std::vector<size_t> inter;
-                std::set_intersection(ports1.begin(), ports1.end(),
-                                      ports2.begin(), ports2.end(),
-                                      std::back_inserter(inter));
+                std::set_intersection(ports1.begin(), ports1.end(), ports2.begin(), ports2.end(), std::back_inserter(inter));
                 inter_str = port_names(inter);
                 size_t inter_sz = inter.size();
                 size_t union_sz = ports1.size() + ports2.size() - inter_sz;
                 overlap = (union_sz == 0) ? 0.5 : static_cast<double>(inter_sz) / union_sz;
                 pmc_conf_indep = 1.0 - overlap;
-                pmc_conf_dep   = overlap;
+                pmc_conf_dep = overlap;
 
                 if (overlap == 0.0) {
                     pmc_summary = "STRONG INDEPENDENCE (no shared ports)";
@@ -326,12 +323,11 @@ private:
         } else {
             // Weighted average (time 60%, PMC 40%)
             double comb_indep = time_conf_indep * 0.6 + pmc_conf_indep * 0.4;
-            double comb_dep   = time_conf_dep * 0.6 + pmc_conf_dep * 0.4;
+            double comb_dep = time_conf_dep * 0.6 + pmc_conf_dep * 0.4;
             final_diff = (comb_indep > comb_dep);
             final_conf = std::max(comb_indep, comb_dep);
-            reasoning = "Combined (time 60%, PMC 40%): independent=" +
-                        std::to_string(comb_indep) + ", dependent=" + std::to_string(comb_dep) +
-                        " -> " + std::string(final_diff ? "independent" : "dependent");
+            reasoning = "Combined (time 60%, PMC 40%): independent=" + std::to_string(comb_indep) +
+                        ", dependent=" + std::to_string(comb_dep) + " -> " + std::string(final_diff ? "independent" : "dependent");
         }
 
         // ===== BUILD DETAILED OUTPUT =====
