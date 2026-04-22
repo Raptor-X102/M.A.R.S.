@@ -80,7 +80,7 @@ cmake --build build
 
 ## CLI аргументы
 
-Поддерживаемые аргументы определены в [`include/silicon_probe/app/config.hpp`](/home/tiomik/projectX/M.A.R.S./include/silicon_probe/app/config.hpp).
+Поддерживаемые аргументы определены в [`include/app/config.hpp`](/home/tiomik/projectX/M.A.R.S./include/app/config.hpp).
 
 | Опция | Короткая форма | Значение | По умолчанию | Описание |
 |---|---|---|---|---|
@@ -390,7 +390,7 @@ probe:
 | Что | Путь |
 |---|---|
 | Точка входа CLI | [`src/cli/main.cpp`](/home/tiomik/projectX/M.A.R.S./src/cli/main.cpp) |
-| Парсер CLI-опций | [`include/silicon_probe/app/config.hpp`](/home/tiomik/projectX/M.A.R.S./include/silicon_probe/app/config.hpp) |
+| Парсер CLI-опций | [`include/app/config.hpp`](/home/tiomik/projectX/M.A.R.S./include/app/config.hpp) |
 | Загрузка YAML | [`src/app/config_loader.cpp`](/home/tiomik/projectX/M.A.R.S./src/app/config_loader.cpp) |
 | Пример конфига | [`config/mars_example.yaml`](/home/tiomik/projectX/M.A.R.S./config/mars_example.yaml) |
 

@@ -1,4 +1,4 @@
-#include "silicon_probe/app/config.hpp"
+#include "app/config.hpp"
 
 #include <yaml-cpp/yaml.h>
 

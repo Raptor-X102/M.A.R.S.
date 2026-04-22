@@ -1,12 +1,12 @@
-#include "silicon_probe/app/application.hpp"
+#include "app/application.hpp"
 
-#include "silicon_probe/cache/cache_measurer.hpp"
-#include "silicon_probe/rob/rob_measurer.hpp"
-#include "silicon_probe/core/measurer_registry.hpp"
-#include "silicon_probe/core/probe_service.hpp"
-#include "silicon_probe/core/summary_printer.hpp"
-#include "silicon_probe/infra/logging.hpp"
-#include "silicon_probe/platform/os_errors.hpp"
+#include "measurement/cache/cache_measurer.hpp"
+#include "measurement/rob/rob_measurer.hpp"
+#include "measurement/core/measurer_registry.hpp"
+#include "measurement/core/probe_service.hpp"
+#include "measurement/core/summary_printer.hpp"
+#include "infra/logging.hpp"
+#include "platform/os_errors.hpp"
 
 #include <iostream>
 #include <memory>

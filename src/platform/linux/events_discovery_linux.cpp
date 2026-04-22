@@ -1,11 +1,11 @@
-#include "silicon_probe/platform/events_discovery.hpp"
-#include "silicon_probe/infra/logging.hpp"
+#include "platform/events_discovery.hpp"
+#include "infra/logging.hpp"
 #include <perfmon/pfmlib.h>
 #include <perfmon/pfmlib_perf_event.h>
 #include <mutex>
 #include <optional>
 #include <cstring>
-#include "silicon_probe/platform/arch.hpp"
+#include "platform/arch.hpp"
 
 namespace silicon_probe::platform {
 

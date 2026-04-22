@@ -1,0 +1,49 @@
+#pragma once
+
+#include "measurement/core/cpu_info_data.hpp"
+
+#include <ostream>
+
+namespace silicon_probe::core {
+
+class SummaryPrinter {
+public:
+    static void print(std::ostream& stream, const CpuInfoData& data) {
+        stream << "\n=== CPU Info Summary ===\n";
+
+        if (data.l1d_size) {
+            stream << "L1d: " << *data.l1d_size << " bytes\n";
+        }
+        if (data.l2_size) {
+            stream << "L2:  " << *data.l2_size << " bytes\n";
+        }
+        if (data.l3_size) {
+            stream << "L3:  " << *data.l3_size << " bytes\n";
+        }
+        if (data.cache_line_size) {
+            stream << "Cache line: " << *data.cache_line_size << " bytes\n";
+        }
+        if (data.rob_size) {
+            stream << "Rob size: " << *data.rob_size << " instructions\n";
+        }
+        if (data.bht_size) {
+            stream << "Branch History Table size: " << *data.bht_size << " entries\n";
+        }
+        if (data.ras_size) {
+            stream << "Return Address Stack size: " << *data.ras_size << " entries\n";
+        }
+        if (data.execution_ports_independent) {
+            stream << "Execution ports independent: " << *data.execution_ports_independent << "\n";
+        }
+        if (data.uops_cache_size) {
+            stream << "Uops cache size: " << *data.uops_cache_size << " uops\n";
+        }
+        if (data.btb_size) {
+            stream << "BTB size: " << *data.btb_size << " addresses\n";
+        }
+
+        stream << "========================\n\n";
+    }
+};
+
+} // namespace silicon_probe::core

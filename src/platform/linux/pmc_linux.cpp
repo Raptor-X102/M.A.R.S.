@@ -1,6 +1,6 @@
 // pmc_linux.cpp
-#include "silicon_probe/platform/pmc.hpp"
-#include "silicon_probe/infra/logging.hpp"
+#include "platform/pmc.hpp"
+#include "infra/logging.hpp"
 #include <linux/perf_event.h>
 #include <sys/syscall.h>
 #include <sys/ioctl.h>

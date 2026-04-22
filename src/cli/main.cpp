@@ -1,5 +1,5 @@
-#include "silicon_probe/app/application.hpp"
-#include "silicon_probe/app/config.hpp"
+#include "app/application.hpp"
+#include "app/config.hpp"
 
 #include <CLI/CLI.hpp>
 #include <exception>
