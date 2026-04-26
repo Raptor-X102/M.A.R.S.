@@ -22,12 +22,15 @@ struct WriteBufferResult {
 
 class WriteBufferMeasurer final : public core::Measurer {
 public:
-    static constexpr size_t kDefaultMaxWrites = 256;
+    static constexpr size_t kDefaultMaxWrites = 128;
     static constexpr size_t kDefaultMinWrites = 1;
     static constexpr size_t kDefaultWritesStep = 1;
-    static constexpr size_t kDefaultIterations = 100'000;
-    static constexpr size_t kDefaultRepeats = 10;
-    static constexpr size_t kDefaultWarmupIterations = 10;
+    static constexpr size_t kDefaultIterations = 1000;
+    static constexpr size_t kDefaultRepeats = 30;
+    static constexpr size_t kDefaultWarmupIterations = 5;
+    static constexpr size_t kBufferSizeMB = 16;
+    static constexpr size_t kBytesPerEntry = 4;
+    static constexpr size_t kCacheLineSize = 64;
 
     struct Config {
         bool enabled = true;
@@ -38,7 +41,7 @@ public:
         size_t iterations = kDefaultIterations;
         size_t repeats = kDefaultRepeats;
         size_t warmup_iterations = kDefaultWarmupIterations;
-        double latency_growth_ratio = 1.5;
+        double latency_growth_ratio = 2.0;
         double pmc_saturation_ratio = 0.1;
     };
 
@@ -58,9 +61,7 @@ public:
         auto events = platform::discover_write_buffer_events();
         bool has_pmc = !events.empty();
         std::unique_ptr<platform::pmc::PmcGroup> pmc;
-        size_t sb_idx = std::string::npos;    // resource_stalls.sb
-        size_t bound_idx = std::string::npos; // exe_activity.bound_on_stores
-
+        size_t sb_idx = std::string::npos, bound_idx = std::string::npos;
         if (has_pmc) {
             pmc = platform::pmc::PmcGroup::create_raw(events);
             if (!pmc) {
@@ -74,24 +75,24 @@ public:
             }
         }
 
-        // Allocate write area (for stores) and separate read area (independent address)
-        const size_t write_entries = config_.max_writes + 16;
-        std::unique_ptr<int[]> write_area(new int[write_entries]);
-        std::unique_ptr<int[]> read_area(new int[64]);   // independent buffer
-        std::memset(write_area.get(), 0, sizeof(int) * write_entries);
-        std::memset(read_area.get(), 0, sizeof(int) * 64);
+        const size_t buffer_bytes = kBufferSizeMB * 1024 * 1024;
+        const size_t num_elements = buffer_bytes / kBytesPerEntry;
+        std::unique_ptr<int[]> fill_area(new int[num_elements]);
+        std::unique_ptr<int[]> extra_area(new int[num_elements]);
+        std::memset(fill_area.get(), 0, buffer_bytes);
+        std::memset(extra_area.get(), 0, buffer_bytes);
 
-        volatile int* read_addr = read_area.get();
+        const size_t region_size = ((config_.max_writes * kCacheLineSize) + kCacheLineSize - 1) & ~(kCacheLineSize - 1);
+        if ((config_.max_writes + 1) * region_size > num_elements * kBytesPerEntry) {
+            SPDLOG_ERROR("[{}] Buffer too small for requested max_writes", name());
+            return;
+        }
+
         volatile int dummy = 0;
-
-        // Print header for results table
+        SPDLOG_INFO("| writes | latency(ticks) | stddev |");
         if (has_pmc) {
-            SPDLOG_INFO("| writes | latency(ticks) | stddev |");
-            for (const auto& ev : events) {
+            for (const auto& ev : events)
                 SPDLOG_INFO("|        | {} (per sample) |", ev);
-            }
-        } else {
-            SPDLOG_INFO("| writes | latency(ticks) | stddev |");
         }
 
         std::vector<size_t> writes_list;
@@ -99,54 +100,51 @@ public:
 
         for (size_t num_writes = config_.min_writes; num_writes <= config_.max_writes;
              num_writes += config_.writes_step) {
+            size_t region_offset = (num_writes - 1) * region_size / kBytesPerEntry;
+            int* fill_ptr = fill_area.get() + region_offset;
+            volatile int* extra_ptr = extra_area.get() + region_offset;
+
             writes_list.push_back(num_writes);
-            WriteBufferResult res = measure_for_writes(num_writes, write_area.get(),
-                                                       read_addr, dummy, pmc.get());
+            WriteBufferResult res = measure_for_writes(num_writes, fill_ptr, extra_ptr, dummy, pmc.get());
             results.push_back(res);
 
             if (has_pmc) {
                 SPDLOG_INFO("| {:6} | {:12.2f} | {:6.2f} |", num_writes, res.avg_latency_ticks, res.latency_stddev);
                 for (size_t i = 0; i < events.size(); ++i) {
                     double per_sample = (res.avg_events.size() > i) ? double(res.avg_events[i]) / config_.iterations : 0.0;
-                    SPDLOG_INFO("|        | {:20.2f} |", per_sample);
+                    double total = (res.avg_events.size() > i) ? double(res.avg_events[i]) : 0.0;
+                    SPDLOG_INFO("|        | {}: {:.2f} per sample (total {}) |", events[i], per_sample, total);
                 }
-            } else {
-                SPDLOG_INFO("| {:6} | {:12.2f} | {:6.2f} |", num_writes, res.avg_latency_ticks, res.latency_stddev);
             }
         }
 
-        if (results.size() < 2) {
-            SPDLOG_WARN("[{}] Not enough data points", name());
-            return;
+        if (results.size() >= 2) {
+            size_t capacity = analyze_buffer_capacity(results, writes_list, has_pmc, sb_idx, bound_idx);
+            SPDLOG_INFO("[{}] Estimated write buffer capacity: {} entries (each 4 bytes)", name(), capacity);
+            data.write_buffer_size = capacity;
         }
-
-        size_t max_working_writes = analyze_buffer_capacity(results, writes_list,
-                                                            has_pmc, sb_idx, bound_idx);
-        SPDLOG_INFO("[{}] Estimated write buffer capacity: {} entries (each 4 bytes)", name(), max_working_writes);
-        data.write_buffer_size = max_working_writes;
     }
 
 private:
     Config config_;
 
-    WriteBufferResult measure_for_writes(size_t num_writes, int* write_area,
-                                         volatile int* read_addr, volatile int& dummy,
+    WriteBufferResult measure_for_writes(size_t num_writes, int* fill_base,
+                                         volatile int* extra_addr, volatile int& dummy,
                                          platform::pmc::PmcGroup* pmc) {
-        platform::arch::clflush(const_cast<int*>(read_addr));
-        asm volatile("" : : : "memory");
+        const size_t stride = kCacheLineSize / kBytesPerEntry;
 
-        // Warmup
         for (size_t w = 0; w < config_.warmup_iterations; ++w) {
             for (size_t i = 0; i < num_writes; ++i) {
-                write_area[i] = static_cast<int>(i);   // ordinary store
+                platform::arch::write_non_temporal(&fill_base[i * stride], static_cast<int>(i));
             }
-            dummy = *read_addr;   // load from independent address
-            asm volatile("" : : : "memory");
+            platform::arch::sfence();
+            dummy = *extra_addr;
+            platform::arch::lfence();
         }
 
-        std::vector<double> latency_samples;
+        std::vector<double> time_samples;
         std::vector<std::vector<uint64_t>> pmc_samples;
-        latency_samples.reserve(config_.repeats);
+        time_samples.reserve(config_.repeats);
         if (pmc) pmc_samples.reserve(config_.repeats);
 
         for (size_t r = 0; r < config_.repeats; ++r) {
@@ -155,18 +153,18 @@ private:
                 pmc->enable();
             }
 
-            uint64_t total_read_ticks = 0;
+            uint64_t total_ticks = 0;
             for (size_t iter = 0; iter < config_.iterations; ++iter) {
-                // Fill store buffer with ordinary stores
                 for (size_t i = 0; i < num_writes; ++i) {
-                    write_area[i] = static_cast<int>(iter + i);
+                    platform::arch::write_non_temporal(&fill_base[i * stride], static_cast<int>(iter + i));
                 }
-                // Measure load latency from independent address
+
                 uint64_t start = platform::arch::tick();
-                dummy = *read_addr;
+                platform::arch::write_non_temporal(const_cast<int*>(extra_addr), 0xdeadbeef);
+                dummy = *extra_addr;
                 uint64_t end = platform::arch::tick();
-                total_read_ticks += (end - start);
-                asm volatile("" : : : "memory");
+                total_ticks += (end - start);
+                platform::arch::lfence();
             }
 
             if (pmc) {
@@ -175,14 +173,14 @@ private:
                 if (cv.valid) pmc_samples.push_back(std::move(cv.values));
             }
 
-            double avg_latency = static_cast<double>(total_read_ticks) / config_.iterations;
-            latency_samples.push_back(avg_latency);
+            double avg_ticks = static_cast<double>(total_ticks) / config_.iterations;
+            time_samples.push_back(avg_ticks);
         }
 
-        double avg_latency = std::accumulate(latency_samples.begin(), latency_samples.end(), 0.0) / config_.repeats;
+        double avg = std::accumulate(time_samples.begin(), time_samples.end(), 0.0) / config_.repeats;
         double stddev = 0.0;
-        for (double v : latency_samples) {
-            double d = v - avg_latency;
+        for (double v : time_samples) {
+            double d = v - avg;
             stddev += d * d;
         }
         stddev = std::sqrt(stddev / config_.repeats);
@@ -190,15 +188,21 @@ private:
         std::vector<uint64_t> avg_events;
         if (pmc && !pmc_samples.empty()) {
             avg_events.assign(pmc_samples[0].size(), 0);
-            for (const auto& sample : pmc_samples) {
+            for (const auto& sample : pmc_samples)
                 for (size_t i = 0; i < sample.size(); ++i)
                     avg_events[i] += sample[i];
-            }
             for (size_t i = 0; i < avg_events.size(); ++i)
                 avg_events[i] /= config_.repeats;
         }
-
-        return {avg_latency, stddev, std::move(avg_events)};
+        if (pmc) {
+            SPDLOG_DEBUG("[{}] num_writes={}, samples: ticks={:.2f}+-{:.2f}", 
+                         name(), num_writes, avg, stddev);
+            for (size_t i = 0; i < avg_events.size(); ++i) {
+                SPDLOG_DEBUG("[{}]   event{} = {} total, {:.2f} per iter", 
+                             name(), i, avg_events[i], double(avg_events[i]) / config_.iterations);
+            }
+        }
+        return {avg, stddev, std::move(avg_events)};
     }
 
     size_t analyze_buffer_capacity(const std::vector<WriteBufferResult>& results,
