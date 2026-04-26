@@ -146,7 +146,7 @@ benchmarks:
 
     measurement:
       #repeats: 10
-      iterations: 100000
+      iterations: 50000
       #warmup_iterations: 10
       #alignment: 16
          

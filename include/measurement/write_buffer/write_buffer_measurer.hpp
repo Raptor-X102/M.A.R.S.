@@ -133,11 +133,11 @@ private:
                                          platform::pmc::PmcGroup* pmc) {
         const size_t stride = kCacheLineSize / kBytesPerEntry;
 
+        // warmup
         for (size_t w = 0; w < config_.warmup_iterations; ++w) {
             for (size_t i = 0; i < num_writes; ++i) {
-                platform::arch::write_non_temporal(&fill_base[i * stride], static_cast<int>(i));
+                fill_base[i * stride] = static_cast<int>(i);   // regular store
             }
-            platform::arch::sfence();
             dummy = *extra_addr;
             platform::arch::lfence();
         }
@@ -155,12 +155,20 @@ private:
 
             uint64_t total_ticks = 0;
             for (size_t iter = 0; iter < config_.iterations; ++iter) {
+                // 1. Сбросить все линии, в которые будем писать
                 for (size_t i = 0; i < num_writes; ++i) {
-                    platform::arch::write_non_temporal(&fill_base[i * stride], static_cast<int>(iter + i));
+                    platform::arch::clflush(&fill_base[i * stride]);
+                }
+                platform::arch::flush_complete(); // mfence – дождаться завершения clflush
+
+                // 2. Заполнить буфер записи
+                for (size_t i = 0; i < num_writes; ++i) {
+                    fill_base[i * stride] = static_cast<int>(iter + i);
                 }
 
+                // 3. Измерить критическую пару store+load
                 uint64_t start = platform::arch::tick();
-                platform::arch::write_non_temporal(const_cast<int*>(extra_addr), 0xdeadbeef);
+                const_cast<int*>(extra_addr)[0] = 0xdeadbeef;
                 dummy = *extra_addr;
                 uint64_t end = platform::arch::tick();
                 total_ticks += (end - start);
