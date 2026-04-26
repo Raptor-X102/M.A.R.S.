@@ -157,10 +157,10 @@ std::vector<std::string> discover_s2l_forwarding_events() {
 
     if (vendor == CpuVendor::CpuVendorID::Intel) {
         const std::string STORE_FORWARD = "ld_blocks.store_forward"; 
-        const std::string SPLIT_STORES = "mem_inst_retired.split_stores"; 
-        if (event_exists(STORE_FORWARD) && event_exists(SPLIT_STORES)) {
+        //const std::string SPLIT_STORES = "mem_inst_retired.split_stores"; 
+        if (event_exists(STORE_FORWARD) /*&& event_exists(SPLIT_STORES)*/) {
             candidates.push_back(STORE_FORWARD);
-            candidates.push_back(SPLIT_STORES);
+            //candidates.push_back(SPLIT_STORES);
         }
     }
     else {

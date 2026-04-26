@@ -1,3 +1,4 @@
+// store_to_load_forwarding_measurer.hpp
 #pragma once
 
 #include "infra/logging.hpp"
@@ -11,22 +12,22 @@
 #include <algorithm>
 #include <numeric>
 #include <cmath>
+#include <cstdint>
+#include <cstring>
 
 namespace silicon_probe::store_to_load_forwarding {
 
 struct StoreToLoadForwardingResult {
-    double avg_ticks_per_block;
-    double avg_ticks_per_iter;
+    double avg_ticks;
     double ticks_std;
-    std::vector<uint64_t> avg_events_counts;
+    std::vector<uint64_t> avg_events;
 };
 
 class StoreToLoadForwardingMeasurer final : public core::Measurer {
-  public:
-    static constexpr size_t kDefaultAlignment = 16;
-    static constexpr size_t kDefaultBufferSize = 2*64 / sizeof(size_t); // 2 cache lines in size_t
-    static constexpr size_t kDefaultMinOffest = 0;
-    static constexpr size_t kDefaultMaxOffest = kDefaultBufferSize - 2;
+public:
+    static constexpr size_t kDefaultBufferSize = 128;          // bytes
+    static constexpr size_t kDefaultMinOffset = 0;
+    static constexpr size_t kDefaultMaxOffset = 7;             // 0..7
     static constexpr size_t kDefaultOffsetStep = 1;
     static constexpr size_t kDefaultIterations = 100'000'000;
     static constexpr size_t kDefaultRepeats = 10;
@@ -35,113 +36,159 @@ class StoreToLoadForwardingMeasurer final : public core::Measurer {
     struct Config {
         bool enabled = true;
         platform::MeasurementEnvironmentOptions environment;
-        size_t min_offset = kDefaultMinOffest;
-        size_t max_offset = kDefaultMaxOffest;
-        size_t buffer_size = kDefaultBufferSize;
+        size_t min_offset = kDefaultMinOffset;
+        size_t max_offset = kDefaultMaxOffset;
         size_t offset_step = kDefaultOffsetStep;
         size_t iterations = kDefaultIterations;
         size_t repeats = kDefaultRepeats;
         size_t warmup_iterations = kDefaultWarmupIterations;
-        int alignment = kDefaultAlignment;
-        double misprediction_saturation_threshold = 0.01;
-        double misprediction_growth_threshold = 0.005;
-        double time_growth_ratio = 1.20;
-        size_t time_stability_points = 3;
-        size_t coarse_ignore_first = 2;
+        double time_growth_ratio = 1.5;            // latency increase ratio to detect failure
+        double pmc_saturation_ratio = 0.01;        // blocked / iterations > this -> failure
     };
 
     StoreToLoadForwardingMeasurer() : StoreToLoadForwardingMeasurer(Config{}) {}
     explicit StoreToLoadForwardingMeasurer(Config config) : config_(std::move(config)) {
-        SPDLOG_INFO("[{}] configured: min_offset = {}, max_offset = {}, offset_step = {}, iterations={}, "
-                    "repeats={}, alignment={}",
-                    name(), config_.min_offset, config_.max_offset, config_.offset_step, config_.iterations, config_.repeats,
-                    config_.alignment);
+        SPDLOG_INFO("[{}] cfg: offsets={}..{} step={} iter={} repeats={} growth={}",
+                    name(), config_.min_offset, config_.max_offset, config_.offset_step,
+                    config_.iterations, config_.repeats, config_.time_growth_ratio);
     }
 
-    std::string_view name() const noexcept override { return "branch target buffer"; }
+    std::string_view name() const noexcept override { return "store-to-load forwarding"; }
 
     void measure(core::CpuInfoData& data) override {
-        SPDLOG_INFO("[{}] starting BTB size measurement", name());
+        SPDLOG_INFO("[{}] start", name());
+        platform::ScopedMeasurementEnvironment env{config_.environment};
 
-        platform::ScopedMeasurementEnvironment environment{config_.environment};
-
-        auto s2l_fwd_events = platform::discover_s2l_forwarding_events();
-        bool has_s2l_fwd = false;
-        if (s2l_fwd_events.empty()) {
-            SPDLOG_WARN("[{}] No s2l_fwd events found. Falling back to time-only measurement.", name());
-        } else {
-            SPDLOG_INFO("[{}] Found {} s2l_fwd events", name(), s2l_fwd_events.size());
-            has_s2l_fwd = true;
-        }
-
+        auto events = platform::discover_s2l_forwarding_events();
+        bool has_pmc = !events.empty();
         std::unique_ptr<platform::pmc::PmcGroup> pmc;
-        if (has_s2l_fwd) {
-            pmc = platform::pmc::PmcGroup::create_raw(s2l_fwd_events);
+        size_t sf_idx = std::string::npos;
+
+        if (has_pmc) {
+            pmc = platform::pmc::PmcGroup::create_raw(events);
             if (!pmc) {
-                SPDLOG_WARN("[{}] failed to open s2l_fwd counters, falling back to time-only", name());
-                has_s2l_fwd = false;
+                SPDLOG_WARN("[{}] pmc open failed, fallback to time-only", name());
+                has_pmc = false;
+            } else {
+                for (size_t i = 0; i < events.size(); ++i)
+                    if (events[i].find("store_forward") != std::string::npos) sf_idx = i;
             }
         }
 
-        std::vector<StoreToLoadForwardingResult> coarse_results;
-        std::vector<size_t> coarse_counts;
-        size_t store_forward_idx = std::string::npos;
-        if (has_s2l_fwd) {
-            for (size_t i = 0; i < s2l_fwd_events.size(); ++i) {
-                if (s2l_fwd_events[i].find("store_forward") != std::string::npos) store_forward_idx = i;
+        size_t best_size = 0;
+        size_t best_offset = 0;
+
+        // Try sizes 8,4,2,1
+        for (size_t size : {8, 4, 2, 1}) {
+            if (size > kDefaultBufferSize) continue;
+            SPDLOG_INFO("[{}] testing access size = {} bytes", name(), size);
+
+            size_t max_off = std::min(config_.max_offset, kDefaultBufferSize - size);
+            std::vector<StoreToLoadForwardingResult> results;
+            std::vector<size_t> offsets;
+
+            // Sweep all offsets from min to max
+            for (size_t off = config_.min_offset; off <= max_off; off += config_.offset_step) {
+                StoreToLoadForwardingResult res;
+                switch (size) {
+                    case 8: res = run_test<8>(off, pmc.get(), events); break;
+                    case 4: res = run_test<4>(off, pmc.get(), events); break;
+                    case 2: res = run_test<2>(off, pmc.get(), events); break;
+                    case 1: res = run_test<1>(off, pmc.get(), events); break;
+                    default: __builtin_unreachable();
+                }
+                results.push_back(res);
+                offsets.push_back(off);
             }
+            if (results.empty()) continue;
+
+            // Check if forwarding works at any offset
+            // First, detect if offset 0 works (necessary condition for this size)
+            bool zero_works = false;
+            if (has_pmc && sf_idx != std::string::npos && results[0].avg_events.size() > sf_idx) {
+                double ratio = double(results[0].avg_events[sf_idx]) / config_.iterations;
+                if (ratio < config_.pmc_saturation_ratio) zero_works = true;
+            } else {
+                if (max_off > 0 && results[0].avg_ticks < results.back().avg_ticks * config_.time_growth_ratio)
+                    zero_works = true;
+            }
+
+            if (!zero_works) {
+                SPDLOG_INFO("[{}] size {} no STLF at offset 0, try smaller", name(), size);
+                continue;
+            }
+
+            // Size works at offset 0 -> find max working offset
+            best_size = size;
+            best_offset = 0;
+            double base_ticks = results[0].avg_ticks;
+
+            for (size_t i = 1; i < results.size(); ++i) {
+                bool ok = false;
+                if (has_pmc && sf_idx != std::string::npos && results[i].avg_events.size() > sf_idx) {
+                    double ratio = double(results[i].avg_events[sf_idx]) / config_.iterations;
+                    if (ratio < config_.pmc_saturation_ratio) ok = true;
+                } else {
+                    if (results[i].avg_ticks < base_ticks * config_.time_growth_ratio)
+                        ok = true;
+                }
+                if (ok) best_offset = offsets[i];
+                else break;
+            }
+
+            SPDLOG_INFO("[{}] size {} works, max offset = {}", name(), best_size, best_offset);
+            break; // largest working size found
         }
 
-        for (size_t offset = config_.min_offset; offset < config_.max_offset; offset += config_.offset_step) {
-            StoreToLoadForwardingResult res = run_test(offset, pmc.get(), s2l_fwd_events);
-            coarse_counts.push_back(offset);
-            coarse_results.push_back(res);
-        }
-
-        size_t result = detectS2LFWDSaturation(coarse_results, coarse_counts, s2l_fwd_events, store_forward_idx);
-
-        data.s2l_fwd_size = result;
-        SPDLOG_INFO("[{}] estimated store-to-load forwarding size: {} s2l_fwd", name(), result);
-        SPDLOG_INFO("[{}] measurement complete", name());
+        data.s2l_fwd_max_size = best_size;
+        data.s2l_fwd_max_offset = best_offset;
+        SPDLOG_INFO("[{}] result: size={} bytes, max_offset={}", name(), best_size, best_offset);
     }
 
-  private:
+private:
     Config config_;
 
-    StoreToLoadForwardingResult run_test(size_t offset, platform::pmc::PmcGroup* pmc, const std::vector<std::string>& s2l_fwd_events) {
-        if (offset >= kDefaultBufferSize)
-            throw std::runtime_error("offset is out of buffer range");
+    template<size_t N>
+    StoreToLoadForwardingResult run_test(size_t offset, platform::pmc::PmcGroup* pmc,
+                                         const std::vector<std::string>& ev_names) {
+        static_assert(N == 1 || N == 2 || N == 4 || N == 8, "size must be 1,2,4,8");
+        constexpr size_t buffer_bytes = kDefaultBufferSize;
+        alignas(64) char buffer[buffer_bytes];
+        std::memset(buffer, 0, buffer_bytes);
+        volatile uint64_t dummy = 0;
 
-        std::vector<double> ticks_per_mem_access;
-        std::vector<uint64_t> raw_ticks;
+        std::vector<double> ticks_vec;
         std::vector<std::vector<uint64_t>> all_counts;
 
-        alignas(64) size_t buffer[kDefaultBufferSize];
-        volatile size_t dummy = 0;
+        using StoreT = typename std::conditional<N == 1, uint8_t,
+                      typename std::conditional<N == 2, uint16_t,
+                      typename std::conditional<N == 4, uint32_t, uint64_t>::type>::type>::type;
+        volatile StoreT* store_ptr = reinterpret_cast<volatile StoreT*>(buffer);
+        volatile StoreT* load_ptr  = reinterpret_cast<volatile StoreT*>(buffer + offset);
 
         for (size_t i = 0; i < config_.warmup_iterations; ++i) {
-            *buffer = i;
-            dummy = *(buffer+offset);
+            *store_ptr = static_cast<StoreT>(i);
+            asm volatile("" : : : "memory"); 
+            dummy = *load_ptr;
+            asm volatile("" : : : "memory"); 
         }
 
         for (size_t r = 0; r < config_.repeats; ++r) {
-            if (pmc) {
-                pmc->reset();
-                pmc->enable();
-            }
+            if (pmc) { pmc->reset(); pmc->enable(); }
 
-            uint64_t start_ticks = platform::arch::tick();
-            for (size_t iteration = 0; iteration <= config_.iterations; ++iteration) {
-                *buffer = iteration;
-                dummy = *(buffer+offset);
+            uint64_t start = platform::arch::tick();
+            for (size_t iter = 0; iter < config_.iterations; ++iter) {
+                *store_ptr = static_cast<StoreT>(iter);
+                asm volatile("" : : : "memory"); 
+                dummy = *load_ptr;
+                asm volatile("" : : : "memory");
             }
-            uint64_t end_ticks = platform::arch::tick();
+            uint64_t end = platform::arch::tick();
 
             if (pmc) pmc->disable();
 
-            uint64_t ticks = end_ticks - start_ticks;
-            raw_ticks.push_back(ticks);
-            ticks_per_mem_access.push_back(static_cast<double>(ticks) / config_.iterations);
+            uint64_t total = end - start;
+            ticks_vec.push_back(static_cast<double>(total) / config_.iterations);
 
             if (pmc) {
                 auto cv = pmc->read();
@@ -151,107 +198,32 @@ class StoreToLoadForwardingMeasurer final : public core::Measurer {
 
         (void)dummy;
 
-        double avg_ticks_per_mem_access = std::accumulate(ticks_per_mem_access.begin(), ticks_per_mem_access.end(), 0.0) / config_.repeats;
-        double avg_raw_ticks = std::accumulate(raw_ticks.begin(), raw_ticks.end(), 0.0) / config_.repeats;
-
-        double ticks_std = 0.0;
-        for (double t : ticks_per_mem_access) {
-            double diff = t - avg_ticks_per_mem_access;
-            ticks_std += diff * diff;
+        double avg = std::accumulate(ticks_vec.begin(), ticks_vec.end(), 0.0) / config_.repeats;
+        double stddev = 0.0;
+        for (double v : ticks_vec) {
+            double d = v - avg;
+            stddev += d * d;
         }
-        ticks_std = std::sqrt(ticks_std / config_.repeats);
+        stddev = std::sqrt(stddev / config_.repeats);
 
-        std::vector<uint64_t> avg_events_counts;
+        std::vector<uint64_t> avg_ev;
         if (!all_counts.empty()) {
-            avg_events_counts.resize(all_counts[0].size(), 0);
-            for (const auto& counts : all_counts) {
-                for (size_t i = 0; i < counts.size(); ++i) {
-                    avg_events_counts[i] += counts[i];
-                }
-            }
-            for (size_t i = 0; i < avg_events_counts.size(); ++i) {
-                avg_events_counts[i] /= config_.repeats;
-            }
+            avg_ev.resize(all_counts[0].size(), 0);
+            for (const auto& cnt : all_counts)
+                for (size_t i = 0; i < cnt.size(); ++i)
+                    avg_ev[i] += cnt[i];
+            for (size_t i = 0; i < avg_ev.size(); ++i)
+                avg_ev[i] /= config_.repeats;
         }
 
-        SPDLOG_INFO("[{}] offset={}: avg_ticks_per_mem_access={:.4g} (std={:.4g})", name(), offset, avg_ticks_per_mem_access, ticks_std);
-        if (!avg_events_counts.empty()) {
-            for (size_t i = 0; i < s2l_fwd_events.size(); ++i) {
-                SPDLOG_INFO("  {} avg = {:.4g}", s2l_fwd_events[i], static_cast<double>(avg_events_counts[i]));
-            }
+        SPDLOG_INFO("[{}] \nsize={} off={}: avg={:.3g} std={:.3g}", name(), N, offset, avg, stddev);
+        if (!avg_ev.empty()) {
+            for (size_t i = 0; i < ev_names.size(); ++i)
+                SPDLOG_INFO(" \n{} avg = {:.3g}", ev_names[i], double(avg_ev[i]));
         }
 
-        return {avg_ticks_per_mem_access, avg_raw_ticks, ticks_std, std::move(avg_events_counts)};
-    }
-
-    size_t detectS2LFWDSaturation(
-        const std::vector<StoreToLoadForwardingResult>& results,
-        const std::vector<size_t>& offsets,
-        const std::vector<std::string>& event_names,
-        size_t store_forward_idx) const {
-
-        if (results.empty() || offsets.empty()) {
-            SPDLOG_WARN("[{}] No results to analyze, returning max offset", name());
-            return config_.max_offset;
-        }
-
-        const size_t iterations = config_.iterations;
-        const double time_growth_ratio = config_.time_growth_ratio;
-        const size_t stability_points = config_.time_stability_points;
-        const double saturation_threshold = config_.misprediction_saturation_threshold; // re-used for counter ratio
-
-        // ----- 1. Time‑based analysis -----
-        // Find baseline latency – average of first few offsets (assumed to be in forwarding regime)
-        const size_t baseline_window = std::min<size_t>(3, results.size());
-        double baseline_latency = 0.0;
-        for (size_t i = 0; i < baseline_window; ++i) {
-            baseline_latency += results[i].avg_ticks_per_block;
-        }
-        baseline_latency /= baseline_window;
-
-        size_t time_saturation = offsets.back();
-        size_t consecutive_high = 0;
-        for (size_t i = 0; i < results.size(); ++i) {
-            double cur_lat = results[i].avg_ticks_per_block;
-            if (cur_lat > baseline_latency * time_growth_ratio) {
-                ++consecutive_high;
-                if (consecutive_high >= stability_points) {
-                    time_saturation = offsets[i - stability_points + 1];
-                    break;
-                }
-            } else {
-                consecutive_high = 0;
-            }
-        }
-
-        // ----- 2. Counter‑based analysis (if we have a store_forward event) -----
-        size_t counter_saturation = offsets.back();
-        if (store_forward_idx != std::string::npos && store_forward_idx < event_names.size()) {
-            for (size_t i = 0; i < results.size(); ++i) {
-                if (i >= results[i].avg_events_counts.size()) continue;
-                uint64_t forward_blocked = results[i].avg_events_counts[store_forward_idx];
-                double blocked_ratio = static_cast<double>(forward_blocked) / iterations;
-                if (blocked_ratio > saturation_threshold) {
-                    counter_saturation = offsets[i];
-                    break;
-                }
-            }
-        }
-
-        // ----- 3. Combine results -----
-        size_t final_saturation = offsets.back();
-        if (store_forward_idx != std::string::npos) {
-            // Prefer counter result if it's earlier (more precise), otherwise take the time result
-            final_saturation = std::min(time_saturation, counter_saturation);
-            SPDLOG_INFO("[{}] Time‑based saturation = {}, counter‑based saturation = {}, final = {}",
-                        name(), time_saturation, counter_saturation, final_saturation);
-        } else {
-            final_saturation = time_saturation;
-            SPDLOG_INFO("[{}] No store_forward counter, using time‑based saturation = {}", name(), final_saturation);
-        }
-
-        return final_saturation;
+        return {avg, stddev, std::move(avg_ev)};
     }
 };
 
-} // namespace silicon_probe::branch_target_buffer
+} // namespace silicon_probe::store_to_load_forwarding

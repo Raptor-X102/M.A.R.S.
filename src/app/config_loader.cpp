@@ -816,9 +816,6 @@ class S2LFwdConfigParser final : public BenchmarkConfigParserBase<silicon_probe:
             with_optional_node(measurement, "offset_step", measurement_path, [&](const YAML::Node& node, const std::string& node_path) {
                 config.offset_step = parse_size_scalar(node, node_path);
             });
-            with_optional_node(measurement, "buffer_size", measurement_path, [&](const YAML::Node& node, const std::string& node_path) {
-                config.buffer_size = parse_size_scalar(node, node_path);
-            });
             with_optional_node(measurement, "iterations", measurement_path, [&](const YAML::Node& node, const std::string& node_path) {
                 config.iterations = parse_size_scalar(node, node_path);
             });
@@ -829,29 +826,14 @@ class S2LFwdConfigParser final : public BenchmarkConfigParserBase<silicon_probe:
                                [&](const YAML::Node& node, const std::string& node_path) {
                                    config.warmup_iterations = parse_size_scalar(node, node_path);
                                });
-            with_optional_node(measurement, "alignment", measurement_path, [&](const YAML::Node& node, const std::string& node_path) {
-                config.alignment = parse_int_scalar(node, node_path);
-            });
         });
 
         with_mapping(section, "detection", path, [&](const YAML::Node& detection, const std::string& detection_path) {
-            with_optional_node(detection, "misprediction_saturation_threshold", detection_path,
-                               [&](const YAML::Node& node, const std::string& node_path) {
-                                   config.misprediction_saturation_threshold = parse_double_scalar(node, node_path);
-                               });
-            with_optional_node(detection, "misprediction_growth_threshold", detection_path,
-                               [&](const YAML::Node& node, const std::string& node_path) {
-                                   config.misprediction_growth_threshold = parse_double_scalar(node, node_path);
-                               });
+            with_optional_node(detection, "pmc_saturation_ratio", detection_path, [&](const YAML::Node& node, const std::string& node_path) {
+                config.pmc_saturation_ratio = parse_double_scalar(node, node_path);
+            });
             with_optional_node(detection, "time_growth_ratio", detection_path, [&](const YAML::Node& node, const std::string& node_path) {
                 config.time_growth_ratio = parse_double_scalar(node, node_path);
-            });
-            with_optional_node(detection, "time_stability_points", detection_path,
-                               [&](const YAML::Node& node, const std::string& node_path) {
-                                   config.time_stability_points = parse_size_scalar(node, node_path);
-                               });
-            with_optional_node(detection, "coarse_ignore_first", detection_path, [&](const YAML::Node& node, const std::string& node_path) {
-                config.coarse_ignore_first = parse_size_scalar(node, node_path);
             });
         });
     }

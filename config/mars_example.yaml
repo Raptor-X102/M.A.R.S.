@@ -137,17 +137,7 @@ benchmarks:
     enabled: true
 
     measurement:
-      min_offset: 0
-      max_offset: 14
-      buffer_size: 16
-      offset_step: 1
       repeats: 10
-      warmup_iterations: 100
-      alignment: 16
-
-    detection:
-      misprediction_saturation_threshold: 0.01
-      misprediction_growth_threshold: 0.005
-      time_growth_ratio: 1.20
-      time_stability_points: 3
-      coarse_ignore_first: 2
+      #warmup_iterations: 10
+      #alignment: 16
+      

@@ -22,7 +22,8 @@ struct CpuInfoData {
     std::optional<size_t> bht_size; // branch history table
     std::optional<size_t> uops_cache_size;
     std::optional<size_t> rob_size; // reorder buffer
-    std::optional<size_t> s2l_fwd_size; // store-to-load forwarding size
+    std::optional<size_t> s2l_fwd_max_size; // store-to-load forwarding max size
+    std::optional<size_t> s2l_fwd_max_offset; // store-to-load forwarding max offset
     std::optional<size_t> pipeline_depth;
 
     std::optional<bool> execution_ports_independent; // for now only for add & mul instructions
