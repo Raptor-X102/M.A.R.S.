@@ -42,6 +42,9 @@ int execute(const ApplicationConfig& config) {
         if (config.s2l_fwd.enabled) {
             registry.register_measurer(std::make_unique<store_to_load_forwarding::StoreToLoadForwardingMeasurer>(config.s2l_fwd));
         }
+        if (config.write_buffer.enabled) {
+            registry.register_measurer(std::make_unique<write_buffer::WriteBufferMeasurer>(config.write_buffer));
+        }
 
         core::ProbeService probe_service{std::move(registry)};
         const auto& data = probe_service.run();

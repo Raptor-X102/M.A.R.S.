@@ -134,10 +134,19 @@ benchmarks:
       coarse_ignore_first: 2
   
   store_to_load_forwarding:
-    enabled: true
+    enabled: false
 
     measurement:
       repeats: 10
       #warmup_iterations: 10
       #alignment: 16
-      
+
+  write_buffer:
+    enabled: true
+
+    measurement:
+      repeats: 10
+      iterations: 100000
+      #warmup_iterations: 10
+      #alignment: 16
+         

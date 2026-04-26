@@ -839,6 +839,46 @@ class S2LFwdConfigParser final : public BenchmarkConfigParserBase<silicon_probe:
     }
 };
 
+class WriteBufferConfigParser final : public BenchmarkConfigParserBase<silicon_probe::write_buffer::WriteBufferMeasurer::Config> {
+  public:
+    WriteBufferConfigParser() : BenchmarkConfigParserBase("write_buffer") {}
+
+  private:
+    void parse_specific(const YAML::Node& section, const std::string& path,
+                        silicon_probe::write_buffer::WriteBufferMeasurer::Config& config) const override {
+        with_mapping(section, "measurement", path, [&](const YAML::Node& measurement, const std::string& measurement_path) {
+            with_optional_node(measurement, "max_writes", measurement_path, [&](const YAML::Node& node, const std::string& node_path) {
+                config.max_writes = parse_size_scalar(node, node_path);
+            });
+            with_optional_node(measurement, "min_writes", measurement_path, [&](const YAML::Node& node, const std::string& node_path) {
+                config.min_writes = parse_size_scalar(node, node_path);
+            });
+            with_optional_node(measurement, "writes_step", measurement_path, [&](const YAML::Node& node, const std::string& node_path) {
+                config.writes_step = parse_size_scalar(node, node_path);
+            });
+            with_optional_node(measurement, "iterations", measurement_path, [&](const YAML::Node& node, const std::string& node_path) {
+                config.iterations = parse_size_scalar(node, node_path);
+            });
+            with_optional_node(measurement, "repeats", measurement_path, [&](const YAML::Node& node, const std::string& node_path) {
+                config.repeats = parse_size_scalar(node, node_path);
+            });
+            with_optional_node(measurement, "warmup_iterations", measurement_path,
+                               [&](const YAML::Node& node, const std::string& node_path) {
+                                   config.warmup_iterations = parse_size_scalar(node, node_path);
+                               });
+        });
+
+        with_mapping(section, "detection", path, [&](const YAML::Node& detection, const std::string& detection_path) {
+            with_optional_node(detection, "latency_growth_ratio", detection_path, [&](const YAML::Node& node, const std::string& node_path) {
+                config.latency_growth_ratio = parse_double_scalar(node, node_path);
+            });
+            with_optional_node(detection, "pmc_saturation_ratio", detection_path, [&](const YAML::Node& node, const std::string& node_path) {
+                config.pmc_saturation_ratio = parse_double_scalar(node, node_path);
+            });
+        });
+    }
+};
+
 } // namespace
 
 namespace silicon_probe::app {
@@ -857,6 +897,7 @@ ApplicationConfig ApplicationConfigLoader::load(const BootstrapOptions& options)
     config.uops_cache = UopsCacheConfigParser{}.parse(document);
     config.btb = BtbConfigParser{}.parse(document);
     config.s2l_fwd = S2LFwdConfigParser{}.parse(document);
+    config.write_buffer = WriteBufferConfigParser{}.parse(document);
     return config;
 }
 

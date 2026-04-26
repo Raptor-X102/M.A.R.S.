@@ -157,11 +157,37 @@ std::vector<std::string> discover_s2l_forwarding_events() {
 
     if (vendor == CpuVendor::CpuVendorID::Intel) {
         const std::string STORE_FORWARD = "ld_blocks.store_forward"; 
-        //const std::string SPLIT_STORES = "mem_inst_retired.split_stores"; 
         if (event_exists(STORE_FORWARD) /*&& event_exists(SPLIT_STORES)*/) {
             candidates.push_back(STORE_FORWARD);
-            //candidates.push_back(SPLIT_STORES);
         }
+    }
+    else {
+        SPDLOG_WARN("Unsupported CPU vendor ({}) for port event discovery", vendor.name());
+    }
+
+    return candidates; 
+}
+
+std::vector<std::string> discover_write_buffer_events() {
+    if (!ensure_pfm()) return {};
+
+    using CpuVendor = silicon_probe::platform::cpu_vendor::CpuVendor;
+    CpuVendor vendor = arch::detect_vendor();
+    std::vector<std::string> candidates;
+
+    if (vendor == CpuVendor::CpuVendorID::Intel) {
+        const std::string RESOURCE_STALLS = "resource_stalls.sb"; 
+        const std::string BOUND_ON_STORES = "exe_activity.bound_on_stores"; 
+        //const std::string MEM_BOUND_STALLS_LOAD = "mem_bound_stalls.load"; 
+        if (event_exists(RESOURCE_STALLS)) {
+            candidates.push_back(RESOURCE_STALLS);
+        }
+        if (event_exists(BOUND_ON_STORES)) {
+            candidates.push_back(BOUND_ON_STORES);
+        }
+        /*if (event_exists(MEM_BOUND_STALLS_LOAD)) {
+            candidates.push_back(MEM_BOUND_STALLS_LOAD);
+        }*/
     }
     else {
         SPDLOG_WARN("Unsupported CPU vendor ({}) for port event discovery", vendor.name());

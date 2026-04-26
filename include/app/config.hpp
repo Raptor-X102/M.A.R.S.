@@ -8,6 +8,7 @@
 #include "measurement/uops_cache/uops_cache_measurer.hpp"
 #include "measurement/branch_target_buffer/branch_target_buffer_measurer.hpp"
 #include "measurement/store_to_load_forwarding/store_to_load_forwarding_measurer.hpp"
+#include "measurement/write_buffer/write_buffer_measurer.hpp"
 #include "infra/logging.hpp"
 
 #include <CLI/CLI.hpp>
@@ -34,6 +35,7 @@ struct ApplicationConfig {
     uops_cache::UopsCacheMeasurer::Config uops_cache;
     branch_target_buffer::BranchTargetBufferMeasurer::Config btb;
     store_to_load_forwarding::StoreToLoadForwardingMeasurer::Config s2l_fwd;
+    write_buffer::WriteBufferMeasurer::Config write_buffer;
     bool print_summary = true;
 };
 

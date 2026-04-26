@@ -47,6 +47,9 @@ public:
         if (data.s2l_fwd_max_offset) {
             stream << "Store-to-load forwarding size: " << *data.s2l_fwd_max_offset << " bytes\n";
         }
+        if (data.write_buffer_size) {
+            stream << "Write buffer size: " << *data.write_buffer_size << " entries\n";
+        }
 
         stream << "========================\n\n";
     }
