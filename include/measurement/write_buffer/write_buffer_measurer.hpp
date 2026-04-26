@@ -25,7 +25,7 @@ public:
     static constexpr size_t kDefaultMaxWrites = 128;
     static constexpr size_t kDefaultMinWrites = 1;
     static constexpr size_t kDefaultWritesStep = 1;
-    static constexpr size_t kDefaultIterations = 1000;
+    static constexpr size_t kDefaultIterations = 5000;
     static constexpr size_t kDefaultRepeats = 30;
     static constexpr size_t kDefaultWarmupIterations = 5;
     static constexpr size_t kBufferSizeMB = 16;
@@ -73,6 +73,11 @@ public:
                     if (events[i].find("exe_activity.bound_on_stores") != std::string::npos) bound_idx = i;
                 }
             }
+        }
+
+        if (!has_pmc) {
+            SPDLOG_WARN("[{}] No usable PMC events. Write buffer measurement requires PMC. Skipping.", name());
+            return;
         }
 
         const size_t buffer_bytes = kBufferSizeMB * 1024 * 1024;
@@ -136,7 +141,7 @@ private:
         // warmup
         for (size_t w = 0; w < config_.warmup_iterations; ++w) {
             for (size_t i = 0; i < num_writes; ++i) {
-                fill_base[i * stride] = static_cast<int>(i);   // regular store
+                fill_base[i * stride] = static_cast<int>(i);
             }
             dummy = *extra_addr;
             platform::arch::lfence();
@@ -155,18 +160,20 @@ private:
 
             uint64_t total_ticks = 0;
             for (size_t iter = 0; iter < config_.iterations; ++iter) {
-                // 1. Сбросить все линии, в которые будем писать
+                // flush all write lines
                 for (size_t i = 0; i < num_writes; ++i) {
                     platform::arch::clflush(&fill_base[i * stride]);
                 }
-                platform::arch::flush_complete(); // mfence – дождаться завершения clflush
+                // also flush the extra address to guarantee cache miss
+                platform::arch::clflush(const_cast<int*>(extra_addr));
+                platform::arch::flush_complete();
 
-                // 2. Заполнить буфер записи
+                // fill store buffer
                 for (size_t i = 0; i < num_writes; ++i) {
                     fill_base[i * stride] = static_cast<int>(iter + i);
                 }
 
-                // 3. Измерить критическую пару store+load
+                // measure critical store+load pair
                 uint64_t start = platform::arch::tick();
                 const_cast<int*>(extra_addr)[0] = 0xdeadbeef;
                 dummy = *extra_addr;
@@ -217,32 +224,30 @@ private:
                                    const std::vector<size_t>& writes_list,
                                    bool has_pmc, size_t sb_idx, size_t bound_idx) {
         double base_latency = results[0].avg_latency_ticks;
-        size_t max_working = 0;
+        size_t capacity = writes_list.back();
 
         for (size_t i = 0; i < results.size(); ++i) {
-            double latency_ratio = results[i].avg_latency_ticks / base_latency;
-            bool time_ok = (latency_ratio < config_.latency_growth_ratio);
-
-            bool stalls_ok = true;
-            if (has_pmc && i < results.size()) {
+            bool stall_overflow = false;
+            if (has_pmc) {
                 double stalls_per_sample = 0.0;
                 if (sb_idx != std::string::npos && sb_idx < results[i].avg_events.size())
                     stalls_per_sample = double(results[i].avg_events[sb_idx]) / config_.iterations;
                 else if (bound_idx != std::string::npos && bound_idx < results[i].avg_events.size())
                     stalls_per_sample = double(results[i].avg_events[bound_idx]) / config_.iterations;
 
-                if (stalls_per_sample > config_.pmc_saturation_ratio)
-                    stalls_ok = false;
+                // realistic threshold for store buffer overflow
+                if (stalls_per_sample > 10.0) stall_overflow = true;
             }
 
-            bool is_working = (has_pmc) ? (time_ok && stalls_ok) : time_ok;
+            // also detect latency increase above 15%
+            bool latency_spike = (results[i].avg_latency_ticks > base_latency * 1.15);
 
-            if (is_working)
-                max_working = writes_list[i];
-            else
+            if (stall_overflow || latency_spike) {
+                capacity = writes_list[i];
                 break;
+            }
         }
-        return max_working;
+        return capacity;
     }
 };
 
