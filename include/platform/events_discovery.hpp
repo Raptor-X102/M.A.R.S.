@@ -11,5 +11,6 @@ namespace silicon_probe::platform {
 std::vector<std::string> discover_port_events();
 std::vector<std::string> discover_uops_events();
 std::optional<std::string> discover_branch_target_buffer_events();
+std::vector<std::string> discover_s2l_forwarding_events();
 
 } // namespace silicon_probe::platform

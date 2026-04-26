@@ -148,4 +148,26 @@ std::optional<std::string> discover_branch_target_buffer_events() {
     return std::nullopt;
 }
 
+std::vector<std::string> discover_s2l_forwarding_events() {
+    if (!ensure_pfm()) return {};
+
+    using CpuVendor = silicon_probe::platform::cpu_vendor::CpuVendor;
+    CpuVendor vendor = arch::detect_vendor();
+    std::vector<std::string> candidates;
+
+    if (vendor == CpuVendor::CpuVendorID::Intel) {
+        const std::string STORE_FORWARD = "ld_blocks.store_forward"; 
+        const std::string SPLIT_STORES = "mem_inst_retired.split_stores"; 
+        if (event_exists(STORE_FORWARD) && event_exists(SPLIT_STORES)) {
+            candidates.push_back(STORE_FORWARD);
+            candidates.push_back(SPLIT_STORES);
+        }
+    }
+    else {
+        SPDLOG_WARN("Unsupported CPU vendor ({}) for port event discovery", vendor.name());
+    }
+
+    return candidates; 
+}
+
 } // namespace silicon_probe::platform

@@ -39,6 +39,9 @@ int execute(const ApplicationConfig& config) {
         if (config.btb.enabled) {
             registry.register_measurer(std::make_unique<branch_target_buffer::BranchTargetBufferMeasurer>(config.btb));
         }
+        if (config.s2l_fwd.enabled) {
+            registry.register_measurer(std::make_unique<store_to_load_forwarding::StoreToLoadForwardingMeasurer>(config.s2l_fwd));
+        }
 
         core::ProbeService probe_service{std::move(registry)};
         const auto& data = probe_service.run();

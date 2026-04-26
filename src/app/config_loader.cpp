@@ -799,6 +799,64 @@ class BtbConfigParser final : public BenchmarkConfigParserBase<silicon_probe::br
     }
 };
 
+class S2LFwdConfigParser final : public BenchmarkConfigParserBase<silicon_probe::store_to_load_forwarding::StoreToLoadForwardingMeasurer::Config> {
+  public:
+    S2LFwdConfigParser() : BenchmarkConfigParserBase("store_to_load_forwarding") {}
+
+  private:
+    void parse_specific(const YAML::Node& section, const std::string& path,
+                        silicon_probe::store_to_load_forwarding::StoreToLoadForwardingMeasurer::Config& config) const override {
+        with_mapping(section, "measurement", path, [&](const YAML::Node& measurement, const std::string& measurement_path) {
+            with_optional_node(measurement, "min_offset", measurement_path, [&](const YAML::Node& node, const std::string& node_path) {
+                config.min_offset = parse_size_scalar(node, node_path);
+            });
+            with_optional_node(measurement, "max_offset", measurement_path, [&](const YAML::Node& node, const std::string& node_path) {
+                config.max_offset = parse_size_scalar(node, node_path);
+            });
+            with_optional_node(measurement, "offset_step", measurement_path, [&](const YAML::Node& node, const std::string& node_path) {
+                config.offset_step = parse_size_scalar(node, node_path);
+            });
+            with_optional_node(measurement, "buffer_size", measurement_path, [&](const YAML::Node& node, const std::string& node_path) {
+                config.buffer_size = parse_size_scalar(node, node_path);
+            });
+            with_optional_node(measurement, "iterations", measurement_path, [&](const YAML::Node& node, const std::string& node_path) {
+                config.iterations = parse_size_scalar(node, node_path);
+            });
+            with_optional_node(measurement, "repeats", measurement_path, [&](const YAML::Node& node, const std::string& node_path) {
+                config.repeats = parse_size_scalar(node, node_path);
+            });
+            with_optional_node(measurement, "warmup_iterations", measurement_path,
+                               [&](const YAML::Node& node, const std::string& node_path) {
+                                   config.warmup_iterations = parse_size_scalar(node, node_path);
+                               });
+            with_optional_node(measurement, "alignment", measurement_path, [&](const YAML::Node& node, const std::string& node_path) {
+                config.alignment = parse_int_scalar(node, node_path);
+            });
+        });
+
+        with_mapping(section, "detection", path, [&](const YAML::Node& detection, const std::string& detection_path) {
+            with_optional_node(detection, "misprediction_saturation_threshold", detection_path,
+                               [&](const YAML::Node& node, const std::string& node_path) {
+                                   config.misprediction_saturation_threshold = parse_double_scalar(node, node_path);
+                               });
+            with_optional_node(detection, "misprediction_growth_threshold", detection_path,
+                               [&](const YAML::Node& node, const std::string& node_path) {
+                                   config.misprediction_growth_threshold = parse_double_scalar(node, node_path);
+                               });
+            with_optional_node(detection, "time_growth_ratio", detection_path, [&](const YAML::Node& node, const std::string& node_path) {
+                config.time_growth_ratio = parse_double_scalar(node, node_path);
+            });
+            with_optional_node(detection, "time_stability_points", detection_path,
+                               [&](const YAML::Node& node, const std::string& node_path) {
+                                   config.time_stability_points = parse_size_scalar(node, node_path);
+                               });
+            with_optional_node(detection, "coarse_ignore_first", detection_path, [&](const YAML::Node& node, const std::string& node_path) {
+                config.coarse_ignore_first = parse_size_scalar(node, node_path);
+            });
+        });
+    }
+};
+
 } // namespace
 
 namespace silicon_probe::app {
@@ -816,6 +874,7 @@ ApplicationConfig ApplicationConfigLoader::load(const BootstrapOptions& options)
     config.exec_ports = ExecPortsConfigParser{}.parse(document);
     config.uops_cache = UopsCacheConfigParser{}.parse(document);
     config.btb = BtbConfigParser{}.parse(document);
+    config.s2l_fwd = S2LFwdConfigParser{}.parse(document);
     return config;
 }
 

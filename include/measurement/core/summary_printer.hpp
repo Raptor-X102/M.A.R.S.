@@ -41,6 +41,9 @@ public:
         if (data.btb_size) {
             stream << "BTB size: " << *data.btb_size << " addresses\n";
         }
+        if (data.s2l_fwd_size) {
+            stream << "Store-to-load forwarding size: " << *data.s2l_fwd_size << " bytes\n";
+        }
 
         stream << "========================\n\n";
     }

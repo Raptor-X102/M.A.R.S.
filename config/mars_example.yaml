@@ -6,7 +6,7 @@ common:
 
 benchmarks:
   cache:
-    enabled: true
+    enabled: false
     levels: [l1, l2, l3]
     limits:
       l1_max: 128KiB
@@ -31,7 +31,7 @@ benchmarks:
       l2_refinement_growth_multiplier: 1.5
 
   rob:
-    enabled: true
+    enabled: false
 
     measurement:
       min_instr_cnt: 50
@@ -40,7 +40,7 @@ benchmarks:
       warmup_iterations: 2
       inner_iterations: 8192
       outer_iterations: 64
-      instr_type: add_reg
+      instr_type: nop
 
     detection:
       baseline_fraction: 0.20
@@ -59,7 +59,7 @@ benchmarks:
       iterations: 100000000
 
   return_address_stack:
-    enabled: true
+    enabled: false
 
     measurement:
       min_recursion_depth: 1
@@ -115,13 +115,32 @@ benchmarks:
       coarse_ignore_first: 3
 
   branch_target_buffer:
-    enabled: true
+    enabled: false
 
     measurement:
       min_blocks_cnt: 3500
       max_blocks_cnt: 5000
       blocks_step: 100
       iterations: 100000
+      repeats: 10
+      warmup_iterations: 100
+      alignment: 16
+
+    detection:
+      misprediction_saturation_threshold: 0.01
+      misprediction_growth_threshold: 0.005
+      time_growth_ratio: 1.20
+      time_stability_points: 3
+      coarse_ignore_first: 2
+  
+  store_to_load_forwarding:
+    enabled: true
+
+    measurement:
+      min_offset: 0
+      max_offset: 14
+      buffer_size: 16
+      offset_step: 1
       repeats: 10
       warmup_iterations: 100
       alignment: 16
