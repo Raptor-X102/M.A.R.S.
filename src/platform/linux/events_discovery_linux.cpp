@@ -6,6 +6,7 @@
 #include <optional>
 #include <cstring>
 #include "platform/arch.hpp"
+#include "shared_types/cache_types.hpp"
 
 namespace silicon_probe::platform {
 
@@ -194,6 +195,43 @@ std::vector<std::string> discover_write_buffer_events() {
     }
 
     return candidates; 
+}
+
+using CacheLevel = silicon_probe::shared_types::CacheLevel;
+
+std::vector<std::string> discover_cache_miss_events(CacheLevel level) {
+    if (!ensure_pfm()) return {};
+    
+    using CpuVendor = silicon_probe::platform::cpu_vendor::CpuVendor;
+    CpuVendor vendor = arch::detect_vendor();
+    std::vector<std::string> candidates;
+
+    if (vendor == CpuVendor::CpuVendorID::Intel) {
+        switch (level) {
+            case CacheLevel::l1d:
+                if (event_exists("mem_load_retired.l1_miss"))
+                    candidates.push_back("mem_load_retired.l1_miss");
+                if (event_exists("l1-dcache-load-misses"))
+                    candidates.push_back("l1-dcache-load-misses");
+                break;
+            case CacheLevel::l2:
+                if (event_exists("l2_rqsts.all_demand_miss"))
+                    candidates.push_back("l2_rqsts.all_demand_miss");
+                if (event_exists("mem_load_retired.l2_miss"))
+                    candidates.push_back("mem_load_retired.l2_miss");
+                break;
+            case CacheLevel::l3:
+                if (event_exists("longest_lat_cache.miss"))
+                    candidates.push_back("longest_lat_cache.miss");
+                if (event_exists("mem_load_retired.l3_miss"))
+                    candidates.push_back("mem_load_retired.l3_miss");
+                break;
+            default:
+                throw std::invalid_argument("discover_cache_miss_events: insert proper cache level");
+        }
+    }
+
+    return candidates;
 }
 
 } // namespace silicon_probe::platform

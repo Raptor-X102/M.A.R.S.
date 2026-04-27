@@ -6,29 +6,39 @@ common:
 
 benchmarks:
   cache:
-    enabled: false
-    levels: [l1, l2, l3]
+    enabled: true
+    levels: [l3]
+    
     limits:
-      l1_max: 128KiB
-      l2_max: 2MiB
-      l3_max: 128MiB
+        l1_max: 128KiB
+        l2_max: 2MiB
+        l3_max: 128MiB
 
     measurement:
-      cache_min_lines: 16
-      seed: 48815
-      warmup_iterations: 4
-      precision: 64
-      target_accesses: 2000000
-      min_iterations: 1
-      max_iterations: 1000
+        cache_min_lines: 16
+        seed: 48815
+        warmup_iterations: 4
+        precision: 64
+        target_accesses: 2000000
+        min_iterations: 1
+        max_iterations: 1000
 
     detection:
-      refinement_samples: 3
-      baseline_stability_threshold: 0.20
-      l1_growth_factor: 1.5
-      l2_growth_factor: 2.0
-      l3_growth_factor: 2.2
-      l2_refinement_growth_multiplier: 1.5
+        refinement_samples: 3
+        baseline_stability_threshold: 0.20
+        decision_tolerance: 0.10
+        l1_growth_factor: 1.42
+        l2_growth_factor: 1.8
+        l3_growth_factor: 6.0
+        l2_refinement_growth_multiplier: 1.15
+
+    miss_events:
+        l1_miss_growth_factor: 90
+        l2_miss_growth_factor: 2.0
+        l3_miss_growth_factor: 3.2
+        l2_miss_rate_threshold: 0.25
+        l3_miss_rate_threshold: 0.9
+        l1_miss_rate_threshold: 0.01
 
   rob:
     enabled: false
@@ -142,7 +152,7 @@ benchmarks:
       #alignment: 16
 
   write_buffer:
-    enabled: true
+    enabled: false
 
     measurement:
       #repeats: 10

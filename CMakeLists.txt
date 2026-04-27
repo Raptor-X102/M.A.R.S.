@@ -127,6 +127,7 @@ endif()
 add_subdirectory(include/infra)
 add_subdirectory(include/platform)
 add_subdirectory(include/measurement)
+#add_subdirectory(include/shared_types)
 add_subdirectory(src/app)
 
 if(MARS_BUILD_APPS)
