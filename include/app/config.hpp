@@ -1,6 +1,7 @@
 #pragma once
 
 #include "measurement/cache/cache_measurer.hpp"
+#include "measurement/tlb/tlb_measurer.hpp"
 #include "measurement/rob/rob_measurer.hpp"
 #include "measurement/branch_history_table/branch_history_table_measurer.hpp"
 #include "measurement/return_address_stack/return_address_stack_measurer.hpp"
@@ -28,6 +29,7 @@ struct BootstrapOptions {
 struct ApplicationConfig {
     infra::LoggingConfig logging;
     cache::CacheMeasurer::Config cache;
+    tlb::TlbMeasurer::Config tlb;
     rob::RobMeasurer::Config rob;
     branch_history_table::BranchHistoryTableMeasurer::Config bht;
     return_address_stack::ReturnAddressStackMeasurer::Config ras;

@@ -7,6 +7,22 @@
 
 namespace silicon_probe::shared_types {
 
+struct TlbSummaryPoint {
+    size_t pages = 0;
+    size_t bytes = 0;
+    double min_cycles_per_access = 0.0;
+    double median_cycles_per_access = 0.0;
+    double mean_cycles_per_access = 0.0;
+    double max_cycles_per_access = 0.0;
+};
+
+struct TlbRawPoint {
+    size_t pages = 0;
+    size_t bytes = 0;
+    size_t repeat = 0;
+    double cycles_per_access = 0.0;
+};
+
 struct CpuInfoData {
     std::optional<size_t> l1d_size;
     std::optional<size_t> l1i_size;
@@ -17,6 +33,10 @@ struct CpuInfoData {
 
     std::optional<size_t> tlb_l1_size;
     std::optional<size_t> tlb_l2_size;
+    std::optional<size_t> tlb_page_walk_threshold;
+    std::optional<size_t> tlb_page_size_bytes;
+    std::vector<TlbSummaryPoint> tlb_points;
+    std::vector<TlbRawPoint> tlb_raw_points;
 
     std::optional<size_t> btb_size; // branch target buffer
     std::optional<size_t> ras_size; // return address stack

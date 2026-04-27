@@ -1,6 +1,7 @@
 #include "app/application.hpp"
 
 #include "measurement/cache/cache_measurer.hpp"
+#include "measurement/tlb/tlb_measurer.hpp"
 #include "measurement/rob/rob_measurer.hpp"
 #include "core/measurer_registry.hpp"
 #include "core/probe_service.hpp"
@@ -20,6 +21,9 @@ int execute(const ApplicationConfig& config) {
         core::MeasurerRegistry registry{};
         if (config.cache.enabled) {
             registry.register_measurer(std::make_unique<cache::CacheMeasurer>(config.cache));
+        }
+        if (config.tlb.enabled) {
+            registry.register_measurer(std::make_unique<tlb::TlbMeasurer>(config.tlb));
         }
         if (config.rob.enabled) {
             registry.register_measurer(std::make_unique<rob::RobMeasurer>(config.rob));

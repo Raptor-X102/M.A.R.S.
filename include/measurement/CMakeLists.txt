@@ -1,4 +1,5 @@
 add_subdirectory(cache)
+add_subdirectory(tlb)
 add_subdirectory(rob)
 add_subdirectory(branch_history_table)
 add_subdirectory(return_address_stack)

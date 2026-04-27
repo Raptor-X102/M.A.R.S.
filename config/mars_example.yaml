@@ -40,6 +40,32 @@ benchmarks:
         l3_miss_rate_threshold: 0.9
         l1_miss_rate_threshold: 0.01
 
+  tlb:
+    enabled: true
+
+    measurement:
+      min_pages: 1
+      max_pages: 4096
+      pages_step: 2
+      growth_mode: multiply
+      iterations: 2000000
+      repeats: 9
+      warmup_rounds: 2
+      page_size: 4KiB
+      huge_pages: false
+      disable_transparent_huge_pages: true
+      lock_memory: false
+      seed: 12648430
+
+    detection:
+      moving_average_window: 3
+      l1_growth_ratio: 1.10
+      l2_growth_ratio: 1.08
+      page_walk_growth_ratio: 1.12
+      min_jump_cycles: 0.75
+      page_walk_jump_cycles: 2.0
+      sustain_points: 1
+
   rob:
     enabled: false
 

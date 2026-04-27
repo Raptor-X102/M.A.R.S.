@@ -559,6 +559,94 @@ private:
     }
 };
 
+class TlbConfigParser final : public BenchmarkConfigParserBase<silicon_probe::tlb::TlbMeasurer::Config> {
+  public:
+    TlbConfigParser() : BenchmarkConfigParserBase("tlb") {}
+
+  private:
+    static silicon_probe::tlb::GrowthMode parse_growth_mode(const YAML::Node& node, const std::string& path) {
+        const std::string mode = normalize_identifier(read_scalar(node, path));
+        if (mode == "multiply" || mode == "mul" || mode == "geometric") {
+            return silicon_probe::tlb::GrowthMode::Multiply;
+        }
+        if (mode == "add" || mode == "linear") {
+            return silicon_probe::tlb::GrowthMode::Add;
+        }
+        throw config_error(path, "unsupported growth mode '" + mode + "'");
+    }
+
+    void parse_specific(const YAML::Node& section, const std::string& path,
+                        silicon_probe::tlb::TlbMeasurer::Config& config) const override {
+        with_mapping(section, "measurement", path, [&](const YAML::Node& measurement, const std::string& measurement_path) {
+            with_optional_node(measurement, "min_pages", measurement_path, [&](const YAML::Node& node, const std::string& node_path) {
+                config.min_pages = parse_size_scalar(node, node_path);
+            });
+            with_optional_node(measurement, "max_pages", measurement_path, [&](const YAML::Node& node, const std::string& node_path) {
+                config.max_pages = parse_size_scalar(node, node_path);
+            });
+            with_optional_node(measurement, "pages_step", measurement_path, [&](const YAML::Node& node, const std::string& node_path) {
+                config.pages_step = parse_size_scalar(node, node_path);
+            });
+            with_optional_node(measurement, "growth_mode", measurement_path, [&](const YAML::Node& node, const std::string& node_path) {
+                config.growth_mode = parse_growth_mode(node, node_path);
+            });
+            with_optional_node(measurement, "iterations", measurement_path, [&](const YAML::Node& node, const std::string& node_path) {
+                config.iterations = parse_size_scalar(node, node_path);
+            });
+            with_optional_node(measurement, "repeats", measurement_path, [&](const YAML::Node& node, const std::string& node_path) {
+                config.repeats = parse_size_scalar(node, node_path);
+            });
+            with_optional_node(measurement, "warmup_rounds", measurement_path,
+                               [&](const YAML::Node& node, const std::string& node_path) {
+                                   config.warmup_rounds = parse_size_scalar(node, node_path);
+                               });
+            with_optional_node(measurement, "page_size", measurement_path, [&](const YAML::Node& node, const std::string& node_path) {
+                config.page_size_bytes = parse_size_scalar(node, node_path);
+            });
+            with_optional_node(measurement, "huge_pages", measurement_path, [&](const YAML::Node& node, const std::string& node_path) {
+                config.use_huge_pages = parse_bool_scalar(node, node_path);
+            });
+            with_optional_node(measurement, "disable_transparent_huge_pages", measurement_path,
+                               [&](const YAML::Node& node, const std::string& node_path) {
+                                   config.disable_transparent_huge_pages = parse_bool_scalar(node, node_path);
+                               });
+            with_optional_node(measurement, "lock_memory", measurement_path, [&](const YAML::Node& node, const std::string& node_path) {
+                config.lock_memory = parse_bool_scalar(node, node_path);
+            });
+            with_optional_node(measurement, "seed", measurement_path, [&](const YAML::Node& node, const std::string& node_path) {
+                config.seed = parse_unsigned_scalar(node, node_path);
+            });
+        });
+
+        with_mapping(section, "detection", path, [&](const YAML::Node& detection, const std::string& detection_path) {
+            with_optional_node(detection, "moving_average_window", detection_path,
+                               [&](const YAML::Node& node, const std::string& node_path) {
+                                   config.detection.moving_average_window = parse_size_scalar(node, node_path);
+                               });
+            with_optional_node(detection, "l1_growth_ratio", detection_path, [&](const YAML::Node& node, const std::string& node_path) {
+                config.detection.l1_growth_ratio = parse_double_scalar(node, node_path);
+            });
+            with_optional_node(detection, "l2_growth_ratio", detection_path, [&](const YAML::Node& node, const std::string& node_path) {
+                config.detection.l2_growth_ratio = parse_double_scalar(node, node_path);
+            });
+            with_optional_node(detection, "page_walk_growth_ratio", detection_path,
+                               [&](const YAML::Node& node, const std::string& node_path) {
+                                   config.detection.page_walk_growth_ratio = parse_double_scalar(node, node_path);
+                               });
+            with_optional_node(detection, "min_jump_cycles", detection_path, [&](const YAML::Node& node, const std::string& node_path) {
+                config.detection.min_jump_cycles = parse_double_scalar(node, node_path);
+            });
+            with_optional_node(detection, "page_walk_jump_cycles", detection_path,
+                               [&](const YAML::Node& node, const std::string& node_path) {
+                                   config.detection.page_walk_jump_cycles = parse_double_scalar(node, node_path);
+                               });
+            with_optional_node(detection, "sustain_points", detection_path, [&](const YAML::Node& node, const std::string& node_path) {
+                config.detection.sustain_points = parse_size_scalar(node, node_path);
+            });
+        });
+    }
+};
+
 class RobConfigParser final : public BenchmarkConfigParserBase<silicon_probe::rob::RobMeasurer::Config> {
   public:
     RobConfigParser() : BenchmarkConfigParserBase("rob") {}
@@ -914,6 +1002,7 @@ ApplicationConfig ApplicationConfigLoader::load(const BootstrapOptions& options)
     config.logging = options.logging;
     config.print_summary = options.print_summary;
     config.cache = CacheConfigParser{}.parse(document);
+    config.tlb = TlbConfigParser{}.parse(document);
     config.rob = RobConfigParser{}.parse(document);
     config.bht = BhtConfigParser{}.parse(document);
     config.ras = RasConfigParser{}.parse(document);

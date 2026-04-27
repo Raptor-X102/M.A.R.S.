@@ -2,6 +2,7 @@
 
 #include "shared_types/cpu_info_data.hpp"
 
+#include <iomanip>
 #include <ostream>
 
 namespace silicon_probe::core {
@@ -11,6 +12,9 @@ public:
     static void print(std::ostream& stream, const shared_types::CpuInfoData& data) {
         stream << "\n=== CPU Info Summary ===\n";
 
+        if (data.cpu_vendor) {
+            stream << "CPU vendor: " << *data.cpu_vendor << '\n';
+        }
         if (data.l1d_size) {
             stream << "L1d: " << *data.l1d_size << " bytes\n";
         }
@@ -22,6 +26,27 @@ public:
         }
         if (data.cache_line_size) {
             stream << "Cache line: " << *data.cache_line_size << " bytes\n";
+        }
+        if (data.tlb_l1_size) {
+            stream << "L1 DTLB estimate: " << *data.tlb_l1_size << " pages";
+            if (data.tlb_page_size_bytes) {
+                stream << " (~" << (*data.tlb_l1_size * *data.tlb_page_size_bytes) << " bytes coverage)";
+            }
+            stream << '\n';
+        }
+        if (data.tlb_l2_size) {
+            stream << "L2/STLB estimate: " << *data.tlb_l2_size << " pages";
+            if (data.tlb_page_size_bytes) {
+                stream << " (~" << (*data.tlb_l2_size * *data.tlb_page_size_bytes) << " bytes coverage)";
+            }
+            stream << '\n';
+        }
+        if (data.tlb_page_walk_threshold) {
+            stream << "Likely page-walk region: " << *data.tlb_page_walk_threshold << " pages";
+            if (data.tlb_page_size_bytes) {
+                stream << " (~" << (*data.tlb_page_walk_threshold * *data.tlb_page_size_bytes) << " bytes coverage)";
+            }
+            stream << '\n';
         }
         if (data.rob_size) {
             stream << "Rob size: " << *data.rob_size << " instructions\n";
@@ -49,6 +74,26 @@ public:
         }
         if (data.write_buffer_size) {
             stream << "Write buffer size: " << *data.write_buffer_size << " entries\n";
+        }
+
+        if (!data.tlb_points.empty()) {
+            stream << "\nTLB aggregated points CSV\n";
+            stream << "pages,bytes,min_cycles_per_access,median_cycles_per_access,mean_cycles_per_access,max_cycles_per_access\n";
+            stream << std::fixed << std::setprecision(3);
+            for (const auto& point : data.tlb_points) {
+                stream << point.pages << ',' << point.bytes << ',' << point.min_cycles_per_access << ','
+                       << point.median_cycles_per_access << ',' << point.mean_cycles_per_access << ','
+                       << point.max_cycles_per_access << '\n';
+            }
+        }
+
+        if (!data.tlb_raw_points.empty()) {
+            stream << "\nTLB raw points CSV\n";
+            stream << "pages,bytes,repeat,cycles_per_access\n";
+            stream << std::fixed << std::setprecision(3);
+            for (const auto& point : data.tlb_raw_points) {
+                stream << point.pages << ',' << point.bytes << ',' << point.repeat << ',' << point.cycles_per_access << '\n';
+            }
         }
 
         stream << "========================\n\n";
