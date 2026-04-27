@@ -33,7 +33,6 @@ struct CpuInfoData {
 
     std::optional<size_t> tlb_l1_size;
     std::optional<size_t> tlb_l2_size;
-    std::optional<size_t> tlb_page_walk_threshold;
     std::optional<size_t> tlb_page_size_bytes;
     std::vector<TlbSummaryPoint> tlb_points;
     std::vector<TlbRawPoint> tlb_raw_points;

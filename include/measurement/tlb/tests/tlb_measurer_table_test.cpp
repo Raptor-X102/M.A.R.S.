@@ -13,53 +13,34 @@ namespace {
 using Point = core::TlbSummaryPoint;
 
 struct BuildPageCountsCase {
-    const char* name;
-    TlbMeasurer::Config config;
+    const char*         name;
+    size_t              max_pages;
     std::vector<size_t> expected_counts;
 };
 
 TEST(TlbMeasurerTableTest, BuildsPageCountsFromTable) {
-    std::vector<BuildPageCountsCase> cases{};
-
-    {
-        TlbMeasurer::Config config{};
-        config.min_pages = 1;
-        config.max_pages = 64;
-        config.pages_step = 2;
-        config.growth_mode = GrowthMode::Multiply;
-        cases.push_back({"multiply_power_of_two", config, {1, 2, 4, 8, 16, 32, 64}});
-    }
-
-    {
-        TlbMeasurer::Config config{};
-        config.min_pages = 3;
-        config.max_pages = 40;
-        config.pages_step = 10;
-        config.growth_mode = GrowthMode::Add;
-        cases.push_back({"linear_with_tail_cap", config, {3, 13, 23, 33, 40}});
-    }
-
-    {
-        TlbMeasurer::Config config{};
-        config.min_pages = 5;
-        config.max_pages = 48;
-        config.pages_step = 3;
-        config.growth_mode = GrowthMode::Multiply;
-        cases.push_back({"multiply_non_power_of_two", config, {5, 15, 45, 48}});
-    }
+    const std::vector<BuildPageCountsCase> cases{
+        {"power_of_two_tail", 64, {1, 2, 4, 8, 16, 32, 64}},
+        {"non_power_of_two_tail", 40, {1, 2, 4, 8, 16, 32, 40}},
+        {"custom_tail_cap", 48, {1, 2, 4, 8, 16, 32, 48}},
+    };
 
     for (const auto& test_case : cases) {
         SCOPED_TRACE(test_case.name);
-        const TlbMeasurer measurer(test_case.config);
+
+        TlbMeasurer::Config config{};
+        config.max_pages = test_case.max_pages;
+
+        const TlbMeasurer measurer(config);
         EXPECT_EQ(measurer.build_page_counts(), test_case.expected_counts);
     }
 }
 
 struct MovingAverageCase {
-    const char* name;
-    size_t window;
-    std::vector<Point> points;
-    std::vector<double> expected;
+    const char*          name;
+    size_t               window;
+    std::vector<Point>   points;
+    std::vector<double>  expected;
 };
 
 TEST(TlbMeasurerTableTest, ComputesMovingAverageFromTable) {
@@ -75,7 +56,7 @@ TEST(TlbMeasurerTableTest, ComputesMovingAverageFromTable) {
             {1.0, 2.0, 3.0},
         },
         {
-            "window_3_centered",
+            "window_3_trailing",
             3,
             {
                 {1, 4096, 0.0, 1.0, 0.0, 0.0},
@@ -83,17 +64,14 @@ TEST(TlbMeasurerTableTest, ComputesMovingAverageFromTable) {
                 {4, 16384, 0.0, 5.0, 0.0, 0.0},
                 {8, 32768, 0.0, 8.0, 0.0, 0.0},
             },
-            {1.5, 8.0 / 3.0, 5.0, 6.5},
+            {1.0, 1.5, 8.0 / 3.0, 5.0},
         },
     };
 
     for (const auto& test_case : cases) {
         SCOPED_TRACE(test_case.name);
-        TlbMeasurer::Config config{};
-        config.detection.moving_average_window = test_case.window;
 
-        const TlbMeasurer measurer(config);
-        const auto actual = measurer.moving_average(test_case.points);
+        const auto actual = TlbMeasurer::moving_average(test_case.points, test_case.window);
 
         ASSERT_EQ(actual.size(), test_case.expected.size());
         for (size_t index = 0; index < actual.size(); ++index) {
@@ -102,31 +80,41 @@ TEST(TlbMeasurerTableTest, ComputesMovingAverageFromTable) {
     }
 }
 
-struct DetectBoundaryCase {
+struct PageNodeOffsetCase {
     const char* name;
-    TlbMeasurer::Config config;
-    std::vector<Point> points;
+    size_t      page_index;
+    size_t      page_size_bytes;
+    size_t      cache_line_bytes;
+    size_t      expected_offset;
+};
+
+TEST(TlbMeasurerTableTest, DistributesPageNodesAcrossCacheLines) {
+    const std::vector<PageNodeOffsetCase> cases{
+        {"first_page_first_line", 0, 4096, 64, 0},
+        {"second_page_second_line", 1, 4096, 64, 64},
+        {"sixty_fourth_page_last_line", 63, 4096, 64, 63 * 64},
+        {"sixty_fifth_page_wraps", 64, 4096, 64, 0},
+        {"large_stride_uses_cache_line_size", 2, 4096, 128, 256},
+    };
+
+    for (const auto& test_case : cases) {
+        SCOPED_TRACE(test_case.name);
+        EXPECT_EQ(TlbMeasurer::page_node_offset(test_case.page_index, test_case.page_size_bytes, test_case.cache_line_bytes),
+                  test_case.expected_offset);
+    }
+}
+
+struct DetectBoundaryCase {
+    const char*           name;
+    std::vector<Point>    points;
     std::optional<size_t> expected_l1_index;
     std::optional<size_t> expected_l2_index;
-    std::optional<size_t> expected_page_walk_index;
 };
 
 TEST(TlbMeasurerTableTest, DetectsBoundariesFromTable) {
-    std::vector<DetectBoundaryCase> cases{};
-
-    {
-        TlbMeasurer::Config config{};
-        config.detection.moving_average_window = 1;
-        config.detection.l1_growth_ratio = 1.10;
-        config.detection.l2_growth_ratio = 1.08;
-        config.detection.page_walk_growth_ratio = 1.12;
-        config.detection.min_jump_cycles = 0.75;
-        config.detection.page_walk_jump_cycles = 2.0;
-        config.detection.sustain_points = 1;
-
-        cases.push_back({
+    const std::vector<DetectBoundaryCase> cases{
+        {
             "three_level_curve",
-            config,
             {
                 {16, 16 * 4096, 0.0, 1.00, 0.0, 0.0},
                 {32, 32 * 4096, 0.0, 1.02, 0.0, 0.0},
@@ -139,20 +127,10 @@ TEST(TlbMeasurerTableTest, DetectsBoundariesFromTable) {
                 {4096, 4096 * 4096, 0.0, 5.80, 0.0, 0.0},
             },
             3,
-            5,
             7,
-        });
-    }
-
-    {
-        TlbMeasurer::Config config{};
-        config.detection.moving_average_window = 1;
-        config.detection.min_jump_cycles = 0.75;
-        config.detection.page_walk_jump_cycles = 2.0;
-
-        cases.push_back({
+        },
+        {
             "flat_curve",
-            config,
             {
                 {16, 16 * 4096, 0.0, 1.00, 0.0, 0.0},
                 {32, 32 * 4096, 0.0, 1.03, 0.0, 0.0},
@@ -161,17 +139,17 @@ TEST(TlbMeasurerTableTest, DetectsBoundariesFromTable) {
             },
             std::nullopt,
             std::nullopt,
-            std::nullopt,
-        });
-    }
+        },
+    };
 
     for (const auto& test_case : cases) {
         SCOPED_TRACE(test_case.name);
-        const TlbMeasurer measurer(test_case.config);
+
+        const TlbMeasurer measurer;
         const auto detection = measurer.detect_boundaries(test_case.points);
+
         EXPECT_EQ(detection.l1_index, test_case.expected_l1_index);
         EXPECT_EQ(detection.l2_index, test_case.expected_l2_index);
-        EXPECT_EQ(detection.page_walk_index, test_case.expected_page_walk_index);
     }
 }
 

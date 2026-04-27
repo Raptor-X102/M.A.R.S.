@@ -41,13 +41,6 @@ public:
             }
             stream << '\n';
         }
-        if (data.tlb_page_walk_threshold) {
-            stream << "Likely page-walk region: " << *data.tlb_page_walk_threshold << " pages";
-            if (data.tlb_page_size_bytes) {
-                stream << " (~" << (*data.tlb_page_walk_threshold * *data.tlb_page_size_bytes) << " bytes coverage)";
-            }
-            stream << '\n';
-        }
         if (data.rob_size) {
             stream << "Rob size: " << *data.rob_size << " instructions\n";
         }
@@ -74,26 +67,6 @@ public:
         }
         if (data.write_buffer_size) {
             stream << "Write buffer size: " << *data.write_buffer_size << " entries\n";
-        }
-
-        if (!data.tlb_points.empty()) {
-            stream << "\nTLB aggregated points CSV\n";
-            stream << "pages,bytes,min_cycles_per_access,median_cycles_per_access,mean_cycles_per_access,max_cycles_per_access\n";
-            stream << std::fixed << std::setprecision(3);
-            for (const auto& point : data.tlb_points) {
-                stream << point.pages << ',' << point.bytes << ',' << point.min_cycles_per_access << ','
-                       << point.median_cycles_per_access << ',' << point.mean_cycles_per_access << ','
-                       << point.max_cycles_per_access << '\n';
-            }
-        }
-
-        if (!data.tlb_raw_points.empty()) {
-            stream << "\nTLB raw points CSV\n";
-            stream << "pages,bytes,repeat,cycles_per_access\n";
-            stream << std::fixed << std::setprecision(3);
-            for (const auto& point : data.tlb_raw_points) {
-                stream << point.pages << ',' << point.bytes << ',' << point.repeat << ',' << point.cycles_per_access << '\n';
-            }
         }
 
         stream << "========================\n\n";
