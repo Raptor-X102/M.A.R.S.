@@ -7,31 +7,41 @@ common:
 benchmarks:
   cache:
     enabled: true
-    levels: [l1, l2, l3]
+    levels: [l3]
+    
     limits:
-      l1_max: 128KiB
-      l2_max: 2MiB
-      l3_max: 128MiB
+        l1_max: 128KiB
+        l2_max: 2MiB
+        l3_max: 128MiB
 
     measurement:
-      cache_min_lines: 16
-      seed: 48815
-      warmup_iterations: 4
-      precision: 64
-      target_accesses: 2000000
-      min_iterations: 1
-      max_iterations: 1000
+        cache_min_lines: 16
+        seed: 48815
+        warmup_iterations: 4
+        precision: 64
+        target_accesses: 2000000
+        min_iterations: 1
+        max_iterations: 1000
 
     detection:
-      refinement_samples: 3
-      baseline_stability_threshold: 0.20
-      l1_growth_factor: 1.5
-      l2_growth_factor: 2.0
-      l3_growth_factor: 2.2
-      l2_refinement_growth_multiplier: 1.5
+        refinement_samples: 3
+        baseline_stability_threshold: 0.20
+        decision_tolerance: 0.10
+        l1_growth_factor: 1.42
+        l2_growth_factor: 1.8
+        l3_growth_factor: 6.0
+        l2_refinement_growth_multiplier: 1.15
+
+    miss_events:
+        l1_miss_growth_factor: 90
+        l2_miss_growth_factor: 2.0
+        l3_miss_growth_factor: 3.2
+        l2_miss_rate_threshold: 0.25
+        l3_miss_rate_threshold: 0.9
+        l1_miss_rate_threshold: 0.01
 
   rob:
-    enabled: true
+    enabled: false
 
     measurement:
       min_instr_cnt: 50
@@ -40,7 +50,7 @@ benchmarks:
       warmup_iterations: 2
       inner_iterations: 8192
       outer_iterations: 64
-      instr_type: add_reg
+      instr_type: nop
 
     detection:
       baseline_fraction: 0.20
@@ -59,7 +69,7 @@ benchmarks:
       iterations: 100000000
 
   return_address_stack:
-    enabled: true
+    enabled: false
 
     measurement:
       min_recursion_depth: 1
@@ -115,7 +125,7 @@ benchmarks:
       coarse_ignore_first: 3
 
   branch_target_buffer:
-    enabled: true
+    enabled: false
 
     measurement:
       min_blocks_cnt: 3500
@@ -132,3 +142,21 @@ benchmarks:
       time_growth_ratio: 1.20
       time_stability_points: 3
       coarse_ignore_first: 2
+  
+  store_to_load_forwarding:
+    enabled: false
+
+    measurement:
+      repeats: 10
+      #warmup_iterations: 10
+      #alignment: 16
+
+  write_buffer:
+    enabled: false
+
+    measurement:
+      #repeats: 10
+      iterations: 1000
+      #warmup_iterations: 10
+      #alignment: 16
+         

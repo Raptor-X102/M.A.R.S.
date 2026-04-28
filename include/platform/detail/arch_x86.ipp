@@ -44,6 +44,10 @@ inline void serialize_pipeline() noexcept {
     );
 }
 
+inline void write_non_temporal(int *p, int a) {
+    _mm_stream_si32(p, a);
+}
+
 using CpuVendor = silicon_probe::platform::cpu_vendor::CpuVendor;
 inline CpuVendor detect_vendor() noexcept {
     uint32_t eax = 0, ebx = 0, ecx = 0, edx = 0;

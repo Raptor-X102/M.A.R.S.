@@ -10,8 +10,9 @@ target_link_libraries(mars
 
 find_program(SETCAP_PATH setcap)
 if(SETCAP_PATH)
-    add_custom_command(TARGET mars POST_BUILD
-        COMMAND sudo ${SETCAP_PATH} cap_perfmon=eip $<TARGET_FILE:mars>
-        COMMENT "Setting cap_perfmon capability for PMC access"
+    add_custom_target(setcap_mars ALL
+        COMMAND sudo ${SETCAP_PATH} "cap_sys_nice=eip cap_perfmon=eip" $<TARGET_FILE:mars>
+        COMMENT "Enter password to set capabilities for realtime priority and PMC access"
+        DEPENDS mars
     )
 endif()

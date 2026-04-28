@@ -18,6 +18,7 @@ inline void clflush(void* ptr);
 inline void flush_complete();
 inline void stream_store(void* ptr, uint32_t value);
 inline void serialize_pipeline() noexcept;
+inline void write_non_temporal(int *p, int a);
 inline silicon_probe::platform::cpu_vendor::CpuVendor detect_vendor() noexcept;
 inline void* generate_rob_code(int instr_cnt);
 inline void release_rob_code();

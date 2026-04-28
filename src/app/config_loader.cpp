@@ -441,10 +441,10 @@ template <typename ConfigT> class BenchmarkConfigParserBase : public AbstractBen
 };
 
 class CacheConfigParser final : public BenchmarkConfigParserBase<silicon_probe::cache::CacheMeasurer::Config> {
-  public:
+public:
     CacheConfigParser() : BenchmarkConfigParserBase("cache") {}
 
-  private:
+private:
     void parse_specific(const YAML::Node& section, const std::string& path,
                         silicon_probe::cache::CacheMeasurer::Config& config) const override {
         with_optional_node(section, "levels", path, [&](const YAML::Node& node, const std::string& node_path) {
@@ -518,6 +518,9 @@ class CacheConfigParser final : public BenchmarkConfigParserBase<silicon_probe::
                                [&](const YAML::Node& node, const std::string& node_path) {
                                    config.baseline_stability_threshold = parse_double_scalar(node, node_path);
                                });
+            with_optional_node(detection, "decision_tolerance", detection_path, [&](const YAML::Node& node, const std::string& node_path) {
+                config.decision_tolerance = parse_double_scalar(node, node_path);
+            });
             with_optional_node(detection, "l1_growth_factor", detection_path, [&](const YAML::Node& node, const std::string& node_path) {
                 config.l1_growth_factor = parse_double_scalar(node, node_path);
             });
@@ -531,6 +534,27 @@ class CacheConfigParser final : public BenchmarkConfigParserBase<silicon_probe::
                                [&](const YAML::Node& node, const std::string& node_path) {
                                    config.l2_refinement_growth_multiplier = parse_double_scalar(node, node_path);
                                });
+        });
+
+        with_mapping(section, "miss_events", path, [&](const YAML::Node& miss, const std::string& miss_path) {
+            with_optional_node(miss, "l1_miss_rate_threshold", miss_path, [&](const YAML::Node& node, const std::string& node_path) {
+                config.l1_miss_rate_threshold = parse_double_scalar(node, node_path);
+            });
+            with_optional_node(miss, "l2_miss_rate_threshold", miss_path, [&](const YAML::Node& node, const std::string& node_path) {
+                config.l2_miss_rate_threshold = parse_double_scalar(node, node_path);
+            });
+            with_optional_node(miss, "l3_miss_rate_threshold", miss_path, [&](const YAML::Node& node, const std::string& node_path) {
+                config.l3_miss_rate_threshold = parse_double_scalar(node, node_path);
+            });
+            with_optional_node(miss, "l1_miss_growth_factor", miss_path, [&](const YAML::Node& node, const std::string& node_path) {
+                config.l1_miss_growth_factor = parse_double_scalar(node, node_path);
+            });
+            with_optional_node(miss, "l2_miss_growth_factor", miss_path, [&](const YAML::Node& node, const std::string& node_path) {
+                config.l2_miss_growth_factor = parse_double_scalar(node, node_path);
+            });
+            with_optional_node(miss, "l3_miss_growth_factor", miss_path, [&](const YAML::Node& node, const std::string& node_path) {
+                config.l3_miss_growth_factor = parse_double_scalar(node, node_path);
+            });
         });
     }
 };
@@ -799,6 +823,86 @@ class BtbConfigParser final : public BenchmarkConfigParserBase<silicon_probe::br
     }
 };
 
+class S2LFwdConfigParser final : public BenchmarkConfigParserBase<silicon_probe::store_to_load_forwarding::StoreToLoadForwardingMeasurer::Config> {
+  public:
+    S2LFwdConfigParser() : BenchmarkConfigParserBase("store_to_load_forwarding") {}
+
+  private:
+    void parse_specific(const YAML::Node& section, const std::string& path,
+                        silicon_probe::store_to_load_forwarding::StoreToLoadForwardingMeasurer::Config& config) const override {
+        with_mapping(section, "measurement", path, [&](const YAML::Node& measurement, const std::string& measurement_path) {
+            with_optional_node(measurement, "min_offset", measurement_path, [&](const YAML::Node& node, const std::string& node_path) {
+                config.min_offset = parse_size_scalar(node, node_path);
+            });
+            with_optional_node(measurement, "max_offset", measurement_path, [&](const YAML::Node& node, const std::string& node_path) {
+                config.max_offset = parse_size_scalar(node, node_path);
+            });
+            with_optional_node(measurement, "offset_step", measurement_path, [&](const YAML::Node& node, const std::string& node_path) {
+                config.offset_step = parse_size_scalar(node, node_path);
+            });
+            with_optional_node(measurement, "iterations", measurement_path, [&](const YAML::Node& node, const std::string& node_path) {
+                config.iterations = parse_size_scalar(node, node_path);
+            });
+            with_optional_node(measurement, "repeats", measurement_path, [&](const YAML::Node& node, const std::string& node_path) {
+                config.repeats = parse_size_scalar(node, node_path);
+            });
+            with_optional_node(measurement, "warmup_iterations", measurement_path,
+                               [&](const YAML::Node& node, const std::string& node_path) {
+                                   config.warmup_iterations = parse_size_scalar(node, node_path);
+                               });
+        });
+
+        with_mapping(section, "detection", path, [&](const YAML::Node& detection, const std::string& detection_path) {
+            with_optional_node(detection, "pmc_saturation_ratio", detection_path, [&](const YAML::Node& node, const std::string& node_path) {
+                config.pmc_saturation_ratio = parse_double_scalar(node, node_path);
+            });
+            with_optional_node(detection, "time_growth_ratio", detection_path, [&](const YAML::Node& node, const std::string& node_path) {
+                config.time_growth_ratio = parse_double_scalar(node, node_path);
+            });
+        });
+    }
+};
+
+class WriteBufferConfigParser final : public BenchmarkConfigParserBase<silicon_probe::write_buffer::WriteBufferMeasurer::Config> {
+  public:
+    WriteBufferConfigParser() : BenchmarkConfigParserBase("write_buffer") {}
+
+  private:
+    void parse_specific(const YAML::Node& section, const std::string& path,
+                        silicon_probe::write_buffer::WriteBufferMeasurer::Config& config) const override {
+        with_mapping(section, "measurement", path, [&](const YAML::Node& measurement, const std::string& measurement_path) {
+            with_optional_node(measurement, "max_writes", measurement_path, [&](const YAML::Node& node, const std::string& node_path) {
+                config.max_writes = parse_size_scalar(node, node_path);
+            });
+            with_optional_node(measurement, "min_writes", measurement_path, [&](const YAML::Node& node, const std::string& node_path) {
+                config.min_writes = parse_size_scalar(node, node_path);
+            });
+            with_optional_node(measurement, "writes_step", measurement_path, [&](const YAML::Node& node, const std::string& node_path) {
+                config.writes_step = parse_size_scalar(node, node_path);
+            });
+            with_optional_node(measurement, "iterations", measurement_path, [&](const YAML::Node& node, const std::string& node_path) {
+                config.iterations = parse_size_scalar(node, node_path);
+            });
+            with_optional_node(measurement, "repeats", measurement_path, [&](const YAML::Node& node, const std::string& node_path) {
+                config.repeats = parse_size_scalar(node, node_path);
+            });
+            with_optional_node(measurement, "warmup_iterations", measurement_path,
+                               [&](const YAML::Node& node, const std::string& node_path) {
+                                   config.warmup_iterations = parse_size_scalar(node, node_path);
+                               });
+        });
+
+        with_mapping(section, "detection", path, [&](const YAML::Node& detection, const std::string& detection_path) {
+            with_optional_node(detection, "latency_growth_ratio", detection_path, [&](const YAML::Node& node, const std::string& node_path) {
+                config.latency_growth_ratio = parse_double_scalar(node, node_path);
+            });
+            with_optional_node(detection, "pmc_saturation_ratio", detection_path, [&](const YAML::Node& node, const std::string& node_path) {
+                config.pmc_saturation_ratio = parse_double_scalar(node, node_path);
+            });
+        });
+    }
+};
+
 } // namespace
 
 namespace silicon_probe::app {
@@ -816,6 +920,8 @@ ApplicationConfig ApplicationConfigLoader::load(const BootstrapOptions& options)
     config.exec_ports = ExecPortsConfigParser{}.parse(document);
     config.uops_cache = UopsCacheConfigParser{}.parse(document);
     config.btb = BtbConfigParser{}.parse(document);
+    config.s2l_fwd = S2LFwdConfigParser{}.parse(document);
+    config.write_buffer = WriteBufferConfigParser{}.parse(document);
     return config;
 }
 
