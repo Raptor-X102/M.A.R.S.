@@ -27,7 +27,7 @@ namespace silicon_probe::cache {
 using CacheLevel = silicon_probe::shared_types::CacheLevel;
 
 class CacheMeasurer final : public core::Measurer {
-public:
+  public:
     static constexpr size_t kL1MaxSize = 128 * 1024;
     static constexpr size_t kL2MaxSize = 2 * 1024 * 1024;
     static constexpr size_t kL3MaxSize = 128 * 1024 * 1024;
@@ -83,7 +83,7 @@ public:
         platform::MeasurementEnvironmentOptions environment;
     };
 
-private:
+  private:
     struct MeasurementResult {
         size_t size_bytes = 0;
         double cycles_per_element = 0.0;
@@ -108,6 +108,8 @@ public:
                     config_.levels.test(level_index(CacheLevel::l2)),
                     config_.levels.test(level_index(CacheLevel::l3)));
     }
+
+    std::string_view name() const noexcept override { return "cache"; }
 
     std::string_view name() const noexcept override { return "cache"; }
 
