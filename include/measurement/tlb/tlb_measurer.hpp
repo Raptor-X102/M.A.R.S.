@@ -400,8 +400,6 @@ class TlbMeasurer final : public core::Measurer {
         const size_t cache_line       = platform::cache_line_size();
 
         data.tlb_page_size_bytes = page_size;
-        data.tlb_points.clear();
-        data.tlb_raw_points.clear();
         data.tlb_l1_size.reset();
         data.tlb_l2_size.reset();
 

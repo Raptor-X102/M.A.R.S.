@@ -34,8 +34,6 @@ struct CpuInfoData {
     std::optional<size_t> tlb_l1_size;
     std::optional<size_t> tlb_l2_size;
     std::optional<size_t> tlb_page_size_bytes;
-    std::vector<TlbSummaryPoint> tlb_points;
-    std::vector<TlbRawPoint> tlb_raw_points;
 
     std::optional<size_t> btb_size; // branch target buffer
     std::optional<size_t> ras_size; // return address stack
