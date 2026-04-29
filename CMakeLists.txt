@@ -15,6 +15,7 @@ option(MARS_BUILD_APPS        "Build command line applications" ON)
 option(MARS_BUILD_TESTS       "Build tests" OFF)
 option(MARS_ENABLE_SANITIZERS "Enable ASan/UBSan (non-MSVC)" OFF)
 option(MARS_ENABLE_WERROR     "Treat warnings as errors" OFF)
+option(MARS_SETCAP_AFTER_BUILD "Run setcap on the CLI binary after build" OFF)
 
 #####################################
 # Global settings

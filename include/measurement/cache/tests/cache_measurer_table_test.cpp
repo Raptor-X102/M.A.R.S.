@@ -43,7 +43,7 @@ struct DetectBoundaryCase {
     const char* name;
     std::vector<CacheMeasurer::MeasurementResult> results;
     size_t expected_index;
-    double expected_baseline_latency;
+    double expected_baseline_value;
 };
 
 TEST(CacheMeasurerTableTest, DetectsBoundariesFromTable) {
@@ -85,9 +85,9 @@ TEST(CacheMeasurerTableTest, DetectsBoundariesFromTable) {
 
     for (const auto& test_case : cases) {
         SCOPED_TRACE(test_case.name);
-        const auto boundary = measurer.detect_boundary(test_case.results);
+        const auto boundary = measurer.detect_latency_boundary(test_case.results);
         EXPECT_EQ(boundary.index, test_case.expected_index);
-        EXPECT_NEAR(boundary.baseline_latency, test_case.expected_baseline_latency, 1e-9);
+        EXPECT_NEAR(boundary.baseline_value, test_case.expected_baseline_value, 1e-9);
     }
 }
 

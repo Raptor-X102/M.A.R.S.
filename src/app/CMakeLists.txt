@@ -11,6 +11,7 @@ target_link_libraries(mars_app
         mars::cache
         mars::core
         mars::infra_logging
+        mars::tlb
         mars::rob
         mars::branch_history_table
         mars::return_address_stack

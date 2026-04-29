@@ -559,6 +559,27 @@ private:
     }
 };
 
+class TlbConfigParser final : public BenchmarkConfigParserBase<silicon_probe::tlb::TlbMeasurer::Config> {
+  public:
+    TlbConfigParser() : BenchmarkConfigParserBase("tlb") {}
+
+  private:
+    void parse_specific(const YAML::Node& section, const std::string& path,
+                        silicon_probe::tlb::TlbMeasurer::Config& config) const override {
+        with_mapping(section, "measurement", path, [&](const YAML::Node& measurement, const std::string& measurement_path) {
+            with_optional_node(measurement, "max_pages", measurement_path, [&](const YAML::Node& node, const std::string& node_path) {
+                config.max_pages = parse_size_scalar(node, node_path);
+            });
+            with_optional_node(measurement, "iterations", measurement_path, [&](const YAML::Node& node, const std::string& node_path) {
+                config.iterations = parse_size_scalar(node, node_path);
+            });
+            with_optional_node(measurement, "huge_pages", measurement_path, [&](const YAML::Node& node, const std::string& node_path) {
+                config.use_huge_pages = parse_bool_scalar(node, node_path);
+            });
+        });
+    }
+};
+
 class RobConfigParser final : public BenchmarkConfigParserBase<silicon_probe::rob::RobMeasurer::Config> {
   public:
     RobConfigParser() : BenchmarkConfigParserBase("rob") {}
@@ -914,6 +935,7 @@ ApplicationConfig ApplicationConfigLoader::load(const BootstrapOptions& options)
     config.logging = options.logging;
     config.print_summary = options.print_summary;
     config.cache = CacheConfigParser{}.parse(document);
+    config.tlb = TlbConfigParser{}.parse(document);
     config.rob = RobConfigParser{}.parse(document);
     config.bht = BhtConfigParser{}.parse(document);
     config.ras = RasConfigParser{}.parse(document);
