@@ -3,7 +3,7 @@
 #include <cstdint>
 #include <string>
 #include <functional>
-#include "platform/cpu_vendor.hpp"
+#include "shared_types/cpu_vendor.hpp"
 
 namespace silicon_probe::platform::arch {
 

@@ -2,7 +2,7 @@
 #pragma once
 
 #include "infra/logging.hpp"
-#include "measurement/core/measurer.hpp"
+#include "core/measurer.hpp"
 #include "platform/arch.hpp"
 #include "platform/pmc.hpp"
 #include "platform/os.hpp"
@@ -55,11 +55,11 @@ public:
 
     std::string_view name() const noexcept override { return "store-to-load forwarding"; }
 
-    void measure(core::CpuInfoData& data) override {
+    void measure(shared_types::CpuInfoData& data) override {
         SPDLOG_INFO("[{}] start", name());
         platform::ScopedMeasurementEnvironment env{config_.environment};
 
-        auto events = platform::discover_s2l_forwarding_events();
+        auto events = platform::discover_s2l_forwarding_events(data);
         bool has_pmc = !events.empty();
         std::unique_ptr<platform::pmc::PmcGroup> pmc;
         size_t sf_idx = std::string::npos;

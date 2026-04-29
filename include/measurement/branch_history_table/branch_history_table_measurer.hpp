@@ -1,9 +1,8 @@
 #pragma once
 
 #include "infra/logging.hpp"
-#include "measurement/core/measurer.hpp"
+#include "core/measurer.hpp"
 #include "platform/arch.hpp"
-#include "platform/cpu_vendor.hpp"
 #include "platform/os.hpp"
 #include "platform/pmc.hpp"
 
@@ -54,7 +53,7 @@ class BranchHistoryTableMeasurer final : public core::Measurer {
 
     std::string_view name() const noexcept override { return "branch history table"; }
 
-    void measure(core::CpuInfoData& data) override {
+    void measure(shared_types::CpuInfoData& data) override {
         SPDLOG_INFO("[{}] starting Branch History Table size measurement", name());
 
         platform::ScopedMeasurementEnvironment environment{config_.environment};

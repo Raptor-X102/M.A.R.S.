@@ -1,7 +1,7 @@
 #pragma once
 
 #include "infra/logging.hpp"
-#include "measurement/core/measurer.hpp"
+#include "core/measurer.hpp"
 #include "platform/arch.hpp"
 #include "platform/pmc.hpp"
 #include "platform/os.hpp"
@@ -69,12 +69,12 @@ class UopsCacheMeasurer final : public core::Measurer {
 
     std::string_view name() const noexcept override { return "uops cache"; }
 
-    void measure(core::CpuInfoData& data) override {
+    void measure(shared_types::CpuInfoData& data) override {
         SPDLOG_INFO("[{}] starting uops cache size measurement", name());
 
         platform::ScopedMeasurementEnvironment environment{config_.environment};
 
-        auto uops_events = platform::discover_uops_events();
+        auto uops_events = platform::discover_uops_events(data);
         bool has_uops = false;
         if (uops_events.empty()) {
             SPDLOG_WARN("[{}] No uops events found. Falling back to time-only measurement.", name());

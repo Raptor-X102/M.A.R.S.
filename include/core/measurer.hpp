@@ -1,6 +1,6 @@
 #pragma once
 
-#include "measurement/core/cpu_info_data.hpp"
+#include "shared_types/cpu_info_data.hpp"
 
 #include <string_view>
 
@@ -14,7 +14,7 @@ public:
     virtual bool is_available() const noexcept {
         return true;
     }
-    virtual void measure(CpuInfoData& data) = 0;
+    virtual void measure(shared_types::CpuInfoData& data) = 0;
 };
 
 } // namespace silicon_probe::core

@@ -2,7 +2,7 @@
 #pragma once
 
 #include "infra/logging.hpp"
-#include "measurement/core/measurer.hpp"
+#include "core/measurer.hpp"
 #include "platform/arch.hpp"
 #include "platform/pmc.hpp"
 #include "platform/os.hpp"
@@ -61,7 +61,7 @@ class ExecPortsMeasurer final : public core::Measurer {
 
     std::string_view name() const noexcept override { return "execution ports"; }
 
-    void measure(core::CpuInfoData& data) override {
+    void measure(shared_types::CpuInfoData& data) override {
         SPDLOG_INFO("[{}] starting execution ports contention measurement", name());
 
         // Release any previously generated code from this generator
@@ -70,7 +70,7 @@ class ExecPortsMeasurer final : public core::Measurer {
         platform::ScopedMeasurementEnvironment environment{config_.environment};
 
         // Discover port events
-        auto port_events = platform::discover_port_events();
+        auto port_events = platform::discover_port_events(data);
         bool has_ports = false;
         if (port_events.empty()) {
             SPDLOG_WARN("[{}] No port events found. Check libpfm4, CPU vendor, and kernel support. "

@@ -1,47 +1,40 @@
 #include "platform/events_discovery.hpp"
 #include "infra/logging.hpp"
-#include <perfmon/pfmlib.h>
-#include <perfmon/pfmlib_perf_event.h>
-#include <mutex>
-#include <optional>
-#include <cstring>
-#include "platform/arch.hpp"
-#include "shared_types/cache_types.hpp"
 
 namespace silicon_probe::platform {
 
-static bool ensure_pfm() {
+static bool ensure_pfm(shared_types::CpuInfoData& data) {
     static std::once_flag flag;
     static bool initialized = false;
-    std::call_once(flag, []() {
+    std::call_once(flag, [&data]() {
         initialized = (pfm_initialize() == PFM_SUCCESS);
         if (!initialized) {
             SPDLOG_ERROR("libpfm4 initialization failed");
         }
+        data.cpu_vendor = arch::detect_vendor();
     });
     return initialized;
 }
 
-static bool event_exists(const std::string& name) {
-    if (!ensure_pfm()) return false;
+static inline bool event_exists(const std::string& name) {
+    //if (!ensure_pfm()) return false;
     return pfm_find_event(name.c_str()) >= 0;
 }
 
-std::vector<std::string> discover_port_events() {
-    if (!ensure_pfm()) return {};
+std::vector<std::string> discover_port_events(shared_types::CpuInfoData& data) {
+    if (!ensure_pfm(data)) return {};
 
     using CpuVendor = silicon_probe::platform::cpu_vendor::CpuVendor;
-    CpuVendor vendor = arch::detect_vendor();
     std::vector<std::string> candidates;
 
-    if (vendor == CpuVendor::CpuVendorID::Intel) {
+    if (data.cpu_vendor == CpuVendor::CpuVendorID::Intel) {
         // Try modern names first (uops_dispatched.port_X)
         for (int port = 0; port <= 7; ++port) {
             std::string name = "uops_dispatched.port_" + std::to_string(port);
             if (event_exists(name))
                 candidates.push_back(name);
         }
-        
+
         // Load ports (grouped)
         std::vector<std::string> load_port_names = {
             "uops_dispatched.port_2_3_10",
@@ -102,84 +95,85 @@ std::vector<std::string> discover_port_events() {
    //     }
    // }
     else {
-        SPDLOG_WARN("Unsupported CPU vendor ({}) for port event discovery", vendor.name());
+        if (data.cpu_vendor)
+            SPDLOG_WARN("Unsupported CPU vendor ({}) for port events discovery", data.cpu_vendor->name());
     }
 
     return candidates;
 }
 
-std::vector<std::string> discover_uops_events() {
-    if (!ensure_pfm()) return {};
+std::vector<std::string> discover_uops_events(shared_types::CpuInfoData& data) {
+    if (!ensure_pfm(data)) return {};
 
     using CpuVendor = silicon_probe::platform::cpu_vendor::CpuVendor;
-    CpuVendor vendor = arch::detect_vendor();
+
     std::vector<std::string> candidates;
 
-    if (vendor == CpuVendor::CpuVendorID::Intel) {
-        const std::string MITE_UOPS = "idq.mite_uops"; 
-        const std::string DSB_UOPS = "idq.dsb_uops"; 
+    if (data.cpu_vendor == CpuVendor::CpuVendorID::Intel) {
+        const std::string MITE_UOPS = "idq.mite_uops";
+        const std::string DSB_UOPS = "idq.dsb_uops";
         if (event_exists(MITE_UOPS) && event_exists(DSB_UOPS)) {
             candidates.push_back(MITE_UOPS);
             candidates.push_back(DSB_UOPS);
         }
     }
     else {
-        SPDLOG_WARN("Unsupported CPU vendor ({}) for port event discovery", vendor.name());
+        if (data.cpu_vendor)
+            SPDLOG_WARN("Unsupported CPU vendor ({}) for uops event discovery", data.cpu_vendor->name());
     }
 
     return candidates;
 }
 
-std::optional<std::string> discover_branch_target_buffer_events() {
-    if (!ensure_pfm()) return {};
+std::optional<std::string> discover_branch_target_buffer_events(shared_types::CpuInfoData& data) {
+    if (!ensure_pfm(data)) return {};
 
     using CpuVendor = silicon_probe::platform::cpu_vendor::CpuVendor;
-    CpuVendor vendor = arch::detect_vendor();
 
-    if (vendor == CpuVendor::CpuVendorID::Intel) {
-        std::string br_misp_retired_inderect = "br_misp_retired.indirect"; 
+    if (data.cpu_vendor == CpuVendor::CpuVendorID::Intel) {
+        std::string br_misp_retired_inderect = "br_misp_retired.indirect";
         if (event_exists(br_misp_retired_inderect )) {
             return br_misp_retired_inderect;
         }
     }
     else {
-        SPDLOG_WARN("Unsupported CPU vendor ({}) for port event discovery", vendor.name());
+        if (data.cpu_vendor)
+            SPDLOG_WARN("Unsupported CPU vendor ({}) for branch target buffer events discovery", data.cpu_vendor->name());
     }
 
     return std::nullopt;
 }
 
-std::vector<std::string> discover_s2l_forwarding_events() {
-    if (!ensure_pfm()) return {};
+std::vector<std::string> discover_s2l_forwarding_events(shared_types::CpuInfoData& data) {
+    if (!ensure_pfm(data)) return {};
 
     using CpuVendor = silicon_probe::platform::cpu_vendor::CpuVendor;
-    CpuVendor vendor = arch::detect_vendor();
     std::vector<std::string> candidates;
 
-    if (vendor == CpuVendor::CpuVendorID::Intel) {
-        const std::string STORE_FORWARD = "ld_blocks.store_forward"; 
+    if (data.cpu_vendor == CpuVendor::CpuVendorID::Intel) {
+        const std::string STORE_FORWARD = "ld_blocks.store_forward";
         if (event_exists(STORE_FORWARD) /*&& event_exists(SPLIT_STORES)*/) {
             candidates.push_back(STORE_FORWARD);
         }
     }
     else {
-        SPDLOG_WARN("Unsupported CPU vendor ({}) for port event discovery", vendor.name());
+        if (data.cpu_vendor)
+            SPDLOG_WARN("Unsupported CPU vendor ({}) for store to load forwarding events discovery", data.cpu_vendor->name());
     }
 
-    return candidates; 
+    return candidates;
 }
 
-std::vector<std::string> discover_write_buffer_events() {
-    if (!ensure_pfm()) return {};
+std::vector<std::string> discover_write_buffer_events(shared_types::CpuInfoData& data) {
+    if (!ensure_pfm(data)) return {};
 
     using CpuVendor = silicon_probe::platform::cpu_vendor::CpuVendor;
-    CpuVendor vendor = arch::detect_vendor();
     std::vector<std::string> candidates;
 
-    if (vendor == CpuVendor::CpuVendorID::Intel) {
-        const std::string RESOURCE_STALLS = "resource_stalls.sb"; 
-        const std::string BOUND_ON_STORES = "exe_activity.bound_on_stores"; 
-        //const std::string MEM_BOUND_STALLS_LOAD = "mem_bound_stalls.load"; 
+    if (data.cpu_vendor == CpuVendor::CpuVendorID::Intel) {
+        const std::string RESOURCE_STALLS = "resource_stalls.sb";
+        const std::string BOUND_ON_STORES = "exe_activity.bound_on_stores";
+        //const std::string MEM_BOUND_STALLS_LOAD = "mem_bound_stalls.load";
         if (event_exists(RESOURCE_STALLS)) {
             candidates.push_back(RESOURCE_STALLS);
         }
@@ -191,22 +185,22 @@ std::vector<std::string> discover_write_buffer_events() {
         }*/
     }
     else {
-        SPDLOG_WARN("Unsupported CPU vendor ({}) for port event discovery", vendor.name());
+        if (data.cpu_vendor)
+            SPDLOG_WARN("Unsupported CPU vendor ({}) for write buffer events discovery", data.cpu_vendor->name());
     }
 
-    return candidates; 
+    return candidates;
 }
 
 using CacheLevel = silicon_probe::shared_types::CacheLevel;
 
-std::vector<std::string> discover_cache_miss_events(CacheLevel level) {
-    if (!ensure_pfm()) return {};
-    
+std::vector<std::string> discover_cache_miss_events(CacheLevel level, shared_types::CpuInfoData& data) {
+    if (!ensure_pfm(data)) return {};
+
     using CpuVendor = silicon_probe::platform::cpu_vendor::CpuVendor;
-    CpuVendor vendor = arch::detect_vendor();
     std::vector<std::string> candidates;
 
-    if (vendor == CpuVendor::CpuVendorID::Intel) {
+    if (data.cpu_vendor == CpuVendor::CpuVendorID::Intel) {
         switch (level) {
             case CacheLevel::l1d:
                 if (event_exists("mem_load_retired.l1_miss"))
@@ -229,6 +223,10 @@ std::vector<std::string> discover_cache_miss_events(CacheLevel level) {
             default:
                 throw std::invalid_argument("discover_cache_miss_events: insert proper cache level");
         }
+    }
+    else {
+        if (data.cpu_vendor)
+            SPDLOG_WARN("Unsupported CPU vendor ({}) for cache misses events discovery", data.cpu_vendor->name());
     }
 
     return candidates;

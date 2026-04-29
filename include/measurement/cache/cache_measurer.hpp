@@ -3,7 +3,7 @@
 #include "measurement/cache/boundary_analyzer.hpp"
 #include "measurement/cache/cache_profiler_list.hpp"
 #include "infra/logging.hpp"
-#include "measurement/core/measurer.hpp"
+#include "core/measurer.hpp"
 #include "platform/arch.hpp"
 #include "platform/os.hpp"
 #include "platform/pmc.hpp"
@@ -111,9 +111,7 @@ public:
 
     std::string_view name() const noexcept override { return "cache"; }
 
-    std::string_view name() const noexcept override { return "cache"; }
-
-    void measure(core::CpuInfoData& data) override {
+    void measure(shared_types::CpuInfoData& data) override {
         SPDLOG_INFO("[{}] starting cache measurement", name());
         platform::ScopedMeasurementEnvironment environment{config_.environment};
 
@@ -121,21 +119,21 @@ public:
 
         const size_t l1_min = config_.cache_min_lines * cache_line_size_;
         if (config_.levels.test(level_index(CacheLevel::l1d))) {
-            measure_level(data, CacheLevel::l1d, l1_min, config_.l1_max, &core::CpuInfoData::l1d_size);
+            measure_level(data, CacheLevel::l1d, l1_min, config_.l1_max, &shared_types::CpuInfoData::l1d_size);
         }
         if (config_.levels.test(level_index(CacheLevel::l2))) {
-            measure_level(data, CacheLevel::l2, config_.l1_max, config_.l2_max, &core::CpuInfoData::l2_size);
+            measure_level(data, CacheLevel::l2, config_.l1_max, config_.l2_max, &shared_types::CpuInfoData::l2_size);
         }
         if (config_.levels.test(level_index(CacheLevel::l3))) {
-            measure_level(data, CacheLevel::l3, config_.l2_max, config_.l3_max, &core::CpuInfoData::l3_size);
+            measure_level(data, CacheLevel::l3, config_.l2_max, config_.l3_max, &shared_types::CpuInfoData::l3_size);
         }
 
         SPDLOG_INFO("[{}] cache measurement complete", name());
     }
 
 private:
-    void measure_level(core::CpuInfoData& data, CacheLevel level, size_t min_size, size_t max_size,
-                       std::optional<size_t> core::CpuInfoData::* target_field) {
+    void measure_level(shared_types::CpuInfoData& data, CacheLevel level, size_t min_size, size_t max_size,
+                       std::optional<size_t> shared_types::CpuInfoData::* target_field) {
         SPDLOG_INFO("=== Measuring {} ===", level_name(level));
 
         if (min_size == 0 || min_size > max_size) {
@@ -143,7 +141,7 @@ private:
             return;
         }
 
-        auto pmc = open_pmc_for_level(level);
+        auto pmc = open_pmc_for_level(level, data);
         bool use_misses = (pmc != nullptr);
 
         auto results = measure_range(min_size, max_size, pmc);
@@ -204,8 +202,8 @@ private:
         }
     }
 
-    std::unique_ptr<platform::pmc::PmcGroup> open_pmc_for_level(CacheLevel level) const {
-        auto events = platform::discover_cache_miss_events(level);
+    std::unique_ptr<platform::pmc::PmcGroup> open_pmc_for_level(CacheLevel level, shared_types::CpuInfoData& data) const {
+        auto events = platform::discover_cache_miss_events(level, data);
         if (events.empty()) {
             SPDLOG_DEBUG("No miss events found for {}, using latency-only", level_name(level));
             return nullptr;
