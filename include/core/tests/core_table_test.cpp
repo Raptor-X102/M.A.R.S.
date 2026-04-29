@@ -1,5 +1,5 @@
-#include "measurement/core/measurer_registry.hpp"
-#include "measurement/core/probe_service.hpp"
+#include "core/measurer_registry.hpp"
+#include "core/probe_service.hpp"
 
 #include <gtest/gtest.h>
 
@@ -33,7 +33,7 @@ public:
         return available_;
     }
 
-    void measure(CpuInfoData& data) override {
+    void measure(shared_types::CpuInfoData& data) override {
         if (calls_ != nullptr) {
             calls_->push_back(name_);
         }

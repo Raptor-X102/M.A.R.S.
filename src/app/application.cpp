@@ -2,9 +2,9 @@
 
 #include "measurement/cache/cache_measurer.hpp"
 #include "measurement/rob/rob_measurer.hpp"
-#include "measurement/core/measurer_registry.hpp"
-#include "measurement/core/probe_service.hpp"
-#include "measurement/core/summary_printer.hpp"
+#include "core/measurer_registry.hpp"
+#include "core/probe_service.hpp"
+#include "core/summary_printer.hpp"
 #include "infra/logging.hpp"
 #include "platform/os_errors.hpp"
 

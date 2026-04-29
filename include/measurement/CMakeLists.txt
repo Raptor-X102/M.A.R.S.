@@ -1,4 +1,3 @@
-add_subdirectory(core)
 add_subdirectory(cache)
 add_subdirectory(rob)
 add_subdirectory(branch_history_table)

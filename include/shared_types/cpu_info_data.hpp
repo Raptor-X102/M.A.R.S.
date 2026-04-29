@@ -3,8 +3,9 @@
 #include <cstddef>
 #include <optional>
 #include <string>
+#include "shared_types/cpu_vendor.hpp"
 
-namespace silicon_probe::core {
+namespace silicon_probe::shared_types {
 
 struct CpuInfoData {
     std::optional<size_t> l1d_size;
@@ -29,9 +30,7 @@ struct CpuInfoData {
 
     std::optional<bool> execution_ports_independent; // for now only for add & mul instructions
 
-    std::optional<size_t> cpu_family;
-    std::optional<size_t> cpu_model;
-    std::optional<std::string> cpu_name;
+    std::optional<platform::cpu_vendor::CpuVendor> cpu_vendor;
 };
 
 } // namespace silicon_probe::core

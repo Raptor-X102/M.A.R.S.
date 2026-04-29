@@ -1,6 +1,6 @@
 #pragma once
 
-#include "measurement/core/cpu_info_data.hpp"
+#include "shared_types/cpu_info_data.hpp"
 
 #include <ostream>
 
@@ -8,7 +8,7 @@ namespace silicon_probe::core {
 
 class SummaryPrinter {
 public:
-    static void print(std::ostream& stream, const CpuInfoData& data) {
+    static void print(std::ostream& stream, const shared_types::CpuInfoData& data) {
         stream << "\n=== CPU Info Summary ===\n";
 
         if (data.l1d_size) {

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "measurement/core/measurer.hpp"
+#include "core/measurer.hpp"
 #include "infra/logging.hpp"
 
 #include <memory>

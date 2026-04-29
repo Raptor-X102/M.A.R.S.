@@ -1,7 +1,7 @@
 #pragma once
 
 #include "infra/logging.hpp"
-#include "measurement/core/measurer.hpp"
+#include "core/measurer.hpp"
 #include "platform/arch.hpp"
 #include "platform/pmc.hpp"
 #include "platform/os.hpp"
@@ -63,12 +63,12 @@ class BranchTargetBufferMeasurer final : public core::Measurer {
 
     std::string_view name() const noexcept override { return "branch target buffer"; }
 
-    void measure(core::CpuInfoData& data) override {
+    void measure(shared_types::CpuInfoData& data) override {
         SPDLOG_INFO("[{}] starting BTB size measurement", name());
 
         platform::ScopedMeasurementEnvironment environment{config_.environment};
 
-        std::optional<std::string> btb_event = platform::discover_branch_target_buffer_events();
+        std::optional<std::string> btb_event = platform::discover_branch_target_buffer_events(data);
         bool use_events = btb_event.has_value();
         std::unique_ptr<platform::pmc::PmcGroup> pmc;
 
