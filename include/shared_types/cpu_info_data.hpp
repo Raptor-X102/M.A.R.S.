@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <optional>
 #include <string>
+#include <vector>
 #include "shared_types/cpu_vendor.hpp"
 
 namespace silicon_probe::shared_types {
@@ -50,4 +51,4 @@ struct CpuInfoData {
     std::optional<platform::cpu_vendor::CpuVendor> cpu_vendor;
 };
 
-} // namespace silicon_probe::core
+} // namespace silicon_probe::shared_types

@@ -124,7 +124,7 @@ TEST(CoreTableTest, RunsProbeServiceScenariosFromTable) {
             "second", test_case.available[1], &calls, test_case.rob_sizes[1], test_case.should_throw[1]));
 
         ProbeService service{std::move(registry)};
-        const CpuInfoData& data = service.run();
+        const shared_types::CpuInfoData& data = service.run();
 
         EXPECT_EQ(calls, test_case.expected_calls);
         EXPECT_EQ(data.rob_size, test_case.expected_final_rob_size);

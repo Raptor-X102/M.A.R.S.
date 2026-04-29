@@ -1,7 +1,7 @@
 #pragma once
 
 #include "infra/logging.hpp"
-#include "measurement/core/measurer.hpp"
+#include "core/measurer.hpp"
 #include "platform/arch.hpp"
 #include "platform/os.hpp"
 
@@ -378,7 +378,7 @@ class TlbMeasurer final : public core::Measurer {
      * @throws std::overflow_error If calculated memory size is too large.
      * @throws platform::ResourceError If memory allocation fails.
      */
-    void measure(core::CpuInfoData& data) override {
+    void measure(shared_types::CpuInfoData& data) override {
         validate_config();
 
         SPDLOG_INFO("[{}] starting TLB benchmark", name());
@@ -391,7 +391,7 @@ class TlbMeasurer final : public core::Measurer {
 
         const auto vendor = platform::arch::detect_vendor();
         if (!data.cpu_vendor && !vendor.name().empty()) {
-            data.cpu_vendor = std::string(vendor.name());
+            data.cpu_vendor = vendor;
         }
 
         const size_t page_size        = page_size_bytes();
@@ -409,6 +409,8 @@ class TlbMeasurer final : public core::Measurer {
         std::vector<size_t>    page_counts = build_page_counts();
         std::vector<PageNode*> pool        = make_page_nodes(mapping.base, pool_pages, page_size, cache_line);
         std::vector<PageNode*> order(config_.max_pages);
+        std::vector<shared_types::TlbSummaryPoint> points;
+        points.reserve(page_counts.size());
 
         pretouch(pool);
         warm_instruction_path(pool.front());
@@ -416,8 +418,8 @@ class TlbMeasurer final : public core::Measurer {
         std::mt19937 rng{kSeed};
 
         for (size_t pages : page_counts) {
-            core::TlbSummaryPoint point = measure_point(pool, order, rng, pages, page_size);
-            data.tlb_points.push_back(point);
+            shared_types::TlbSummaryPoint point = measure_point(pool, order, rng, pages, page_size);
+            points.push_back(point);
 
             SPDLOG_INFO("[{}] pages={}, bytes={}, median_cpa={:.3f}, min={:.3f}, max={:.3f}",
                         name(),
@@ -428,14 +430,14 @@ class TlbMeasurer final : public core::Measurer {
                         point.max_cycles_per_access);
         }
 
-        const Boundaries boundaries = detect_boundaries(data.tlb_points);
+        const Boundaries boundaries = detect_boundaries(points);
 
         if (boundaries.l1) {
-            data.tlb_l1_size = data.tlb_points[*boundaries.l1].pages;
+            data.tlb_l1_size = points[*boundaries.l1].pages;
         }
 
         if (boundaries.l2) {
-            data.tlb_l2_size = data.tlb_points[*boundaries.l2].pages;
+            data.tlb_l2_size = points[*boundaries.l2].pages;
         }
 
         SPDLOG_INFO("[{}] TLB benchmark complete", name());
@@ -760,11 +762,11 @@ class TlbMeasurer final : public core::Measurer {
      * @param page_size Size of one page.
      * @return Summary point for this page count.
      */
-    core::TlbSummaryPoint measure_point(std::vector<PageNode*>& pool,
-                                        std::vector<PageNode*>& order,
-                                        std::mt19937& rng,
-                                        size_t pages,
-                                        size_t page_size) const {
+    shared_types::TlbSummaryPoint measure_point(std::vector<PageNode*>& pool,
+                                                std::vector<PageNode*>& order,
+                                                std::mt19937& rng,
+                                                size_t pages,
+                                                size_t page_size) const {
         std::vector<double> samples;
         samples.reserve(kRepeats);
 
@@ -791,7 +793,7 @@ class TlbMeasurer final : public core::Measurer {
         const double mean_value   =
             std::accumulate(samples.begin(), samples.end(), 0.0) / static_cast<double>(samples.size());
 
-        return core::TlbSummaryPoint{
+        return shared_types::TlbSummaryPoint{
             pages,
             pages * page_size,
             min_value,
@@ -809,7 +811,7 @@ class TlbMeasurer final : public core::Measurer {
      * @param points Measured benchmark points.
      * @return Detected boundary indexes.
      */
-    Boundaries detect_boundaries(const std::vector<core::TlbSummaryPoint>& points) const {
+    Boundaries detect_boundaries(const std::vector<shared_types::TlbSummaryPoint>& points) const {
         Boundaries result;
 
         if (points.size() < 3) {
@@ -849,7 +851,7 @@ class TlbMeasurer final : public core::Measurer {
      * @param max_count Maximum number of first points to use.
      * @return Mean median latency.
      */
-    static double mean_first_points(const std::vector<core::TlbSummaryPoint>& points, size_t max_count) {
+    static double mean_first_points(const std::vector<shared_types::TlbSummaryPoint>& points, size_t max_count) {
         const size_t count = std::min(points.size(), max_count);
 
         double sum = 0.0;
@@ -868,7 +870,7 @@ class TlbMeasurer final : public core::Measurer {
      * @param pages Required page count.
      * @return Index of the first matching point, or points.size() if not found.
      */
-    static size_t first_index_with_at_least_pages(const std::vector<core::TlbSummaryPoint>& points,
+    static size_t first_index_with_at_least_pages(const std::vector<shared_types::TlbSummaryPoint>& points,
                                                   size_t pages) {
         for (size_t i = 0; i < points.size(); ++i) {
             if (points[i].pages >= pages) {
@@ -891,7 +893,7 @@ class TlbMeasurer final : public core::Measurer {
      * @param min_jump_cycles Minimum absolute jump in cycles per access.
      * @return Index of the jump, or std::nullopt if no jump is found.
      */
-    static std::optional<size_t> find_latency_jump(const std::vector<core::TlbSummaryPoint>& points,
+    static std::optional<size_t> find_latency_jump(const std::vector<shared_types::TlbSummaryPoint>& points,
                                                    size_t start_index,
                                                    double reference_level,
                                                    double ratio_threshold,
@@ -938,7 +940,7 @@ class TlbMeasurer final : public core::Measurer {
      * @param index Index of the possible jump.
      * @return true if the jump looks stable, false otherwise.
      */
-    static bool jump_is_sustained(const std::vector<core::TlbSummaryPoint>& points, size_t index) {
+    static bool jump_is_sustained(const std::vector<shared_types::TlbSummaryPoint>& points, size_t index) {
         if (index + 1 >= points.size()) {
             return true;
         }

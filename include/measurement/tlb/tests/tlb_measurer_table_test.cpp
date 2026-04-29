@@ -11,7 +11,7 @@
 namespace silicon_probe::tlb {
 namespace {
 
-using Point = core::TlbSummaryPoint;
+using Point = shared_types::TlbSummaryPoint;
 
 struct BuildPageCountsCase {
     const char*         name;

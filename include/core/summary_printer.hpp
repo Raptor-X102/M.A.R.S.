@@ -13,7 +13,7 @@ public:
         stream << "\n=== CPU Info Summary ===\n";
 
         if (data.cpu_vendor) {
-            stream << "CPU vendor: " << *data.cpu_vendor << '\n';
+            stream << "CPU vendor: " << data.cpu_vendor->name() << '\n';
         }
         if (data.l1d_size) {
             stream << "L1d: " << *data.l1d_size << " bytes\n";
