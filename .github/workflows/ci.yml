@@ -30,12 +30,7 @@ jobs:
       - name: Check formatting
         shell: bash
         run: |
-          mapfile -t files < <(git ls-files '*.cpp' '*.hpp' '*.ipp')
-          if [ "${#files[@]}" -eq 0 ]; then
-            echo "No C++ files found"
-            exit 0
-          fi
-          clang-format --dry-run --Werror "${files[@]}"
+          clang-format -i $(rg --files -g '*.cpp' -g '*.hpp' -g '*.cc' -g '*.cxx' -g '*.h' -g '*.hh')  
 
   static-analysis:
     name: Static Analysis (cppcheck)
