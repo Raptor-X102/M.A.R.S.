@@ -13,7 +13,3 @@ target_link_libraries(mars_branch_history_table
         mars::platform
         mars::infra_logging
 )
-
-if(MARS_BUILD_TESTS AND EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/tests/CMakeLists.txt)
-    add_subdirectory(tests)
-endif()

@@ -131,6 +131,10 @@ add_subdirectory(include/measurement)
 add_subdirectory(include/core)
 add_subdirectory(src/app)
 
+if(MARS_BUILD_TESTS)
+    add_subdirectory(src/measurement)
+endif()
+
 if(MARS_BUILD_APPS)
     add_subdirectory(src/cli)
 endif()
