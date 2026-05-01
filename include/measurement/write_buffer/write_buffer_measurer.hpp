@@ -103,8 +103,8 @@ class WriteBufferMeasurer final : public core::Measurer {
         for (size_t num_writes = config_.min_writes; num_writes <= config_.max_writes;
              num_writes += config_.writes_step) {
             size_t region_offset = (num_writes - 1) * region_size / kBytesPerEntry;
-            int* fill_ptr = fill_area.get() + region_offset;
-            volatile int* extra_ptr = extra_area.get() + region_offset;
+            auto* fill_ptr = fill_area.get() + region_offset;
+            volatile auto* extra_ptr = extra_area.get() + region_offset;
 
             writes_list.push_back(num_writes);
             WriteBufferResult res = measure_for_writes(num_writes, fill_ptr, extra_ptr, dummy, pmc.get());
