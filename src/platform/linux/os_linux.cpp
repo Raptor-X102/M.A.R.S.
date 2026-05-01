@@ -26,25 +26,12 @@ struct PriorityState {
     bool valid = false;
 };
 
-PriorityState& priority_state() {
-    static PriorityState state;
-    return state;
-}
-
-std::string& saved_governor() {
-    static std::string governor;
-    return governor;
-}
-
-bool& governor_saved() {
-    static bool saved = false;
-    return saved;
-}
-
-uint64_t& cached_tsc_frequency() {
-    static uint64_t frequency = 0;
-    return frequency;
-}
+PriorityState g_priority_state{};
+std::string g_saved_governor;
+bool g_governor_saved = false;
+uint64_t g_cached_tsc_frequency = 0;
+bool g_turbo_boost_saved = false;
+std::string g_turbo_boost_path;
 
 uint64_t calibrate_tsc() {
     if (!silicon_probe::platform::tsc_is_invariant()) {
@@ -111,11 +98,10 @@ size_t cache_line_size() {
 }
 
 uint64_t tick_frequency() {
-    uint64_t& frequency = cached_tsc_frequency();
-    if (frequency == 0) {
-        frequency = calibrate_tsc();
+    if (g_cached_tsc_frequency == 0) {
+        g_cached_tsc_frequency = calibrate_tsc();
     }
-    return frequency;
+    return g_cached_tsc_frequency;
 }
 
 void* huge_alloc(size_t size) {
@@ -147,7 +133,7 @@ void* aligned_alloc(size_t alignment, size_t size) {
 void aligned_free(void* ptr) { std::free(ptr); }
 
 void set_realtime_priority() {
-    auto& state = priority_state();
+    auto& state = g_priority_state;
     if (pthread_getschedparam(pthread_self(), &state.policy, &state.parameters) != 0) {
         throw SystemError("Failed to capture current thread scheduling parameters");
     }
@@ -172,7 +158,7 @@ void set_realtime_priority() {
 }
 
 void restore_priority() {
-    auto& state = priority_state();
+    auto& state = g_priority_state;
     munlockall();
 
     if (!state.valid) {
@@ -199,11 +185,11 @@ void lock_cpu_frequency() {
         throw PermissionError("Failed to open governor file for reading: " + path);
     }
 
-    input >> saved_governor();
+    input >> g_saved_governor;
     if (input.fail()) {
         throw SystemError("Failed to read current CPU governor");
     }
-    governor_saved() = true;
+    g_governor_saved = true;
 
     std::ofstream output{path};
     if (!output.is_open()) {
@@ -217,45 +203,34 @@ void lock_cpu_frequency() {
 }
 
 void restore_cpu_frequency() {
-    if (!governor_saved()) {
+    if (!g_governor_saved) {
         return;
     }
 
     const int cpu = sched_getcpu();
     if (cpu < 0) {
-        governor_saved() = false;
+        g_governor_saved = false;
         throw SystemError("Failed to obtain current CPU id while restoring governor");
     }
 
     const std::string path = "/sys/devices/system/cpu/cpu" + std::to_string(cpu) + "/cpufreq/scaling_governor";
     std::ofstream output{path};
     if (!output.is_open()) {
-        governor_saved() = false;
+        g_governor_saved = false;
         throw SystemError("Failed to open governor file for restore: " + path);
     }
 
-    output << saved_governor();
+    output << g_saved_governor;
     if (output.fail()) {
-        governor_saved() = false;
+        g_governor_saved = false;
         throw SystemError("Failed to restore CPU governor");
     }
 
-    governor_saved() = false;
+    g_governor_saved = false;
 }
-
-namespace TurboBoostDetails {
-bool& turbo_boost_saved() {
-    static bool saved = false;
-    return saved;
-}
-std::string& turbo_boost_path() {
-    static std::string path;
-    return path;
-}
-}  // namespace TurboBoostDetails
 
 void disable_turbo_boost() {
-    if (TurboBoostDetails::turbo_boost_saved()) return;
+    if (g_turbo_boost_saved) return;
 
     // Try generic path first, then vendor-specific
     const std::vector<std::string> paths = {"/sys/devices/system/cpu/cpufreq/boost",
@@ -266,7 +241,7 @@ void disable_turbo_boost() {
         if (in.is_open()) {
             std::string val;
             in >> val;
-            TurboBoostDetails::turbo_boost_path() = p;
+            g_turbo_boost_path = p;
 
             std::ofstream out{p};
             if (!out.is_open()) {
@@ -276,7 +251,7 @@ void disable_turbo_boost() {
             if (out.fail()) {
                 throw PermissionError("Failed to disable turbo boost at " + p);
             }
-            TurboBoostDetails::turbo_boost_saved() = true;
+            g_turbo_boost_saved = true;
             SPDLOG_INFO("Turbo boost disabled via {}", p);
             return;
         }
@@ -285,8 +260,8 @@ void disable_turbo_boost() {
 }
 
 void restore_turbo_boost() {
-    if (!TurboBoostDetails::turbo_boost_saved()) return;
-    const std::string& path = TurboBoostDetails::turbo_boost_path();
+    if (!g_turbo_boost_saved) return;
+    const std::string& path = g_turbo_boost_path;
 
     std::ofstream out{path};
     if (!out.is_open()) {
@@ -299,7 +274,7 @@ void restore_turbo_boost() {
     } else {
         SPDLOG_INFO("Turbo boost restored");
     }
-    TurboBoostDetails::turbo_boost_saved() = false;
+    g_turbo_boost_saved = false;
 }
 
 ScopedThreadAffinity::ScopedThreadAffinity(int cpu) : previous_affinity_(new cpu_set_t_storage{}) {

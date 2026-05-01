@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cpuid.h>
+#include <array>
 #include <cstdint>
 #include <x86intrin.h>
 #include <cstring>
@@ -232,7 +233,7 @@ private:
         dbuf2_ = static_cast<char*>(dbuf2_orig_) + offset;
     }
 
-    void emit_filler(asmjit::x86::Assembler& a, int instr_type, int /*idx*/, int& global_idx) {
+    static void emit_filler(asmjit::x86::Assembler& a, int instr_type, int /*idx*/, int& global_idx) {
         static int icount = 0;
         const int i = icount;
         const int reg[4] = {3, 5, 6, 7};  // EBX=3, EBP=5, ESI=6, EDI=7
@@ -394,6 +395,9 @@ public:
         return gen;
     }
 
+    ExecPortsCodeGenerator(const ExecPortsCodeGenerator&) = delete;
+    ExecPortsCodeGenerator& operator=(const ExecPortsCodeGenerator&) = delete;
+
     void* generate(size_t instr_cnt, const std::vector<InstrType>& types) {
         if (types.empty() || instr_cnt == 0) return nullptr;
 
@@ -540,7 +544,6 @@ private:
     static auto dst_reg(size_t idx) { return kAllRegs[idx % kNumRegs]; }
     static auto src_reg(size_t idx) { return kAllRegs[(idx + 1) % kNumRegs]; }
     static auto dst_xmm(size_t idx) { return asmjit::x86::xmm(idx % 16); }
-    static auto src_xmm(size_t idx) { return asmjit::x86::xmm((idx + 1) % 16); }
 
     static void emit_nop(asmjit::x86::Assembler& a, size_t) { a.nop(); }
     static void emit_add_imm1(asmjit::x86::Assembler& a, size_t) { a.add(dst_reg(0), asmjit::imm(1)); }
@@ -565,7 +568,7 @@ private:
     static void emit_store_to_rdx(asmjit::x86::Assembler& a, size_t idx) { a.mov(asmjit::x86::ptr(asmjit::x86::rdx), src_reg(idx)); }
 
     static EmitterFunc get_emitter(InstrType type) {
-        static const EmitterFunc table[] = {
+        static constexpr std::array<EmitterFunc, 21> table{{
             emit_nop,           // NOP
             emit_add_imm1,      // ADD_IMM1
             emit_sub_imm1,      // SUB_IMM1
@@ -587,8 +590,8 @@ private:
             emit_store_to_rcx,  // STORE_TO_RCX
             emit_load_from_rdx, // LOAD_FROM_RDX
             emit_store_to_rdx   // STORE_TO_RDX
-        };
-        return table[static_cast<int>(type)];
+        }};
+        return table.at(static_cast<size_t>(type));
     }
 
     asmjit::JitRuntime runtime_;
@@ -613,6 +616,9 @@ public:
         static UopsCacheCodeGenerator gen;
         return gen;
     }
+
+    UopsCacheCodeGenerator(const UopsCacheCodeGenerator&) = delete;
+    UopsCacheCodeGenerator& operator=(const UopsCacheCodeGenerator&) = delete;
 
     void* generate(size_t instr_cnt, size_t iterations, const std::vector<InstrType>& types) {
         release_current();
@@ -715,7 +721,6 @@ private:
     static constexpr size_t kNumRegs = sizeof(kAllRegs) / sizeof(kAllRegs[0]);
 
     static auto dst_reg(size_t idx) { return kAllRegs[idx % kNumRegs]; }
-    static auto src_reg(size_t idx) { return kAllRegs[(idx + 1) % kNumRegs]; }
 
     static void emit_add_reg(asmjit::x86::Assembler& a, size_t /*idx*/) { a.add(dst_reg(0), dst_reg(0)); }
     static void emit_add_imm1(asmjit::x86::Assembler& a, size_t idx) { a.add(dst_reg(idx), asmjit::imm(1)); }
@@ -723,7 +728,7 @@ private:
 
     // TODO: either change logic, or add more emitters
     static EmitterFunc get_emitter(InstrType type) {
-        static const EmitterFunc table[] = {
+        static constexpr std::array<EmitterFunc, 21> table{{
             emit_nop,           // NOP
             emit_add_imm1,      // ADD_IMM1
             emit_nop,           // NOP
@@ -745,8 +750,8 @@ private:
             emit_nop,           // NOP
             emit_nop,           // NOP
             emit_nop,           // NOP
-        };
-        return table[static_cast<int>(type)];
+        }};
+        return table.at(static_cast<size_t>(type));
     }
 };
 
@@ -770,6 +775,9 @@ public:
         static BranchTargetBufferCodeGenerator gen;
         return gen;
     }
+
+    BranchTargetBufferCodeGenerator(const BranchTargetBufferCodeGenerator&) = delete;
+    BranchTargetBufferCodeGenerator& operator=(const BranchTargetBufferCodeGenerator&) = delete;
 
     std::vector<void*> generate(size_t blocks_cnt, size_t iterations, int alignment) {
         release_all();

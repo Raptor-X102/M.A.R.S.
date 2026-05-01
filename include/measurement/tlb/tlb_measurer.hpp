@@ -668,7 +668,7 @@ class TlbMeasurer final : public core::Measurer {
      * @param start First node in the chain.
      * @param pages Number of pages in the chain.
      */
-    __attribute__((noinline)) void warmup(PageNode* start, size_t pages) const {
+    __attribute__((noinline)) static void warmup(PageNode* start, size_t pages) {
         PageNode* cursor = start;
         size_t accesses = std::max(pages, pages * kWarmupRounds);
 
@@ -779,7 +779,7 @@ class TlbMeasurer final : public core::Measurer {
      * @param points Measured benchmark points.
      * @return Detected boundary indexes.
      */
-    Boundaries detect_boundaries(const std::vector<shared_types::TlbSummaryPoint>& points) const {
+    static Boundaries detect_boundaries(const std::vector<shared_types::TlbSummaryPoint>& points) {
         Boundaries result;
 
         if (points.size() < 3) {

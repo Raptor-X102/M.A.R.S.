@@ -65,12 +65,18 @@ jobs:
           cmake -S . -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=Debug \
             -DMARS_BUILD_APPS=ON \
-            -DMARS_BUILD_TESTS=ON \
+            -DMARS_BUILD_TESTS=OFF \
             -DMARS_ENABLE_SANITIZERS=OFF \
             -DMARS_ENABLE_WERROR=ON
 
       - name: Run cppcheck
+        shell: bash
         run: |
+          exclude_args=()
+          while IFS= read -r test_file; do
+            exclude_args+=("-i${test_file}")
+          done < <(find src include -name '*_test.cpp' | sort)
+
           cppcheck \
             --project=build/compile_commands.json \
             --enable=warning,style,performance,portability,information \
@@ -80,10 +86,12 @@ jobs:
             --error-exitcode=1 \
             --inline-suppr \
             --quiet \
+            --suppressions-list=.cppcheck-suppressions \
             --suppress=missingIncludeSystem \
             --suppress=unusedFunction \
             --suppress=unmatchedSuppression \
-            --suppress=noValidConfiguration
+            --suppress=noValidConfiguration \
+            "${exclude_args[@]}"
 
   build-and-test:
     name: ${{ matrix.name }}

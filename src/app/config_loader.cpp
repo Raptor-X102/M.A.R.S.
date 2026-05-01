@@ -1038,7 +1038,7 @@ class WriteBufferConfigParser final
 
 namespace silicon_probe::app {
 
-ApplicationConfig ApplicationConfigLoader::load(const BootstrapOptions& options) const {
+ApplicationConfig ApplicationConfigLoader::load(const BootstrapOptions& options) {
     const LoadedConfigDocument document = load_document(options.config_path);
 
     ApplicationConfig config{};

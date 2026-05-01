@@ -239,28 +239,6 @@ class PmcGroupRawLinux final : public PmcGroup {
             if (fd >= 0) close(fd);
     }
 
-    void print_initial_values() const {
-        auto init = read();
-        if (!init.valid) {
-            SPDLOG_WARN("Failed to read initial counter values");
-            return;
-        }
-        SPDLOG_INFO("Initial counter values (before any reset/enable):");
-        for (size_t i = 0; i < event_names_.size() && i < init.values.size(); ++i) {
-            SPDLOG_INFO("  {} = {}", event_names_[i], init.values[i]);
-        }
-        bool non_zero = false;
-        for (auto v : init.values) {
-            if (v > 100) {
-                non_zero = true;
-                break;
-            }
-        }
-        if (non_zero) {
-            SPDLOG_WARN("Initial counter values are not near zero! Will need to compute differences.");
-        }
-    }
-
     std::vector<int> fds_;
     std::vector<std::string> event_names_;
 };

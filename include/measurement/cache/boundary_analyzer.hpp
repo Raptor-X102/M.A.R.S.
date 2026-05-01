@@ -26,7 +26,7 @@ class BoundaryAnalyzer {
    public:
     explicit BoundaryAnalyzer(BoundaryAnalyzerConfig config = {}) : config_(config) {}
 
-    Statistics compute_stats(const std::vector<double>& samples) const {
+    static Statistics compute_stats(const std::vector<double>& samples) {
         Statistics statistics{};
         if (samples.empty()) {
             return statistics;

@@ -96,7 +96,7 @@ class BootstrapOptionsParser {
 
 class ApplicationConfigLoader {
    public:
-    ApplicationConfig load(const BootstrapOptions& options) const;
+    static ApplicationConfig load(const BootstrapOptions& options);
 };
 
 }  // namespace silicon_probe::app

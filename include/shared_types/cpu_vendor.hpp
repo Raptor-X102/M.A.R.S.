@@ -11,7 +11,7 @@ class CpuVendor {
     enum class CpuVendorID : uint8_t { Unknown = 0, Intel = 1, AMD = 2 };
 
    private:
-    CpuVendorID id_;
+    CpuVendorID id_ = CpuVendorID::Unknown;
     std::string name_;
 
    public:

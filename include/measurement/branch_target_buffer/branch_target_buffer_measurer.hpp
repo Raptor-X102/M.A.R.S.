@@ -148,7 +148,7 @@ class BranchTargetBufferMeasurer final : public core::Measurer {
 
         auto funcs =
             platform::arch::generate_branch_target_buffer_code(blocks_cnt, config_.iterations, config_.alignment);
-        if (funcs.size() < 2 || !funcs[0] || !funcs[1]) {
+        if (!funcs[0] || !funcs[1]) {
             SPDLOG_ERROR("[{}] Failed to generate functions for blocks_cnt={}", name(), blocks_cnt);
             return {};
         }
@@ -220,8 +220,6 @@ class BranchTargetBufferMeasurer final : public core::Measurer {
         if (total_branches == 0) return 0.0;
         return static_cast<double>(res.avg_events_counts) / total_branches;
     }
-
-    double computeTimePerBlock(const BranchTargetBufferResult& res) const { return res.avg_ticks_per_block; }
 
     size_t findApproxSaturation(const std::vector<size_t>& counts, const std::vector<BranchTargetBufferResult>& results,
                                 bool use_events) {

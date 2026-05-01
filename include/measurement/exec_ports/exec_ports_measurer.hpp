@@ -196,8 +196,8 @@ class ExecPortsMeasurer final : public core::Measurer {
     }
 
    private:
-    PortContentionDecision detectPortContention(const std::vector<ExecPortsResult>& results,
-                                                const std::vector<std::string>& port_events) const {
+    static PortContentionDecision detectPortContention(const std::vector<ExecPortsResult>& results,
+                                                       const std::vector<std::string>& port_events) {
         if (results.size() < 3) {
             return {false, 0.0, "insufficient data"};
         }

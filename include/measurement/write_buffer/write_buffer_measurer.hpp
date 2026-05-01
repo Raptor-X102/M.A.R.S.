@@ -95,9 +95,7 @@ class WriteBufferMeasurer final : public core::Measurer {
 
         volatile int dummy = 0;
         SPDLOG_INFO("| writes | latency(ticks) | stddev |");
-        if (has_pmc) {
-            for (const auto& ev : events) SPDLOG_INFO("|        | {} (per sample) |", ev);
-        }
+        for (const auto& ev : events) SPDLOG_INFO("|        | {} (per sample) |", ev);
 
         std::vector<size_t> writes_list;
         std::vector<WriteBufferResult> results;
@@ -112,14 +110,12 @@ class WriteBufferMeasurer final : public core::Measurer {
             WriteBufferResult res = measure_for_writes(num_writes, fill_ptr, extra_ptr, dummy, pmc.get());
             results.push_back(res);
 
-            if (has_pmc) {
-                SPDLOG_INFO("| {:6} | {:12.2f} | {:6.2f} |", num_writes, res.avg_latency_ticks, res.latency_stddev);
-                for (size_t i = 0; i < events.size(); ++i) {
-                    double per_sample =
-                        (res.avg_events.size() > i) ? double(res.avg_events[i]) / config_.iterations : 0.0;
-                    double total = (res.avg_events.size() > i) ? double(res.avg_events[i]) : 0.0;
-                    SPDLOG_INFO("|        | {}: {:.2f} per sample (total {}) |", events[i], per_sample, total);
-                }
+            SPDLOG_INFO("| {:6} | {:12.2f} | {:6.2f} |", num_writes, res.avg_latency_ticks, res.latency_stddev);
+            for (size_t i = 0; i < events.size(); ++i) {
+                double per_sample =
+                    (res.avg_events.size() > i) ? double(res.avg_events[i]) / config_.iterations : 0.0;
+                double total = (res.avg_events.size() > i) ? double(res.avg_events[i]) : 0.0;
+                SPDLOG_INFO("|        | {}: {:.2f} per sample (total {}) |", events[i], per_sample, total);
             }
         }
 
