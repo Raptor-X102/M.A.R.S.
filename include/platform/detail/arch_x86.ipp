@@ -17,6 +17,34 @@
 
 namespace silicon_probe::platform::arch {
 
+#if defined(ASMJIT_LIBRARY_VERSION) && ASMJIT_LIBRARY_VERSION >= ASMJIT_LIBRARY_MAKE_VERSION(1, 21, 0)
+template <typename Assembler>
+inline asmjit::Label asmjit_new_label(Assembler& assembler) {
+    return assembler.new_label();
+}
+
+inline void asmjit_set_logger(asmjit::CodeHolder& code, asmjit::Logger* logger) {
+    code.set_logger(logger);
+}
+
+inline size_t asmjit_code_size(const asmjit::CodeHolder& code) {
+    return code.code_size();
+}
+#else
+template <typename Assembler>
+inline asmjit::Label asmjit_new_label(Assembler& assembler) {
+    return assembler.newLabel();
+}
+
+inline void asmjit_set_logger(asmjit::CodeHolder& code, asmjit::Logger* logger) {
+    code.setLogger(logger);
+}
+
+inline size_t asmjit_code_size(const asmjit::CodeHolder& code) {
+    return code.codeSize();
+}
+#endif
+
 inline uint64_t tick() {
     _mm_lfence();
     unsigned int aux = 0;
@@ -122,7 +150,7 @@ public:
 
         // Align loop start to 16 bytes
         a.align(asmjit::AlignMode::kCode, 16);
-        asmjit::Label loop_start = a.new_label();
+        asmjit::Label loop_start = asmjit_new_label(a);
         a.bind(loop_start);
 
         int filler_idx = 0;
@@ -172,7 +200,7 @@ public:
 
         if (current_fn_) {
             __builtin___clear_cache(reinterpret_cast<char*>(current_fn_),
-                                    reinterpret_cast<char*>(current_fn_) + code.code_size());
+                                    reinterpret_cast<char*>(current_fn_) + asmjit_code_size(code));
         }
 
         return current_fn_;
@@ -419,7 +447,7 @@ public:
             fprintf(log_file_, ")\n;;; ========================================\n");
             fflush(log_file_);
             logger = std::make_unique<asmjit::FileLogger>(log_file_);
-            code.set_logger(logger.get());
+            asmjit_set_logger(code, logger.get());
         }
 
         a.push(asmjit::x86::rbx);
@@ -459,7 +487,7 @@ public:
         if (runtime_.add(&fn, &code) == asmjit::kErrorOk) {
             functions_.push_back(fn);
             __builtin___clear_cache(reinterpret_cast<char*>(fn),
-                                    reinterpret_cast<char*>(fn) + code.code_size());
+                                    reinterpret_cast<char*>(fn) + asmjit_code_size(code));
         }
         return fn;
     }
@@ -643,7 +671,7 @@ public:
             fprintf(log_file_, ")\n;;; ========================================\n");
             fflush(log_file_);
             logger = std::make_unique<asmjit::FileLogger>(log_file_);
-            code.set_logger(logger.get());
+            asmjit_set_logger(code, logger.get());
         }
 
         a.push(asmjit::x86::rbx);
@@ -656,7 +684,7 @@ public:
         a.push(asmjit::x86::r15);
         a.mov(asmjit::x86::rcx, asmjit::imm(iterations));
         a.align(asmjit::AlignMode::kCode, 16);
-        asmjit::Label loop_start = a.new_label();
+        asmjit::Label loop_start = asmjit_new_label(a);
         a.bind(loop_start);
 
         size_t num_types = emitters.size();
@@ -680,7 +708,7 @@ public:
         if (runtime_.add(&fn, &code) == asmjit::kErrorOk) {
             current_function_ = fn;
             __builtin___clear_cache(reinterpret_cast<char*>(fn),
-                                    reinterpret_cast<char*>(fn) + code.code_size());
+                                    reinterpret_cast<char*>(fn) + asmjit_code_size(code));
         }
         return fn;
     }
@@ -795,7 +823,7 @@ public:
         auto generate_body_func = [&](asmjit::x86::Assembler& a) {
             std::vector<asmjit::Label> labels(blocks_cnt);
             for (auto& label : labels) {
-                label = a.new_label();
+                label = asmjit_new_label(a);
                 a.lea(asmjit::x86::r11, asmjit::x86::ptr(label));
                 a.jmp(asmjit::x86::r11);
                 a.align(asmjit::AlignMode::kCode, alignment);
@@ -806,7 +834,7 @@ public:
         auto generate_warmup = [&]() -> void* {
             asmjit::CodeHolder code;
             code.init(runtime_.environment());
-            code.set_logger(logger.get());
+            asmjit_set_logger(code, logger.get());
             asmjit::x86::Assembler a(&code);
 
             a.align(asmjit::AlignMode::kCode, alignment);
@@ -816,7 +844,7 @@ public:
             if (runtime_.add(&fn, &code) == asmjit::kErrorOk) {
                 warmup_function_ = fn;
                 __builtin___clear_cache(reinterpret_cast<char*>(fn),
-                                        reinterpret_cast<char*>(fn) + code.code_size());
+                                        reinterpret_cast<char*>(fn) + asmjit_code_size(code));
             }
 
             return fn;
@@ -825,12 +853,12 @@ public:
         auto generate_measure = [&]() -> void* {
             asmjit::CodeHolder code;
             code.init(runtime_.environment());
-            code.set_logger(logger.get());
+            asmjit_set_logger(code, logger.get());
             asmjit::x86::Assembler a(&code);
 
             a.mov(asmjit::x86::rcx, asmjit::imm(iterations));
             a.align(asmjit::AlignMode::kCode, alignment);
-            asmjit::Label loop_start = a.new_label();
+            asmjit::Label loop_start = asmjit_new_label(a);
             a.bind(loop_start);
             generate_body_func(a);
             a.dec(asmjit::x86::rcx);
@@ -839,9 +867,9 @@ public:
 
             void* fn = nullptr;
             if (runtime_.add(&fn, &code) == asmjit::kErrorOk) {
-                warmup_function_ = fn;
+                measure_function_ = fn;
                 __builtin___clear_cache(reinterpret_cast<char*>(fn),
-                                        reinterpret_cast<char*>(fn) + code.code_size());
+                                        reinterpret_cast<char*>(fn) + asmjit_code_size(code));
             }
 
             return fn;

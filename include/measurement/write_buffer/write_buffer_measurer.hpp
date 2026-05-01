@@ -100,20 +100,28 @@ class WriteBufferMeasurer final : public core::Measurer {
         std::vector<size_t> writes_list;
         std::vector<WriteBufferResult> results;
 
+        auto* fill_base = static_cast<int*>(fill_area.get());
+        auto* extra_base = static_cast<int*>(extra_area.get());
+
         for (size_t num_writes = config_.min_writes; num_writes <= config_.max_writes;
              num_writes += config_.writes_step) {
             size_t region_offset = (num_writes - 1) * region_size / kBytesPerEntry;
-            auto* fill_ptr = fill_area.get() + region_offset;
-            volatile auto* extra_ptr = extra_area.get() + region_offset;
+
+            int* fill_ptr = fill_base + region_offset;
+            volatile int* extra_ptr = extra_base + region_offset;
 
             writes_list.push_back(num_writes);
+
             WriteBufferResult res = measure_for_writes(num_writes, fill_ptr, extra_ptr, dummy, pmc.get());
+
             results.push_back(res);
 
             SPDLOG_INFO("| {:6} | {:12.2f} | {:6.2f} |", num_writes, res.avg_latency_ticks, res.latency_stddev);
+
             for (size_t i = 0; i < events.size(); ++i) {
                 double per_sample = (res.avg_events.size() > i) ? double(res.avg_events[i]) / config_.iterations : 0.0;
                 double total = (res.avg_events.size() > i) ? double(res.avg_events[i]) : 0.0;
+
                 SPDLOG_INFO("|        | {}: {:.2f} per sample (total {}) |", events[i], per_sample, total);
             }
         }
