@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cpuid.h>
+#include <array>
 #include <cstdint>
 #include <x86intrin.h>
 #include <cstring>
@@ -15,6 +16,34 @@
 #include <random>
 
 namespace silicon_probe::platform::arch {
+
+#if defined(ASMJIT_LIBRARY_VERSION) && ASMJIT_LIBRARY_VERSION >= ASMJIT_LIBRARY_MAKE_VERSION(1, 21, 0)
+template <typename Assembler>
+inline asmjit::Label asmjit_new_label(Assembler& assembler) {
+    return assembler.new_label();
+}
+
+inline void asmjit_set_logger(asmjit::CodeHolder& code, asmjit::Logger* logger) {
+    code.set_logger(logger);
+}
+
+inline size_t asmjit_code_size(const asmjit::CodeHolder& code) {
+    return code.code_size();
+}
+#else
+template <typename Assembler>
+inline asmjit::Label asmjit_new_label(Assembler& assembler) {
+    return assembler.newLabel();
+}
+
+inline void asmjit_set_logger(asmjit::CodeHolder& code, asmjit::Logger* logger) {
+    code.setLogger(logger);
+}
+
+inline size_t asmjit_code_size(const asmjit::CodeHolder& code) {
+    return code.codeSize();
+}
+#endif
 
 inline uint64_t tick() {
     _mm_lfence();
@@ -121,7 +150,7 @@ public:
 
         // Align loop start to 16 bytes
         a.align(asmjit::AlignMode::kCode, 16);
-        asmjit::Label loop_start = a.new_label();
+        asmjit::Label loop_start = asmjit_new_label(a);
         a.bind(loop_start);
 
         int filler_idx = 0;
@@ -171,7 +200,7 @@ public:
 
         if (current_fn_) {
             __builtin___clear_cache(reinterpret_cast<char*>(current_fn_),
-                                    reinterpret_cast<char*>(current_fn_) + code.code_size());
+                                    reinterpret_cast<char*>(current_fn_) + asmjit_code_size(code));
         }
 
         return current_fn_;
@@ -232,7 +261,7 @@ private:
         dbuf2_ = static_cast<char*>(dbuf2_orig_) + offset;
     }
 
-    void emit_filler(asmjit::x86::Assembler& a, int instr_type, int /*idx*/, int& global_idx) {
+    static void emit_filler(asmjit::x86::Assembler& a, int instr_type, int /*idx*/, int& global_idx) {
         static int icount = 0;
         const int i = icount;
         const int reg[4] = {3, 5, 6, 7};  // EBX=3, EBP=5, ESI=6, EDI=7
@@ -394,6 +423,9 @@ public:
         return gen;
     }
 
+    ExecPortsCodeGenerator(const ExecPortsCodeGenerator&) = delete;
+    ExecPortsCodeGenerator& operator=(const ExecPortsCodeGenerator&) = delete;
+
     void* generate(size_t instr_cnt, const std::vector<InstrType>& types) {
         if (types.empty() || instr_cnt == 0) return nullptr;
 
@@ -415,7 +447,7 @@ public:
             fprintf(log_file_, ")\n;;; ========================================\n");
             fflush(log_file_);
             logger = std::make_unique<asmjit::FileLogger>(log_file_);
-            code.set_logger(logger.get());
+            asmjit_set_logger(code, logger.get());
         }
 
         a.push(asmjit::x86::rbx);
@@ -455,7 +487,7 @@ public:
         if (runtime_.add(&fn, &code) == asmjit::kErrorOk) {
             functions_.push_back(fn);
             __builtin___clear_cache(reinterpret_cast<char*>(fn),
-                                    reinterpret_cast<char*>(fn) + code.code_size());
+                                    reinterpret_cast<char*>(fn) + asmjit_code_size(code));
         }
         return fn;
     }
@@ -540,7 +572,6 @@ private:
     static auto dst_reg(size_t idx) { return kAllRegs[idx % kNumRegs]; }
     static auto src_reg(size_t idx) { return kAllRegs[(idx + 1) % kNumRegs]; }
     static auto dst_xmm(size_t idx) { return asmjit::x86::xmm(idx % 16); }
-    static auto src_xmm(size_t idx) { return asmjit::x86::xmm((idx + 1) % 16); }
 
     static void emit_nop(asmjit::x86::Assembler& a, size_t) { a.nop(); }
     static void emit_add_imm1(asmjit::x86::Assembler& a, size_t) { a.add(dst_reg(0), asmjit::imm(1)); }
@@ -565,7 +596,7 @@ private:
     static void emit_store_to_rdx(asmjit::x86::Assembler& a, size_t idx) { a.mov(asmjit::x86::ptr(asmjit::x86::rdx), src_reg(idx)); }
 
     static EmitterFunc get_emitter(InstrType type) {
-        static const EmitterFunc table[] = {
+        static constexpr std::array<EmitterFunc, 21> table{{
             emit_nop,           // NOP
             emit_add_imm1,      // ADD_IMM1
             emit_sub_imm1,      // SUB_IMM1
@@ -587,8 +618,8 @@ private:
             emit_store_to_rcx,  // STORE_TO_RCX
             emit_load_from_rdx, // LOAD_FROM_RDX
             emit_store_to_rdx   // STORE_TO_RDX
-        };
-        return table[static_cast<int>(type)];
+        }};
+        return table.at(static_cast<size_t>(type));
     }
 
     asmjit::JitRuntime runtime_;
@@ -614,6 +645,9 @@ public:
         return gen;
     }
 
+    UopsCacheCodeGenerator(const UopsCacheCodeGenerator&) = delete;
+    UopsCacheCodeGenerator& operator=(const UopsCacheCodeGenerator&) = delete;
+
     void* generate(size_t instr_cnt, size_t iterations, const std::vector<InstrType>& types) {
         release_current();
 
@@ -637,7 +671,7 @@ public:
             fprintf(log_file_, ")\n;;; ========================================\n");
             fflush(log_file_);
             logger = std::make_unique<asmjit::FileLogger>(log_file_);
-            code.set_logger(logger.get());
+            asmjit_set_logger(code, logger.get());
         }
 
         a.push(asmjit::x86::rbx);
@@ -650,7 +684,7 @@ public:
         a.push(asmjit::x86::r15);
         a.mov(asmjit::x86::rcx, asmjit::imm(iterations));
         a.align(asmjit::AlignMode::kCode, 16);
-        asmjit::Label loop_start = a.new_label();
+        asmjit::Label loop_start = asmjit_new_label(a);
         a.bind(loop_start);
 
         size_t num_types = emitters.size();
@@ -674,7 +708,7 @@ public:
         if (runtime_.add(&fn, &code) == asmjit::kErrorOk) {
             current_function_ = fn;
             __builtin___clear_cache(reinterpret_cast<char*>(fn),
-                                    reinterpret_cast<char*>(fn) + code.code_size());
+                                    reinterpret_cast<char*>(fn) + asmjit_code_size(code));
         }
         return fn;
     }
@@ -715,7 +749,6 @@ private:
     static constexpr size_t kNumRegs = sizeof(kAllRegs) / sizeof(kAllRegs[0]);
 
     static auto dst_reg(size_t idx) { return kAllRegs[idx % kNumRegs]; }
-    static auto src_reg(size_t idx) { return kAllRegs[(idx + 1) % kNumRegs]; }
 
     static void emit_add_reg(asmjit::x86::Assembler& a, size_t /*idx*/) { a.add(dst_reg(0), dst_reg(0)); }
     static void emit_add_imm1(asmjit::x86::Assembler& a, size_t idx) { a.add(dst_reg(idx), asmjit::imm(1)); }
@@ -723,7 +756,7 @@ private:
 
     // TODO: either change logic, or add more emitters
     static EmitterFunc get_emitter(InstrType type) {
-        static const EmitterFunc table[] = {
+        static constexpr std::array<EmitterFunc, 21> table{{
             emit_nop,           // NOP
             emit_add_imm1,      // ADD_IMM1
             emit_nop,           // NOP
@@ -745,8 +778,8 @@ private:
             emit_nop,           // NOP
             emit_nop,           // NOP
             emit_nop,           // NOP
-        };
-        return table[static_cast<int>(type)];
+        }};
+        return table.at(static_cast<size_t>(type));
     }
 };
 
@@ -771,6 +804,9 @@ public:
         return gen;
     }
 
+    BranchTargetBufferCodeGenerator(const BranchTargetBufferCodeGenerator&) = delete;
+    BranchTargetBufferCodeGenerator& operator=(const BranchTargetBufferCodeGenerator&) = delete;
+
     std::vector<void*> generate(size_t blocks_cnt, size_t iterations, int alignment) {
         release_all();
         
@@ -787,7 +823,7 @@ public:
         auto generate_body_func = [&](asmjit::x86::Assembler& a) {
             std::vector<asmjit::Label> labels(blocks_cnt);
             for (auto& label : labels) {
-                label = a.new_label();
+                label = asmjit_new_label(a);
                 a.lea(asmjit::x86::r11, asmjit::x86::ptr(label));
                 a.jmp(asmjit::x86::r11);
                 a.align(asmjit::AlignMode::kCode, alignment);
@@ -798,7 +834,7 @@ public:
         auto generate_warmup = [&]() -> void* {
             asmjit::CodeHolder code;
             code.init(runtime_.environment());
-            code.set_logger(logger.get());
+            asmjit_set_logger(code, logger.get());
             asmjit::x86::Assembler a(&code);
 
             a.align(asmjit::AlignMode::kCode, alignment);
@@ -808,7 +844,7 @@ public:
             if (runtime_.add(&fn, &code) == asmjit::kErrorOk) {
                 warmup_function_ = fn;
                 __builtin___clear_cache(reinterpret_cast<char*>(fn),
-                                        reinterpret_cast<char*>(fn) + code.code_size());
+                                        reinterpret_cast<char*>(fn) + asmjit_code_size(code));
             }
 
             return fn;
@@ -817,12 +853,12 @@ public:
         auto generate_measure = [&]() -> void* {
             asmjit::CodeHolder code;
             code.init(runtime_.environment());
-            code.set_logger(logger.get());
+            asmjit_set_logger(code, logger.get());
             asmjit::x86::Assembler a(&code);
 
             a.mov(asmjit::x86::rcx, asmjit::imm(iterations));
             a.align(asmjit::AlignMode::kCode, alignment);
-            asmjit::Label loop_start = a.new_label();
+            asmjit::Label loop_start = asmjit_new_label(a);
             a.bind(loop_start);
             generate_body_func(a);
             a.dec(asmjit::x86::rcx);
@@ -831,9 +867,9 @@ public:
 
             void* fn = nullptr;
             if (runtime_.add(&fn, &code) == asmjit::kErrorOk) {
-                warmup_function_ = fn;
+                measure_function_ = fn;
                 __builtin___clear_cache(reinterpret_cast<char*>(fn),
-                                        reinterpret_cast<char*>(fn) + code.code_size());
+                                        reinterpret_cast<char*>(fn) + asmjit_code_size(code));
             }
 
             return fn;

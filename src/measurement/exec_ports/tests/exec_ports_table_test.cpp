@@ -79,5 +79,5 @@ TEST(ExecPortsTableTest, DetectsPortContentionFromTable) {
     }
 }
 
-} // namespace
-} // namespace silicon_probe::exec_ports
+}  // namespace
+}  // namespace silicon_probe::exec_ports

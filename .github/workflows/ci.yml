@@ -1,0 +1,153 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  format:
+    name: Format (clang-format)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install clang-format
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends clang-format
+
+      - name: Check formatting
+        shell: bash
+        run: |
+          clang-format -i $(rg --files -g '*.cpp' -g '*.hpp' -g '*.cc' -g '*.cxx' -g '*.h' -g '*.hh')  
+
+  static-analysis:
+    name: Static Analysis (cppcheck)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            cmake \
+            ninja-build \
+            g++ \
+            cppcheck \
+            libcli11-dev \
+            libspdlog-dev \
+            libyaml-cpp-dev \
+            libasmjit-dev \
+            libpfm4-dev \
+            libgtest-dev
+
+      - name: Configure
+        run: |
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DMARS_BUILD_APPS=ON \
+            -DMARS_BUILD_TESTS=OFF \
+            -DMARS_ENABLE_SANITIZERS=OFF \
+            -DMARS_ENABLE_WERROR=ON
+
+      - name: Run cppcheck
+        shell: bash
+        run: |
+          exclude_args=()
+          while IFS= read -r test_file; do
+            exclude_args+=("-i${test_file}")
+          done < <(find src include -name '*_test.cpp' | sort)
+
+          cppcheck \
+            --project=build/compile_commands.json \
+            --enable=warning,style,performance,portability,information \
+            --inconclusive \
+            --force \
+            --check-level=exhaustive \
+            --error-exitcode=1 \
+            --inline-suppr \
+            --quiet \
+            --suppressions-list=.cppcheck-suppressions \
+            --suppress=missingIncludeSystem \
+            --suppress=unusedFunction \
+            --suppress=unmatchedSuppression \
+            --suppress=noValidConfiguration \
+            "${exclude_args[@]}"
+
+  build-and-test:
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Build and Test (Release)
+            build_dir: build-release
+            build_type: Release
+            sanitizers: OFF
+          - name: Build and Test (Debug + Sanitizers)
+            build_dir: build-sanitizers
+            build_type: Debug
+            sanitizers: ON
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            cmake \
+            ninja-build \
+            g++ \
+            ccache \
+            libcli11-dev \
+            libspdlog-dev \
+            libyaml-cpp-dev \
+            libasmjit-dev \
+            libpfm4-dev \
+            libgtest-dev
+
+      - name: Cache ccache
+        uses: actions/cache@v4
+        with:
+          path: ~/.ccache
+          key: ${{ runner.os }}-${{ matrix.build_dir }}-ccache-${{ hashFiles('CMakeLists.txt', 'include/**/*.hpp', 'include/**/*.ipp', 'src/**/*.cpp', 'src/**/*.hpp', 'src/**/*.ipp', '.github/workflows/ci.yml') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ matrix.build_dir }}-ccache-
+
+      - name: Configure
+        run: |
+          cmake -S . -B ${{ matrix.build_dir }} -G Ninja \
+            -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+            -DMARS_BUILD_APPS=ON \
+            -DMARS_BUILD_TESTS=ON \
+            -DMARS_ENABLE_SANITIZERS=${{ matrix.sanitizers }} \
+            -DMARS_ENABLE_WERROR=ON \
+            -DMARS_SETCAP_AFTER_BUILD=OFF
+
+      - name: Build
+        run: cmake --build ${{ matrix.build_dir }} --parallel
+
+      - name: Run tests
+        env:
+          ASAN_OPTIONS: detect_leaks=1:strict_string_checks=1:check_initialization_order=1
+          UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
+        run: ctest --test-dir ${{ matrix.build_dir }} --output-on-failure --timeout 120

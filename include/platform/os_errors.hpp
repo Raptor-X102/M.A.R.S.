@@ -6,18 +6,18 @@
 namespace silicon_probe::platform {
 
 class SystemError : public std::runtime_error {
-public:
+   public:
     explicit SystemError(const std::string& message) : std::runtime_error(message) {}
 };
 
 class PermissionError : public SystemError {
-public:
+   public:
     explicit PermissionError(const std::string& message) : SystemError(message) {}
 };
 
 class ResourceError : public SystemError {
-public:
+   public:
     explicit ResourceError(const std::string& message) : SystemError(message) {}
 };
 
-} // namespace silicon_probe::platform
+}  // namespace silicon_probe::platform

@@ -1,14 +1,14 @@
 #pragma once
 
-#include "shared_types/cpu_info_data.hpp"
-
 #include <iomanip>
 #include <ostream>
+
+#include "shared_types/cpu_info_data.hpp"
 
 namespace silicon_probe::core {
 
 class SummaryPrinter {
-public:
+   public:
     static void print(std::ostream& stream, const shared_types::CpuInfoData& data) {
         stream << "\n=== CPU Info Summary ===\n";
 
@@ -73,4 +73,4 @@ public:
     }
 };
 
-} // namespace silicon_probe::core
+}  // namespace silicon_probe::core

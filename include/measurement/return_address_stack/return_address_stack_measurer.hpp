@@ -1,20 +1,20 @@
 // branch_history_table_measurer.hpp
 #pragma once
 
-#include "infra/logging.hpp"
+#include <algorithm>
+#include <cmath>
+#include <random>
+#include <vector>
+
 #include "core/measurer.hpp"
+#include "infra/logging.hpp"
 #include "platform/arch.hpp"
 #include "platform/os.hpp"
-
-#include <vector>
-#include <random>
-#include <cmath>
-#include <algorithm>
 
 namespace silicon_probe::return_address_stack {
 
 class ReturnAddressStackMeasurer final : public core::Measurer {
-  public:
+   public:
     static constexpr size_t kDefaultMinRecursion = 1;
     static constexpr size_t kDefaultMaxRecursion = 32;
     static constexpr size_t kDefaultRecursionStep = 1;
@@ -34,7 +34,7 @@ class ReturnAddressStackMeasurer final : public core::Measurer {
         size_t required_consecutive_points = 3;
     };
 
-  private:
+   private:
     Config config_;
 
     struct Result {
@@ -44,11 +44,13 @@ class ReturnAddressStackMeasurer final : public core::Measurer {
         size_t max_exec_time;
     };
 
-  public:
+   public:
     ReturnAddressStackMeasurer() : ReturnAddressStackMeasurer(Config{}) {}
     explicit ReturnAddressStackMeasurer(Config config) : config_(std::move(config)) {
-        SPDLOG_INFO("[{}] configured: min_recursion_depth={}, max_recursion_depth={}, recursion_depth_step={}, iterations={}", name(),
-                    config_.min_recursion_depth, config_.max_recursion_depth, config_.recursion_depth_step, config_.iterations);
+        SPDLOG_INFO(
+            "[{}] configured: min_recursion_depth={}, max_recursion_depth={}, recursion_depth_step={}, iterations={}",
+            name(), config_.min_recursion_depth, config_.max_recursion_depth, config_.recursion_depth_step,
+            config_.iterations);
     }
 
     std::string_view name() const noexcept override { return "return address stack"; }
@@ -60,13 +62,13 @@ class ReturnAddressStackMeasurer final : public core::Measurer {
 
         std::vector<Result> results;
 
-        for (size_t depth = config_.min_recursion_depth; depth <= config_.max_recursion_depth; depth += config_.recursion_depth_step) {
-
+        for (size_t depth = config_.min_recursion_depth; depth <= config_.max_recursion_depth;
+             depth += config_.recursion_depth_step) {
             std::vector<uint64_t> raw_exec_times;
             raw_exec_times.reserve(config_.iterations);
 
             for (size_t outer = 0; outer < config_.iterations; ++outer) {
-                //volatile int sink = 0;
+                // volatile int sink = 0;
                 uint64_t start = platform::arch::tick();
                 recursive_func(depth, 0 /*, sink*/);
                 uint64_t end = platform::arch::tick();
@@ -90,7 +92,8 @@ class ReturnAddressStackMeasurer final : public core::Measurer {
 
             results.push_back({depth, min_time, avg_time, max_time});
 
-            SPDLOG_INFO("[{}] depth={:3d}  min={:3d}  avg={:6.2f}  max={:3d}", name(), depth, min_time, avg_time, max_time);
+            SPDLOG_INFO("[{}] depth={:3d}  min={:3d}  avg={:6.2f}  max={:3d}", name(), depth, min_time, avg_time,
+                        max_time);
         }
 
         if (results.empty()) {
@@ -103,15 +106,16 @@ class ReturnAddressStackMeasurer final : public core::Measurer {
             data.ras_size = ras_size;
             SPDLOG_INFO("[{}] Return Address Stack effective size ≈ {} addresses", name(), ras_size);
         } else {
-            SPDLOG_ERROR("[{}] could not detect RAS saturation in period range [{}, {}]", name(), config_.min_recursion_depth,
-                         config_.max_recursion_depth);
+            SPDLOG_ERROR("[{}] could not detect RAS saturation in period range [{}, {}]", name(),
+                         config_.min_recursion_depth, config_.max_recursion_depth);
         }
 
         SPDLOG_INFO("[{}] measurement complete", name());
     }
 
-  private:
-    __attribute__((noinline, noclone)) void recursive_func(size_t depth, size_t iteration /*, volatile int& sink*/) {
+   private:
+    __attribute__((noinline, noclone)) static void recursive_func(size_t depth,
+                                                                  size_t iteration /*, volatile int& sink*/) {
         if (iteration >= depth) return;
 
         recursive_func(depth, iteration + 1 /*, sink*/);
@@ -158,11 +162,11 @@ class ReturnAddressStackMeasurer final : public core::Measurer {
                 }
             }
             if (stable) {
-                return results[i].depth; // depth at which delta occurred
+                return results[i].depth;  // depth at which delta occurred
             }
         }
         return -1;
     }
 };
 
-} // namespace silicon_probe::branch_history_table
+}  // namespace silicon_probe::return_address_stack

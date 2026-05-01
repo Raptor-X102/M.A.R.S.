@@ -76,5 +76,5 @@ TEST(RobTableTest, DetectsRobSaturationFromTable) {
     }
 }
 
-} // namespace
-} // namespace silicon_probe::rob
+}  // namespace
+}  // namespace silicon_probe::rob

@@ -1,23 +1,23 @@
 #pragma once
 
-#include "infra/logging.hpp"
+#include <algorithm>
+#include <cmath>
+#include <random>
+#include <vector>
+
 #include "core/measurer.hpp"
+#include "infra/logging.hpp"
 #include "platform/arch.hpp"
 #include "platform/os.hpp"
 #include "platform/pmc.hpp"
 
-#include <vector>
-#include <random>
-#include <cmath>
-#include <algorithm>
-
 namespace silicon_probe::branch_history_table {
 
 class BranchHistoryTableMeasurer final : public core::Measurer {
-  public:
+   public:
     static constexpr size_t kDefaultMinPeriod = 16;
     static constexpr size_t kDefaultMaxPeriod = 32 * 1024;
-    static constexpr size_t kDefaultPeriodCoef = 2; // geometric progression
+    static constexpr size_t kDefaultPeriodCoef = 2;  // geometric progression
     static constexpr size_t kDefaultIterations = 100'000'000;
     static constexpr unsigned int kPatternSeed = 123;
     static constexpr double kThreshold035 = 0.35;
@@ -36,19 +36,19 @@ class BranchHistoryTableMeasurer final : public core::Measurer {
         size_t iterations = kDefaultIterations;
     };
 
-  private:
+   private:
     Config config_;
 
     struct RawResult {
         size_t period;
-        double miss_per_iter; // branch misses per iteration (0..0.5)
+        double miss_per_iter;  // branch misses per iteration (0..0.5)
     };
 
-  public:
+   public:
     BranchHistoryTableMeasurer() : BranchHistoryTableMeasurer(Config{}) {}
     explicit BranchHistoryTableMeasurer(Config config) : config_(std::move(config)) {
-        SPDLOG_INFO("[{}] configured: min_period={}, max_period={}, coeff={}, iterations={}", name(), config_.min_period,
-                    config_.max_period, config_.period_coeff, config_.iterations);
+        SPDLOG_INFO("[{}] configured: min_period={}, max_period={}, coeff={}, iterations={}", name(),
+                    config_.min_period, config_.max_period, config_.period_coeff, config_.iterations);
     }
 
     std::string_view name() const noexcept override { return "branch history table"; }
@@ -72,7 +72,7 @@ class BranchHistoryTableMeasurer final : public core::Measurer {
         // Prepare random pattern generator
         std::mt19937 rng(kPatternSeed);
         std::uniform_int_distribution<int> dist(0, 1);
-        std::vector<bool> pattern(config_.max_period); // reusable buffer
+        std::vector<bool> pattern(config_.max_period);  // reusable buffer
         std::vector<RawResult> results;
 
         for (size_t period = config_.min_period; period <= config_.max_period; period *= config_.period_coeff) {
@@ -117,7 +117,8 @@ class BranchHistoryTableMeasurer final : public core::Measurer {
 
         int bht_size = detectBHTSaturation(results);
         if (bht_size < 0) {
-            SPDLOG_ERROR("[{}] could not detect BHT saturation in period range [{}, {}]", name(), config_.min_period, config_.max_period);
+            SPDLOG_ERROR("[{}] could not detect BHT saturation in period range [{}, {}]", name(), config_.min_period,
+                         config_.max_period);
         } else {
             SPDLOG_INFO("[{}] Branch History Table effective length ≈ {} entries", name(), bht_size);
             data.bht_size = bht_size;
@@ -126,15 +127,15 @@ class BranchHistoryTableMeasurer final : public core::Measurer {
         SPDLOG_INFO("[{}] measurement complete", name());
     }
 
-  private:
+   private:
     // Multiple estimation methods for BHT saturation point
     struct BHTEstimates {
-        int threshold_035 = -1;               // miss_rate > 0.35
-        int threshold_040 = -1;               // miss_rate > 0.40
-        int threshold_baseline_plus_015 = -1; // baseline + 0.15
-        int max_delta = -1;                   // largest increase in miss_rate
-        int inflection_point = -1;            // max second derivative (log scale)
-        int median_cross = -1;                // miss_rate crosses 0.4
+        int threshold_035 = -1;                // miss_rate > 0.35
+        int threshold_040 = -1;                // miss_rate > 0.40
+        int threshold_baseline_plus_015 = -1;  // baseline + 0.15
+        int max_delta = -1;                    // largest increase in miss_rate
+        int inflection_point = -1;             // max second derivative (log scale)
+        int median_cross = -1;                 // miss_rate crosses 0.4
         int best_guess = -1;
     };
 
@@ -219,7 +220,7 @@ class BranchHistoryTableMeasurer final : public core::Measurer {
         }
         if (!second_deriv.empty()) {
             auto max_it = std::max_element(second_deriv.begin(), second_deriv.end());
-            size_t idx = std::distance(second_deriv.begin(), max_it) + 1; // +1 because we started at i=1
+            size_t idx = std::distance(second_deriv.begin(), max_it) + 1;  // +1 because we started at i=1
             if (idx < periods.size()) {
                 est.inflection_point = static_cast<int>(periods[idx]);
             }
@@ -259,4 +260,4 @@ class BranchHistoryTableMeasurer final : public core::Measurer {
     }
 };
 
-} // namespace silicon_probe::branch_history_table
+}  // namespace silicon_probe::branch_history_table

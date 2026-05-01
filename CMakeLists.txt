@@ -132,6 +132,9 @@ add_subdirectory(include/core)
 add_subdirectory(src/app)
 
 if(MARS_BUILD_TESTS)
+    if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/src/core/CMakeLists.txt)
+        add_subdirectory(src/core)
+    endif()
     add_subdirectory(src/measurement)
 endif()
 

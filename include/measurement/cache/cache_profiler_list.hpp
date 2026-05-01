@@ -1,9 +1,5 @@
 #pragma once
 
-#include "infra/logging.hpp"
-#include "platform/arch.hpp"
-#include "platform/os.hpp"
-
 #include <algorithm>
 #include <cstddef>
 #include <cstring>
@@ -14,10 +10,14 @@
 #include <stdexcept>
 #include <vector>
 
+#include "infra/logging.hpp"
+#include "platform/arch.hpp"
+#include "platform/os.hpp"
+
 namespace silicon_probe::cache {
 
 class CacheProfilerList {
-  public:
+   public:
     enum class MemoryType {
         aligned,
         huge_page,
@@ -44,7 +44,7 @@ class CacheProfilerList {
         }
     };
 
-  private:
+   private:
     size_t line_size_ = 0;
     size_t element_count_ = 0;
     std::unique_ptr<char, MemoryDeleter> memory_;
@@ -75,7 +75,8 @@ class CacheProfilerList {
             raw_memory = platform::aligned_alloc(line_size_, bytes);
         }
 
-        memory_ = std::unique_ptr<char, MemoryDeleter>(static_cast<char*>(raw_memory), MemoryDeleter{memory_type_, bytes});
+        memory_ =
+            std::unique_ptr<char, MemoryDeleter>(static_cast<char*>(raw_memory), MemoryDeleter{memory_type_, bytes});
         elements_ = static_cast<Element*>(raw_memory);
     }
 
@@ -103,12 +104,15 @@ class CacheProfilerList {
         Element* current = elements_;
 
         for (size_t iteration = 0; iteration < element_count_; ++iteration) {
-            const size_t index = static_cast<size_t>(reinterpret_cast<char*>(current) - reinterpret_cast<char*>(elements_)) / line_size_;
+            const size_t index =
+                static_cast<size_t>(reinterpret_cast<char*>(current) - reinterpret_cast<char*>(elements_)) / line_size_;
             if (index >= element_count_) {
-                throw std::runtime_error(build_error_message("Cycle verification failed: pointer out of bounds at iteration ", iteration));
+                throw std::runtime_error(
+                    build_error_message("Cycle verification failed: pointer out of bounds at iteration ", iteration));
             }
             if (visited[index]) {
-                throw std::runtime_error(build_error_message("Cycle verification failed: duplicate visit at index ", index));
+                throw std::runtime_error(
+                    build_error_message("Cycle verification failed: duplicate visit at index ", index));
             }
 
             visited[index] = true;
@@ -120,12 +124,10 @@ class CacheProfilerList {
         }
     }
 
-  public:
+   public:
     explicit CacheProfilerList(size_t cache_line_size, size_t count, unsigned int seed = 12345,
                                MemoryType memory_type = MemoryType::aligned)
-        : line_size_(cache_line_size),
-          memory_(nullptr, MemoryDeleter{memory_type, 0}),
-          memory_type_(memory_type) {
+        : line_size_(cache_line_size), memory_(nullptr, MemoryDeleter{memory_type, 0}), memory_type_(memory_type) {
         if (cache_line_size == 0) {
             throw std::invalid_argument("Cache line size cannot be zero");
         }
@@ -168,4 +170,4 @@ class CacheProfilerList {
     }
 };
 
-} // namespace silicon_probe::cache
+}  // namespace silicon_probe::cache

@@ -1,11 +1,11 @@
 #pragma once
 
-#include "infra/logging.hpp"
-
 #include <algorithm>
 #include <cmath>
 #include <numeric>
 #include <vector>
+
+#include "infra/logging.hpp"
 
 namespace silicon_probe::cache {
 
@@ -20,13 +20,13 @@ struct BoundaryAnalyzerConfig {
 };
 
 class BoundaryAnalyzer {
-  private:
+   private:
     BoundaryAnalyzerConfig config_;
 
-  public:
+   public:
     explicit BoundaryAnalyzer(BoundaryAnalyzerConfig config = {}) : config_(config) {}
 
-    Statistics compute_stats(const std::vector<double>& samples) const {
+    static Statistics compute_stats(const std::vector<double>& samples) {
         Statistics statistics{};
         if (samples.empty()) {
             return statistics;
@@ -49,7 +49,8 @@ class BoundaryAnalyzer {
     }
 
     template <typename MeasureFn>
-    size_t refine_boundary(size_t left, size_t right, size_t precision, MeasureFn&& measure, double baseline_mean) const {
+    size_t refine_boundary(size_t left, size_t right, size_t precision, MeasureFn&& measure,
+                           double baseline_mean) const {
         SPDLOG_DEBUG("[boundary] baseline={}, threshold={}x", baseline_mean, config_.growth_factor);
 
         size_t current_left = left;
@@ -68,8 +69,8 @@ class BoundaryAnalyzer {
             const double ratio = baseline_mean > 0.0 ? statistics.mean / baseline_mean : 0.0;
             const bool out_of_cache = ratio > config_.growth_factor;
 
-            SPDLOG_DEBUG("[boundary] size={}, mean={}, ratio={}, threshold={}, decision={}", midpoint, statistics.mean, ratio,
-                         config_.growth_factor, out_of_cache ? "out" : "in");
+            SPDLOG_DEBUG("[boundary] size={}, mean={}, ratio={}, threshold={}, decision={}", midpoint, statistics.mean,
+                         ratio, config_.growth_factor, out_of_cache ? "out" : "in");
 
             if (out_of_cache) {
                 current_right = midpoint;
@@ -84,4 +85,4 @@ class BoundaryAnalyzer {
     }
 };
 
-} // namespace silicon_probe::cache
+}  // namespace silicon_probe::cache

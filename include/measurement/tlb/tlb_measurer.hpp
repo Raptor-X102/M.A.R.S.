@@ -1,10 +1,5 @@
 #pragma once
 
-#include "infra/logging.hpp"
-#include "core/measurer.hpp"
-#include "platform/arch.hpp"
-#include "platform/os.hpp"
-
 #include <algorithm>
 #include <cerrno>
 #include <cstddef>
@@ -21,6 +16,11 @@
 #include <unistd.h>
 #include <utility>
 #include <vector>
+
+#include "core/measurer.hpp"
+#include "infra/logging.hpp"
+#include "platform/arch.hpp"
+#include "platform/os.hpp"
 
 namespace silicon_probe::tlb {
 
@@ -40,7 +40,7 @@ namespace silicon_probe::tlb {
  * The result can be used to estimate L1 and L2 TLB sizes.
  */
 class TlbMeasurer final : public core::Measurer {
-  public:
+   public:
     /**
      * @brief Minimum number of pages used in the benchmark.
      */
@@ -195,7 +195,7 @@ class TlbMeasurer final : public core::Measurer {
         platform::MeasurementEnvironmentOptions environment;
     };
 
-  private:
+   private:
     /**
      * @brief One node in the pointer chasing chain.
      *
@@ -253,9 +253,7 @@ class TlbMeasurer final : public core::Measurer {
          *
          * @param other Source mapping.
          */
-        Mapping(Mapping&& other) noexcept {
-            *this = std::move(other);
-        }
+        Mapping(Mapping&& other) noexcept { *this = std::move(other); }
 
         /**
          * @brief Move assignment operator.
@@ -269,10 +267,10 @@ class TlbMeasurer final : public core::Measurer {
             if (this != &other) {
                 release();
 
-                base       = std::exchange(other.base, nullptr);
+                base = std::exchange(other.base, nullptr);
                 size_bytes = std::exchange(other.size_bytes, 0);
-                huge       = std::exchange(other.huge, false);
-                locked     = std::exchange(other.locked, false);
+                huge = std::exchange(other.huge, false);
+                locked = std::exchange(other.locked, false);
             }
 
             return *this;
@@ -281,9 +279,7 @@ class TlbMeasurer final : public core::Measurer {
         /**
          * @brief Releases owned memory.
          */
-        ~Mapping() {
-            release();
-        }
+        ~Mapping() { release(); }
 
         /**
          * @brief Frees the memory block.
@@ -306,10 +302,10 @@ class TlbMeasurer final : public core::Measurer {
                 munmap(base, size_bytes);
             }
 
-            base       = nullptr;
+            base = nullptr;
             size_bytes = 0;
-            huge       = false;
-            locked     = false;
+            huge = false;
+            locked = false;
         }
     };
 
@@ -335,7 +331,7 @@ class TlbMeasurer final : public core::Measurer {
      */
     Config config_;
 
-  public:
+   public:
     /**
      * @brief Creates a TLB measurer with default configuration.
      */
@@ -347,13 +343,8 @@ class TlbMeasurer final : public core::Measurer {
      * @param config Benchmark configuration.
      */
     explicit TlbMeasurer(Config config) : config_(std::move(config)) {
-        SPDLOG_INFO("[{}] configured: pages {}..{}, iterations={}, page_size={}, huge_pages={}",
-                    name(),
-                    kMinPages,
-                    config_.max_pages,
-                    config_.iterations,
-                    page_size_bytes(),
-                    config_.use_huge_pages);
+        SPDLOG_INFO("[{}] configured: pages {}..{}, iterations={}, page_size={}, huge_pages={}", name(), kMinPages,
+                    config_.max_pages, config_.iterations, page_size_bytes(), config_.use_huge_pages);
     }
 
     /**
@@ -361,9 +352,7 @@ class TlbMeasurer final : public core::Measurer {
      *
      * @return Name of the measurer.
      */
-    std::string_view name() const noexcept override {
-        return "tlb";
-    }
+    std::string_view name() const noexcept override { return "tlb"; }
 
     /**
      * @brief Runs the TLB benchmark and stores the result.
@@ -394,10 +383,10 @@ class TlbMeasurer final : public core::Measurer {
             data.cpu_vendor = vendor;
         }
 
-        const size_t page_size        = page_size_bytes();
-        const size_t pool_pages       = checked_mul(config_.max_pages, kPagePoolScale);
+        const size_t page_size = page_size_bytes();
+        const size_t pool_pages = checked_mul(config_.max_pages, kPagePoolScale);
         const size_t allocation_bytes = checked_mul(pool_pages, page_size);
-        const size_t cache_line       = platform::cache_line_size();
+        const size_t cache_line = platform::cache_line_size();
 
         data.tlb_page_size_bytes = page_size;
         data.tlb_l1_size.reset();
@@ -406,8 +395,8 @@ class TlbMeasurer final : public core::Measurer {
         Mapping mapping = allocate_mapping(allocation_bytes);
         advise_mapping(mapping);
 
-        std::vector<size_t>    page_counts = build_page_counts();
-        std::vector<PageNode*> pool        = make_page_nodes(mapping.base, pool_pages, page_size, cache_line);
+        std::vector<size_t> page_counts = build_page_counts();
+        std::vector<PageNode*> pool = make_page_nodes(mapping.base, pool_pages, page_size, cache_line);
         std::vector<PageNode*> order(config_.max_pages);
         std::vector<shared_types::TlbSummaryPoint> points;
         points.reserve(page_counts.size());
@@ -421,12 +410,8 @@ class TlbMeasurer final : public core::Measurer {
             shared_types::TlbSummaryPoint point = measure_point(pool, order, rng, pages, page_size);
             points.push_back(point);
 
-            SPDLOG_INFO("[{}] pages={}, bytes={}, median_cpa={:.3f}, min={:.3f}, max={:.3f}",
-                        name(),
-                        point.pages,
-                        point.bytes,
-                        point.median_cycles_per_access,
-                        point.min_cycles_per_access,
+            SPDLOG_INFO("[{}] pages={}, bytes={}, median_cpa={:.3f}, min={:.3f}, max={:.3f}", name(), point.pages,
+                        point.bytes, point.median_cycles_per_access, point.min_cycles_per_access,
                         point.max_cycles_per_access);
         }
 
@@ -443,7 +428,7 @@ class TlbMeasurer final : public core::Measurer {
         SPDLOG_INFO("[{}] TLB benchmark complete", name());
     }
 
-  private:
+   private:
     /**
      * @brief Stops the compiler from removing or moving important operations.
      *
@@ -462,9 +447,7 @@ class TlbMeasurer final : public core::Measurer {
      *
      * @return 4 KB for normal pages, or 2 MB for huge pages.
      */
-    size_t page_size_bytes() const noexcept {
-        return config_.use_huge_pages ? kHugePageSize : kDefaultPageSize;
-    }
+    size_t page_size_bytes() const noexcept { return config_.use_huge_pages ? kHugePageSize : kDefaultPageSize; }
 
     /**
      * @brief Checks that the configuration is valid.
@@ -539,7 +522,7 @@ class TlbMeasurer final : public core::Measurer {
     Mapping allocate_mapping(size_t size_bytes) const {
         Mapping mapping;
         mapping.size_bytes = size_bytes;
-        mapping.huge       = config_.use_huge_pages;
+        mapping.huge = config_.use_huge_pages;
 
         if (config_.use_huge_pages) {
             mapping.base = platform::huge_alloc(size_bytes);
@@ -549,17 +532,12 @@ class TlbMeasurer final : public core::Measurer {
                     "Failed to allocate MAP_HUGETLB memory. Reserve huge pages or disable huge-page mode.");
             }
         } else {
-            mapping.base = mmap(nullptr,
-                                size_bytes,
-                                PROT_READ | PROT_WRITE,
-                                MAP_PRIVATE | MAP_ANONYMOUS,
-                                -1,
-                                0);
+            mapping.base = mmap(nullptr, size_bytes, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
 
             if (mapping.base == MAP_FAILED) {
                 mapping.base = nullptr;
-                throw platform::ResourceError(
-                    "Failed to allocate benchmark memory: " + std::string(std::strerror(errno)));
+                throw platform::ResourceError("Failed to allocate benchmark memory: " +
+                                              std::string(std::strerror(errno)));
             }
         }
 
@@ -608,16 +586,14 @@ class TlbMeasurer final : public core::Measurer {
      * @param cache_line_bytes Size of one cache line.
      * @return Vector with pointers to page nodes.
      */
-    static std::vector<PageNode*> make_page_nodes(void* base,
-                                                  size_t page_count,
-                                                  size_t page_size,
+    static std::vector<PageNode*> make_page_nodes(void* base, size_t page_count, size_t page_size,
                                                   size_t cache_line_bytes) {
         std::vector<PageNode*> nodes;
         nodes.reserve(page_count);
 
         auto* bytes = static_cast<std::byte*>(base);
 
-        const size_t stride         = std::max(cache_line_bytes, sizeof(PageNode));
+        const size_t stride = std::max(cache_line_bytes, sizeof(PageNode));
         const size_t slots_per_page = std::max<size_t>(1, page_size / stride);
 
         for (size_t page = 0; page < page_count; ++page) {
@@ -625,7 +601,7 @@ class TlbMeasurer final : public core::Measurer {
             auto* node = reinterpret_cast<PageNode*>(bytes + page * page_size + offset);
 
             node->next = node;
-            node->tag  = page;
+            node->tag = page;
 
             nodes.push_back(node);
         }
@@ -692,9 +668,9 @@ class TlbMeasurer final : public core::Measurer {
      * @param start First node in the chain.
      * @param pages Number of pages in the chain.
      */
-    __attribute__((noinline)) void warmup(PageNode* start, size_t pages) const {
-        PageNode* cursor   = start;
-        size_t    accesses = std::max(pages, pages * kWarmupRounds);
+    __attribute__((noinline)) static void warmup(PageNode* start, size_t pages) {
+        PageNode* cursor = start;
+        size_t accesses = std::max(pages, pages * kWarmupRounds);
 
         for (size_t i = 0; i < accesses; ++i) {
             cursor = cursor->next;
@@ -762,11 +738,8 @@ class TlbMeasurer final : public core::Measurer {
      * @param page_size Size of one page.
      * @return Summary point for this page count.
      */
-    shared_types::TlbSummaryPoint measure_point(std::vector<PageNode*>& pool,
-                                                std::vector<PageNode*>& order,
-                                                std::mt19937& rng,
-                                                size_t pages,
-                                                size_t page_size) const {
+    shared_types::TlbSummaryPoint measure_point(std::vector<PageNode*>& pool, std::vector<PageNode*>& order,
+                                                std::mt19937& rng, size_t pages, size_t page_size) const {
         std::vector<double> samples;
         samples.reserve(kRepeats);
 
@@ -787,19 +760,14 @@ class TlbMeasurer final : public core::Measurer {
         std::vector<double> sorted = samples;
         std::sort(sorted.begin(), sorted.end());
 
-        const double min_value    = sorted.front();
-        const double max_value    = sorted.back();
+        const double min_value = sorted.front();
+        const double max_value = sorted.back();
         const double median_value = median(sorted);
-        const double mean_value   =
+        const double mean_value =
             std::accumulate(samples.begin(), samples.end(), 0.0) / static_cast<double>(samples.size());
 
         return shared_types::TlbSummaryPoint{
-            pages,
-            pages * page_size,
-            min_value,
-            median_value,
-            mean_value,
-            max_value,
+            pages, pages * page_size, min_value, median_value, mean_value, max_value,
         };
     }
 
@@ -811,7 +779,7 @@ class TlbMeasurer final : public core::Measurer {
      * @param points Measured benchmark points.
      * @return Detected boundary indexes.
      */
-    Boundaries detect_boundaries(const std::vector<shared_types::TlbSummaryPoint>& points) const {
+    static Boundaries detect_boundaries(const std::vector<shared_types::TlbSummaryPoint>& points) {
         Boundaries result;
 
         if (points.size() < 3) {
@@ -822,21 +790,13 @@ class TlbMeasurer final : public core::Measurer {
 
         const size_t l1_start = first_index_with_at_least_pages(points, kMinL1CandidatePages);
 
-        result.l1 = find_latency_jump(points,
-                                      l1_start,
-                                      baseline,
-                                      kL1GrowthRatio,
-                                      kL1MinJumpCycles);
+        result.l1 = find_latency_jump(points, l1_start, baseline, kL1GrowthRatio, kL1MinJumpCycles);
 
         if (result.l1) {
             const size_t l2_start = *result.l1 + kL2SearchGapPoints;
             const double l1_level = points[*result.l1].median_cycles_per_access;
 
-            result.l2 = find_latency_jump(points,
-                                          l2_start,
-                                          l1_level,
-                                          kL2GrowthRatio,
-                                          kL2MinJumpCycles);
+            result.l2 = find_latency_jump(points, l2_start, l1_level, kL2GrowthRatio, kL2MinJumpCycles);
         }
 
         return result;
@@ -894,24 +854,22 @@ class TlbMeasurer final : public core::Measurer {
      * @return Index of the jump, or std::nullopt if no jump is found.
      */
     static std::optional<size_t> find_latency_jump(const std::vector<shared_types::TlbSummaryPoint>& points,
-                                                   size_t start_index,
-                                                   double reference_level,
-                                                   double ratio_threshold,
+                                                   size_t start_index, double reference_level, double ratio_threshold,
                                                    double min_jump_cycles) {
         if (start_index >= points.size()) {
             return std::nullopt;
         }
 
         const double safe_reference = std::max(reference_level, 0.001);
-        const size_t first          = std::max<size_t>(1, start_index);
+        const size_t first = std::max<size_t>(1, start_index);
 
         for (size_t i = first; i < points.size(); ++i) {
             const double previous = points[i - 1].median_cycles_per_access;
-            const double current  = points[i].median_cycles_per_access;
+            const double current = points[i].median_cycles_per_access;
 
             const double absolute_jump = current - previous;
-            const double local_ratio   = previous > 0.0 ? current / previous : 0.0;
-            const double global_ratio  = current / safe_reference;
+            const double local_ratio = previous > 0.0 ? current / previous : 0.0;
+            const double global_ratio = current / safe_reference;
 
             if (absolute_jump < min_jump_cycles) {
                 continue;
@@ -946,7 +904,7 @@ class TlbMeasurer final : public core::Measurer {
         }
 
         const double current = points[index].median_cycles_per_access;
-        const double next    = points[index + 1].median_cycles_per_access;
+        const double next = points[index + 1].median_cycles_per_access;
 
         return next >= current * 0.97;
     }
@@ -970,4 +928,4 @@ class TlbMeasurer final : public core::Measurer {
     }
 };
 
-} // namespace silicon_probe::tlb
+}  // namespace silicon_probe::tlb

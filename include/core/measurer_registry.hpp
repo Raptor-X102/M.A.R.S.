@@ -1,8 +1,5 @@
 #pragma once
 
-#include "core/measurer.hpp"
-#include "infra/logging.hpp"
-
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -10,14 +7,17 @@
 #include <unordered_map>
 #include <vector>
 
+#include "core/measurer.hpp"
+#include "infra/logging.hpp"
+
 namespace silicon_probe::core {
 
 class MeasurerRegistry {
-private:
+   private:
     std::vector<std::unique_ptr<Measurer>> measurers_;
     std::unordered_map<std::string, Measurer*> measurer_map_;
 
-public:
+   public:
     void register_measurer(std::unique_ptr<Measurer> measurer) {
         if (!measurer) {
             throw std::invalid_argument("Cannot register a null measurer");
@@ -38,9 +38,7 @@ public:
         measurers_.push_back(std::move(measurer));
     }
 
-    const std::vector<std::unique_ptr<Measurer>>& measurers() const noexcept {
-        return measurers_;
-    }
+    const std::vector<std::unique_ptr<Measurer>>& measurers() const noexcept { return measurers_; }
 
     const Measurer* find(std::string_view name) const noexcept {
         const auto iterator = measurer_map_.find(std::string(name));
@@ -48,4 +46,4 @@ public:
     }
 };
 
-} // namespace silicon_probe::core
+}  // namespace silicon_probe::core
