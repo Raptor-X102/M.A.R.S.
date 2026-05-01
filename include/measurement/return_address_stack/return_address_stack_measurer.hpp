@@ -114,7 +114,8 @@ class ReturnAddressStackMeasurer final : public core::Measurer {
     }
 
    private:
-    __attribute__((noinline, noclone)) static void recursive_func(size_t depth, size_t iteration /*, volatile int& sink*/) {
+    __attribute__((noinline, noclone)) static void recursive_func(size_t depth,
+                                                                  size_t iteration /*, volatile int& sink*/) {
         if (iteration >= depth) return;
 
         recursive_func(depth, iteration + 1 /*, sink*/);
