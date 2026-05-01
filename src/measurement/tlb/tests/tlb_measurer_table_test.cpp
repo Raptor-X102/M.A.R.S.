@@ -14,8 +14,8 @@ namespace {
 using Point = shared_types::TlbSummaryPoint;
 
 struct BuildPageCountsCase {
-    const char*         name;
-    size_t              max_pages;
+    const char* name;
+    size_t max_pages;
     std::vector<size_t> expected_counts;
 };
 
@@ -38,10 +38,10 @@ TEST(TlbMeasurerTableTest, BuildsPageCountsFromTable) {
 }
 
 struct MeanFirstPointsCase {
-    const char*          name;
-    size_t               max_count;
-    std::vector<Point>   points;
-    double               expected;
+    const char* name;
+    size_t max_count;
+    std::vector<Point> points;
+    double expected;
 };
 
 TEST(TlbMeasurerTableTest, ComputesMeanOfFirstPointsFromTable) {
@@ -78,10 +78,10 @@ TEST(TlbMeasurerTableTest, ComputesMeanOfFirstPointsFromTable) {
 
 struct PageNodeOffsetCase {
     const char* name;
-    size_t      page_index;
-    size_t      page_size_bytes;
-    size_t      cache_line_bytes;
-    size_t      expected_offset;
+    size_t page_index;
+    size_t page_size_bytes;
+    size_t cache_line_bytes;
+    size_t expected_offset;
 };
 
 TEST(TlbMeasurerTableTest, DistributesPageNodesAcrossCacheLines) {
@@ -94,15 +94,15 @@ TEST(TlbMeasurerTableTest, DistributesPageNodesAcrossCacheLines) {
     };
 
     constexpr size_t page_count = 96;
-    constexpr size_t page_size  = 4096;
-    void* const base            = ::operator new(page_count * page_size, std::align_val_t(64));
+    constexpr size_t page_size = 4096;
+    void* const base = ::operator new(page_count * page_size, std::align_val_t(64));
 
     for (const auto& test_case : cases) {
         SCOPED_TRACE(test_case.name);
 
         const auto nodes =
             TlbMeasurer::make_page_nodes(base, page_count, test_case.page_size_bytes, test_case.cache_line_bytes);
-        const auto* bytes      = static_cast<std::byte*>(base);
+        const auto* bytes = static_cast<std::byte*>(base);
         const auto* node_bytes = reinterpret_cast<const std::byte*>(nodes.at(test_case.page_index));
         const size_t offset =
             static_cast<size_t>(node_bytes - bytes - test_case.page_index * test_case.page_size_bytes);
@@ -114,8 +114,8 @@ TEST(TlbMeasurerTableTest, DistributesPageNodesAcrossCacheLines) {
 }
 
 struct DetectBoundaryCase {
-    const char*           name;
-    std::vector<Point>    points;
+    const char* name;
+    std::vector<Point> points;
     std::optional<size_t> expected_l1_index;
     std::optional<size_t> expected_l2_index;
 };
@@ -162,5 +162,5 @@ TEST(TlbMeasurerTableTest, DetectsBoundariesFromTable) {
     }
 }
 
-} // namespace
-} // namespace silicon_probe::tlb
+}  // namespace
+}  // namespace silicon_probe::tlb

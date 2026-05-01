@@ -91,5 +91,5 @@ TEST(CacheMeasurerTableTest, DetectsBoundariesFromTable) {
     }
 }
 
-} // namespace
-} // namespace silicon_probe::cache
+}  // namespace
+}  // namespace silicon_probe::cache

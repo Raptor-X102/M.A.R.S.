@@ -1,10 +1,5 @@
-#include "platform/os.hpp"
-
-#include "infra/logging.hpp"
-#include "platform/arch.hpp"
-
-#include <cpuid.h>
 #include <cerrno>
+#include <cpuid.h>
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
@@ -13,6 +8,10 @@
 #include <sys/mman.h>
 #include <time.h>
 #include <unistd.h>
+
+#include "infra/logging.hpp"
+#include "platform/arch.hpp"
+#include "platform/os.hpp"
 
 namespace {
 
@@ -78,7 +77,7 @@ uint64_t calibrate_tsc() {
     return best_cycles * kNsPerSecond / kCalibrationSleepNs;
 }
 
-} // namespace
+}  // namespace
 
 namespace silicon_probe::platform {
 
@@ -145,9 +144,7 @@ void* aligned_alloc(size_t alignment, size_t size) {
     return ptr;
 }
 
-void aligned_free(void* ptr) {
-    std::free(ptr);
-}
+void aligned_free(void* ptr) { std::free(ptr); }
 
 void set_realtime_priority() {
     auto& state = priority_state();
@@ -255,28 +252,27 @@ std::string& turbo_boost_path() {
     static std::string path;
     return path;
 }
-}
+}  // namespace TurboBoostDetails
 
 void disable_turbo_boost() {
     if (TurboBoostDetails::turbo_boost_saved()) return;
 
     // Try generic path first, then vendor-specific
-    const std::vector<std::string> paths = {
-        "/sys/devices/system/cpu/cpufreq/boost",
-        "/sys/devices/system/cpu/intel_pstate/no_turbo"
-    };
+    const std::vector<std::string> paths = {"/sys/devices/system/cpu/cpufreq/boost",
+                                            "/sys/devices/system/cpu/intel_pstate/no_turbo"};
 
     for (const auto& p : paths) {
         std::ifstream in{p};
         if (in.is_open()) {
-            std::string val; in >> val;
+            std::string val;
+            in >> val;
             TurboBoostDetails::turbo_boost_path() = p;
-            
+
             std::ofstream out{p};
             if (!out.is_open()) {
                 throw PermissionError("Cannot open boost control file: " + p);
             }
-            out << "0"; // 0 = disable
+            out << "0";  // 0 = disable
             if (out.fail()) {
                 throw PermissionError("Failed to disable turbo boost at " + p);
             }
@@ -291,13 +287,13 @@ void disable_turbo_boost() {
 void restore_turbo_boost() {
     if (!TurboBoostDetails::turbo_boost_saved()) return;
     const std::string& path = TurboBoostDetails::turbo_boost_path();
-    
+
     std::ofstream out{path};
     if (!out.is_open()) {
         SPDLOG_ERROR("Cannot restore turbo boost: {} is unavailable", path);
         return;
     }
-    out << "1"; // Re-enable
+    out << "1";  // Re-enable
     if (out.fail()) {
         SPDLOG_ERROR("Failed to re-enable turbo boost at {}", path);
     } else {
@@ -306,8 +302,7 @@ void restore_turbo_boost() {
     TurboBoostDetails::turbo_boost_saved() = false;
 }
 
-ScopedThreadAffinity::ScopedThreadAffinity(int cpu)
-    : previous_affinity_(new cpu_set_t_storage{}) {
+ScopedThreadAffinity::ScopedThreadAffinity(int cpu) : previous_affinity_(new cpu_set_t_storage{}) {
     CPU_ZERO(&previous_affinity_->set);
     if (pthread_getaffinity_np(pthread_self(), sizeof(previous_affinity_->set), &previous_affinity_->set) != 0) {
         delete previous_affinity_;
@@ -327,7 +322,8 @@ ScopedThreadAffinity::~ScopedThreadAffinity() {
     }
 
     if (active_) {
-        const int result = pthread_setaffinity_np(pthread_self(), sizeof(previous_affinity_->set), &previous_affinity_->set);
+        const int result =
+            pthread_setaffinity_np(pthread_self(), sizeof(previous_affinity_->set), &previous_affinity_->set);
         if (result != 0) {
             SPDLOG_ERROR("Failed to restore previous thread affinity: {}", result);
         }
@@ -337,9 +333,7 @@ ScopedThreadAffinity::~ScopedThreadAffinity() {
     previous_affinity_ = nullptr;
 }
 
-ScopedPriority::ScopedPriority() {
-    set_realtime_priority();
-}
+ScopedPriority::ScopedPriority() { set_realtime_priority(); }
 
 ScopedPriority::~ScopedPriority() {
     try {
@@ -357,10 +351,10 @@ ScopedFrequencyLock::ScopedFrequencyLock() {
 ScopedFrequencyLock::~ScopedFrequencyLock() {
     try {
         restore_cpu_frequency();
-        try { 
-            restore_turbo_boost(); 
-        } catch (const std::exception& e) { 
-            SPDLOG_ERROR("Turbo restore failed: {}", e.what()); 
+        try {
+            restore_turbo_boost();
+        } catch (const std::exception& e) {
+            SPDLOG_ERROR("Turbo restore failed: {}", e.what());
         }
     } catch (const std::exception& error) {
         SPDLOG_ERROR("Failed to restore CPU frequency governor: {}", error.what());
@@ -379,4 +373,4 @@ ScopedMeasurementEnvironment::ScopedMeasurementEnvironment(const MeasurementEnvi
     }
 }
 
-} // namespace silicon_probe::platform
+}  // namespace silicon_probe::platform

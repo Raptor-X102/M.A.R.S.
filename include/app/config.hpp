@@ -1,22 +1,22 @@
 #pragma once
 
-#include "measurement/cache/cache_measurer.hpp"
-#include "measurement/tlb/tlb_measurer.hpp"
-#include "measurement/rob/rob_measurer.hpp"
-#include "measurement/branch_history_table/branch_history_table_measurer.hpp"
-#include "measurement/return_address_stack/return_address_stack_measurer.hpp"
-#include "measurement/exec_ports/exec_ports_measurer.hpp"
-#include "measurement/uops_cache/uops_cache_measurer.hpp"
-#include "measurement/branch_target_buffer/branch_target_buffer_measurer.hpp"
-#include "measurement/store_to_load_forwarding/store_to_load_forwarding_measurer.hpp"
-#include "measurement/write_buffer/write_buffer_measurer.hpp"
-#include "infra/logging.hpp"
-
 #include <CLI/CLI.hpp>
 #include <filesystem>
 #include <map>
 #include <stdexcept>
 #include <string>
+
+#include "infra/logging.hpp"
+#include "measurement/branch_history_table/branch_history_table_measurer.hpp"
+#include "measurement/branch_target_buffer/branch_target_buffer_measurer.hpp"
+#include "measurement/cache/cache_measurer.hpp"
+#include "measurement/exec_ports/exec_ports_measurer.hpp"
+#include "measurement/return_address_stack/return_address_stack_measurer.hpp"
+#include "measurement/rob/rob_measurer.hpp"
+#include "measurement/store_to_load_forwarding/store_to_load_forwarding_measurer.hpp"
+#include "measurement/tlb/tlb_measurer.hpp"
+#include "measurement/uops_cache/uops_cache_measurer.hpp"
+#include "measurement/write_buffer/write_buffer_measurer.hpp"
 
 namespace silicon_probe::app {
 
@@ -42,7 +42,7 @@ struct ApplicationConfig {
 };
 
 class BootstrapOptionsParser {
-  private:
+   private:
     static const std::map<std::string, std::string>& log_level_aliases() {
         static const std::map<std::string, std::string> aliases{
             {"trace", "trace"}, {"debug", "debug"}, {"info", "info"},         {"warning", "warn"}, {"warn", "warn"},
@@ -74,7 +74,7 @@ class BootstrapOptionsParser {
     bool no_summary_ = false;
     bool no_console_ = false;
 
-  public:
+   public:
     BootstrapOptionsParser() : cli_("SiliconProbe - CPU microarchitecture benchmark tool") { configure(); }
 
     BootstrapOptions parse(int argc, char** argv) {
@@ -95,8 +95,8 @@ class BootstrapOptionsParser {
 };
 
 class ApplicationConfigLoader {
-  public:
+   public:
     ApplicationConfig load(const BootstrapOptions& options) const;
 };
 
-} // namespace silicon_probe::app
+}  // namespace silicon_probe::app

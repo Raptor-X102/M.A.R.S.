@@ -1,8 +1,7 @@
-#include "measurement/cache/boundary_analyzer.hpp"
-
 #include <gtest/gtest.h>
-
 #include <vector>
+
+#include "measurement/cache/boundary_analyzer.hpp"
 
 namespace silicon_probe::cache {
 namespace {
@@ -51,9 +50,7 @@ TEST(BoundaryAnalyzerTableTest, RefinesBoundaryFromTable) {
         SCOPED_TRACE(test_case.name);
         const BoundaryAnalyzer analyzer(test_case.config);
         const size_t boundary = analyzer.refine_boundary(
-            test_case.left,
-            test_case.right,
-            test_case.precision,
+            test_case.left, test_case.right, test_case.precision,
             [&test_case](size_t size) {
                 return size < test_case.switch_point ? test_case.baseline_mean : test_case.baseline_mean * 3.0;
             },
@@ -63,5 +60,5 @@ TEST(BoundaryAnalyzerTableTest, RefinesBoundaryFromTable) {
     }
 }
 
-} // namespace
-} // namespace silicon_probe::cache
+}  // namespace
+}  // namespace silicon_probe::cache

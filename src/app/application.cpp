@@ -1,16 +1,16 @@
 #include "app/application.hpp"
 
-#include "measurement/cache/cache_measurer.hpp"
-#include "measurement/tlb/tlb_measurer.hpp"
-#include "measurement/rob/rob_measurer.hpp"
+#include <iostream>
+#include <memory>
+
 #include "core/measurer_registry.hpp"
 #include "core/probe_service.hpp"
 #include "core/summary_printer.hpp"
 #include "infra/logging.hpp"
+#include "measurement/cache/cache_measurer.hpp"
+#include "measurement/rob/rob_measurer.hpp"
+#include "measurement/tlb/tlb_measurer.hpp"
 #include "platform/os_errors.hpp"
-
-#include <iostream>
-#include <memory>
 
 namespace silicon_probe::app {
 
@@ -44,7 +44,8 @@ int execute(const ApplicationConfig& config) {
             registry.register_measurer(std::make_unique<branch_target_buffer::BranchTargetBufferMeasurer>(config.btb));
         }
         if (config.s2l_fwd.enabled) {
-            registry.register_measurer(std::make_unique<store_to_load_forwarding::StoreToLoadForwardingMeasurer>(config.s2l_fwd));
+            registry.register_measurer(
+                std::make_unique<store_to_load_forwarding::StoreToLoadForwardingMeasurer>(config.s2l_fwd));
         }
         if (config.write_buffer.enabled) {
             registry.register_measurer(std::make_unique<write_buffer::WriteBufferMeasurer>(config.write_buffer));
@@ -67,4 +68,4 @@ int execute(const ApplicationConfig& config) {
     }
 }
 
-} // namespace silicon_probe::app
+}  // namespace silicon_probe::app

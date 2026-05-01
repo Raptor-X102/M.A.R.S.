@@ -1,30 +1,40 @@
 // pmc_linux.cpp
-#include "platform/pmc.hpp"
-#include "infra/logging.hpp"
-#include <linux/perf_event.h>
-#include <sys/syscall.h>
-#include <sys/ioctl.h>
-#include <unistd.h>
-#include <cstring>
-#include <stdexcept>
 #include <cstdint>
+#include <cstring>
+#include <linux/perf_event.h>
 #include <mutex>
 #include <perfmon/pfmlib_perf_event.h>
+#include <stdexcept>
+#include <sys/ioctl.h>
+#include <sys/syscall.h>
+#include <unistd.h>
+
+#include "infra/logging.hpp"
+#include "platform/pmc.hpp"
 
 namespace silicon_probe::platform::pmc {
 
 // Map platform-independent EventType to Linux hardware config
 static uint64_t map_event_to_perf_config(EventType ev) {
     switch (ev) {
-        case EventType::BRANCH_MISSES:      return PERF_COUNT_HW_BRANCH_MISSES;
-        case EventType::BRANCH_INSTRUCTIONS:return PERF_COUNT_HW_BRANCH_INSTRUCTIONS;
-        case EventType::CPU_CYCLES:         return PERF_COUNT_HW_CPU_CYCLES;
-        case EventType::INSTRUCTIONS:       return PERF_COUNT_HW_INSTRUCTIONS;
-        case EventType::CACHE_REFERENCES:   return PERF_COUNT_HW_CACHE_REFERENCES;
-        case EventType::CACHE_MISSES:       return PERF_COUNT_HW_CACHE_MISSES;
-        case EventType::BUS_CYCLES:         return PERF_COUNT_HW_BUS_CYCLES;
-        case EventType::REF_CPU_CYCLES:     return PERF_COUNT_HW_REF_CPU_CYCLES;
-        default:                            return 0; // should not happen
+        case EventType::BRANCH_MISSES:
+            return PERF_COUNT_HW_BRANCH_MISSES;
+        case EventType::BRANCH_INSTRUCTIONS:
+            return PERF_COUNT_HW_BRANCH_INSTRUCTIONS;
+        case EventType::CPU_CYCLES:
+            return PERF_COUNT_HW_CPU_CYCLES;
+        case EventType::INSTRUCTIONS:
+            return PERF_COUNT_HW_INSTRUCTIONS;
+        case EventType::CACHE_REFERENCES:
+            return PERF_COUNT_HW_CACHE_REFERENCES;
+        case EventType::CACHE_MISSES:
+            return PERF_COUNT_HW_CACHE_MISSES;
+        case EventType::BUS_CYCLES:
+            return PERF_COUNT_HW_BUS_CYCLES;
+        case EventType::REF_CPU_CYCLES:
+            return PERF_COUNT_HW_REF_CPU_CYCLES;
+        default:
+            return 0;  // should not happen
     }
 }
 
@@ -44,9 +54,7 @@ static int open_perf_counter(EventType event) {
 
 static bool encode_event(const std::string& event_name, struct perf_event_attr& attr) {
     static std::once_flag init_flag;
-    std::call_once(init_flag, []() {
-        pfm_initialize();
-    });
+    std::call_once(init_flag, []() { pfm_initialize(); });
 
     pfm_perf_encode_arg_t arg = {};
     arg.attr = &attr;
@@ -73,7 +81,7 @@ static int open_raw_counter_by_name(const std::string& event_name) {
 }
 
 class PmcGroupLinux final : public PmcGroup {
-public:
+   public:
     PmcGroupLinux(std::vector<int> fds, std::vector<EventType> types)
         : fds_(std::move(fds)), event_types_(std::move(types)) {
         if (!valid()) {
@@ -119,11 +127,9 @@ public:
         return cv;
     }
 
-    std::vector<EventType> get_event_types() const override {
-        return event_types_;
-    }
+    std::vector<EventType> get_event_types() const override { return event_types_; }
 
-private:
+   private:
     bool valid() const noexcept {
         for (int fd : fds_) {
             if (fd < 0) return false;
@@ -173,11 +179,11 @@ bool PmcGroup::is_supported() noexcept {
 }
 
 class PmcGroupRawLinux final : public PmcGroup {
-public:
+   public:
     PmcGroupRawLinux(std::vector<int> fds, std::vector<std::string> names)
         : fds_(std::move(fds)), event_names_(std::move(names)) {
         if (!valid()) cleanup();
-        //print_initial_values();
+        // print_initial_values();
     }
 
     ~PmcGroupRawLinux() override { cleanup(); }
@@ -221,14 +227,16 @@ public:
 
     const std::vector<std::string>& get_event_names() const { return event_names_; }
 
-private:
+   private:
     bool valid() const noexcept {
-        for (int fd : fds_) if (fd < 0) return false;
+        for (int fd : fds_)
+            if (fd < 0) return false;
         return !fds_.empty();
     }
 
     void cleanup() {
-        for (int fd : fds_) if (fd >= 0) close(fd);
+        for (int fd : fds_)
+            if (fd >= 0) close(fd);
     }
 
     void print_initial_values() const {
@@ -243,7 +251,10 @@ private:
         }
         bool non_zero = false;
         for (auto v : init.values) {
-            if (v > 100) { non_zero = true; break; }
+            if (v > 100) {
+                non_zero = true;
+                break;
+            }
         }
         if (non_zero) {
             SPDLOG_WARN("Initial counter values are not near zero! Will need to compute differences.");
@@ -268,4 +279,4 @@ std::unique_ptr<PmcGroup> PmcGroup::create_raw(const std::vector<std::string>& e
     return std::make_unique<PmcGroupRawLinux>(std::move(fds), event_names);
 }
 
-} // namespace
+}  // namespace silicon_probe::platform::pmc

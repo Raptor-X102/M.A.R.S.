@@ -1,24 +1,25 @@
 // ExecPortsMeasurer.hpp
 #pragma once
 
-#include "infra/logging.hpp"
-#include "core/measurer.hpp"
-#include "platform/arch.hpp"
-#include "platform/pmc.hpp"
-#include "platform/os.hpp"
-#include "platform/events_discovery.hpp"
-#include <vector>
-#include <string>
 #include <algorithm>
-#include <numeric>
 #include <cmath>
+#include <numeric>
+#include <string>
+#include <vector>
+
+#include "core/measurer.hpp"
+#include "infra/logging.hpp"
+#include "platform/arch.hpp"
+#include "platform/events_discovery.hpp"
+#include "platform/os.hpp"
+#include "platform/pmc.hpp"
 
 namespace silicon_probe::exec_ports {
 
 struct ExecPortsResult {
     std::string test_name;
-    double avg_ticks; // average ticks per repeat
-    double ticks_std; // standard deviation of ticks
+    double avg_ticks;  // average ticks per repeat
+    double ticks_std;  // standard deviation of ticks
     std::vector<uint64_t> avg_port_counts;
 };
 
@@ -34,7 +35,7 @@ struct IstructionData {
 };
 
 class ExecPortsMeasurer final : public core::Measurer {
-  public:
+   public:
     using InstrType = platform::arch::InstrType;
 
     static constexpr size_t kDefaultInstrCnt = 100000;
@@ -54,9 +55,10 @@ class ExecPortsMeasurer final : public core::Measurer {
 
     ExecPortsMeasurer() : ExecPortsMeasurer(Config{}) {}
     explicit ExecPortsMeasurer(Config config) : config_(std::move(config)) {
-        SPDLOG_INFO("[{}] configured: instr_cnt={}, iterations={}, repeats={}, instr1 = [{}, {}], instr2 = [{}, {}]", name(),
-                    config_.instr_cnt, config_.iterations, config_.repeats, static_cast<int>(config_.instr1.instr_type),
-                    config_.instr1.instr_name, static_cast<int>(config_.instr2.instr_type), config_.instr2.instr_name);
+        SPDLOG_INFO("[{}] configured: instr_cnt={}, iterations={}, repeats={}, instr1 = [{}, {}], instr2 = [{}, {}]",
+                    name(), config_.instr_cnt, config_.iterations, config_.repeats,
+                    static_cast<int>(config_.instr1.instr_type), config_.instr1.instr_name,
+                    static_cast<int>(config_.instr2.instr_type), config_.instr2.instr_name);
     }
 
     std::string_view name() const noexcept override { return "execution ports"; }
@@ -73,9 +75,10 @@ class ExecPortsMeasurer final : public core::Measurer {
         auto port_events = platform::discover_port_events(data);
         bool has_ports = false;
         if (port_events.empty()) {
-            SPDLOG_WARN("[{}] No port events found. Check libpfm4, CPU vendor, and kernel support. "
-                        "Falling back to time-only measurement.",
-                        name());
+            SPDLOG_WARN(
+                "[{}] No port events found. Check libpfm4, CPU vendor, and kernel support. "
+                "Falling back to time-only measurement.",
+                name());
         } else {
             SPDLOG_INFO("[{}] Found {} port events", name(), port_events.size());
             has_ports = true;
@@ -110,8 +113,7 @@ class ExecPortsMeasurer final : public core::Measurer {
             auto f = reinterpret_cast<void (*)()>(func);
 
             // Warm-up
-            for (size_t i = 0; i < config_.warmup_iterations; ++i)
-                f();
+            for (size_t i = 0; i < config_.warmup_iterations; ++i) f();
 
             std::vector<uint64_t> ticks_samples;
             std::vector<std::vector<uint64_t>> all_counts;
@@ -124,15 +126,14 @@ class ExecPortsMeasurer final : public core::Measurer {
 
                 uint64_t start_ticks = platform::arch::tick();
 
-                for (size_t i = 0; i < config_.iterations; ++i)
-                    f();
+                for (size_t i = 0; i < config_.iterations; ++i) f();
 
                 uint64_t end_ticks = platform::arch::tick();
 
                 if (pmc) pmc->disable();
 
                 uint64_t ticks = end_ticks - start_ticks;
-                //SPDLOG_INFO("[repeat {}]: ticks = {}", r, ticks);
+                // SPDLOG_INFO("[repeat {}]: ticks = {}", r, ticks);
                 ticks_samples.push_back(ticks);
 
                 if (pmc) {
@@ -177,7 +178,8 @@ class ExecPortsMeasurer final : public core::Measurer {
         std::vector<ExecPortsResult> results;
         results.push_back(run_test(instr1_func, config_.instr1.instr_name));
         results.push_back(run_test(instr2_func, config_.instr2.instr_name));
-        results.push_back(run_test(mix_func, config_.instr1.instr_name + " + " + config_.instr2.instr_name + " interleaved"));
+        results.push_back(
+            run_test(mix_func, config_.instr1.instr_name + " + " + config_.instr2.instr_name + " interleaved"));
 
         // Release all generated functions after measurements
         platform::arch::release_exec_ports_code();
@@ -186,14 +188,14 @@ class ExecPortsMeasurer final : public core::Measurer {
         PortContentionDecision decision = detectPortContention(results, port_events);
         data.execution_ports_independent = decision.different_ports;
 
-        SPDLOG_INFO("[{}] decision: instruction1 ({}) and instruction2 ({}) use {} ports (confidence {:.2f}) - {}", name(),
-                    config_.instr1.instr_name, config_.instr2.instr_name, decision.different_ports ? "different" : "the same",
-                    decision.confidence, decision.reasoning);
+        SPDLOG_INFO("[{}] decision: instruction1 ({}) and instruction2 ({}) use {} ports (confidence {:.2f}) - {}",
+                    name(), config_.instr1.instr_name, config_.instr2.instr_name,
+                    decision.different_ports ? "different" : "the same", decision.confidence, decision.reasoning);
 
         SPDLOG_INFO("[{}] measurement complete", name());
     }
 
-  private:
+   private:
     PortContentionDecision detectPortContention(const std::vector<ExecPortsResult>& results,
                                                 const std::vector<std::string>& port_events) const {
         if (results.size() < 3) {
@@ -240,7 +242,6 @@ class ExecPortsMeasurer final : public core::Measurer {
         double overlap = 0.5;
 
         if (!port_events.empty() && !r1.avg_port_counts.empty() && !r2.avg_port_counts.empty()) {
-
             auto active_ports = [&](const std::vector<uint64_t>& counts) -> std::vector<size_t> {
                 if (counts.empty()) return {};
                 uint64_t max_val = *std::max_element(counts.begin(), counts.end());
@@ -273,7 +274,8 @@ class ExecPortsMeasurer final : public core::Measurer {
                 ports2_str = port_names(ports2);
 
                 std::vector<size_t> inter;
-                std::set_intersection(ports1.begin(), ports1.end(), ports2.begin(), ports2.end(), std::back_inserter(inter));
+                std::set_intersection(ports1.begin(), ports1.end(), ports2.begin(), ports2.end(),
+                                      std::back_inserter(inter));
                 inter_str = port_names(inter);
                 size_t inter_sz = inter.size();
                 size_t union_sz = ports1.size() + ports2.size() - inter_sz;
@@ -327,7 +329,8 @@ class ExecPortsMeasurer final : public core::Measurer {
             final_diff = (comb_indep > comb_dep);
             final_conf = std::max(comb_indep, comb_dep);
             reasoning = "Combined (time 60%, PMC 40%): independent=" + std::to_string(comb_indep) +
-                        ", dependent=" + std::to_string(comb_dep) + " -> " + std::string(final_diff ? "independent" : "dependent");
+                        ", dependent=" + std::to_string(comb_dep) + " -> " +
+                        std::string(final_diff ? "independent" : "dependent");
         }
 
         // ===== BUILD DETAILED OUTPUT =====
@@ -359,7 +362,8 @@ class ExecPortsMeasurer final : public core::Measurer {
         detailed += "\n[FINAL DECISION]\n";
         detailed += "  " + reasoning + "\n";
         detailed += "  Confidence: " + std::to_string(final_conf) + "\n";
-        detailed += "  Result: ports are " + std::string(final_diff ? "DIFFERENT (independent)" : "THE SAME (dependent)") + "\n";
+        detailed += "  Result: ports are " +
+                    std::string(final_diff ? "DIFFERENT (independent)" : "THE SAME (dependent)") + "\n";
         detailed += "================================================\n";
 
         SPDLOG_INFO(detailed);
@@ -370,4 +374,4 @@ class ExecPortsMeasurer final : public core::Measurer {
     Config config_;
 };
 
-} // namespace silicon_probe::exec_ports
+}  // namespace silicon_probe::exec_ports

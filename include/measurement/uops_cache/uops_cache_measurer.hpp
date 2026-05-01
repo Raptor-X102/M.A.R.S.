@@ -1,16 +1,17 @@
 #pragma once
 
-#include "infra/logging.hpp"
-#include "core/measurer.hpp"
-#include "platform/arch.hpp"
-#include "platform/pmc.hpp"
-#include "platform/os.hpp"
-#include "platform/events_discovery.hpp"
-#include <vector>
-#include <string>
 #include <algorithm>
-#include <numeric>
 #include <cmath>
+#include <numeric>
+#include <string>
+#include <vector>
+
+#include "core/measurer.hpp"
+#include "infra/logging.hpp"
+#include "platform/arch.hpp"
+#include "platform/events_discovery.hpp"
+#include "platform/os.hpp"
+#include "platform/pmc.hpp"
 
 namespace silicon_probe::uops_cache {
 
@@ -33,7 +34,7 @@ struct UopsCacheSaturationPoint {
 };
 
 class UopsCacheMeasurer final : public core::Measurer {
-  public:
+   public:
     using InstrType = platform::arch::InstrType;
 
     static constexpr size_t kDefaultMinInstrCnt = 1200;
@@ -61,10 +62,11 @@ class UopsCacheMeasurer final : public core::Measurer {
 
     UopsCacheMeasurer() : UopsCacheMeasurer(Config{}) {}
     explicit UopsCacheMeasurer(Config config) : config_(std::move(config)) {
-        SPDLOG_INFO("[{}] configured: min_instr_cnt = {}, max_instr_cnt = {}, instr_step = {}, iterations={}, "
-                    "repeats={}, instr = [{}, {}]",
-                    name(), config_.min_instr_cnt, config_.max_instr_cnt, config_.instr_step, config_.iterations, config_.repeats,
-                    static_cast<int>(config_.instr.instr_type), config_.instr.instr_name);
+        SPDLOG_INFO(
+            "[{}] configured: min_instr_cnt = {}, max_instr_cnt = {}, instr_step = {}, iterations={}, "
+            "repeats={}, instr = [{}, {}]",
+            name(), config_.min_instr_cnt, config_.max_instr_cnt, config_.instr_step, config_.iterations,
+            config_.repeats, static_cast<int>(config_.instr.instr_type), config_.instr.instr_name);
     }
 
     std::string_view name() const noexcept override { return "uops cache"; }
@@ -104,18 +106,21 @@ class UopsCacheMeasurer final : public core::Measurer {
             }
         }
 
-        for (size_t instr_cnt = config_.min_instr_cnt; instr_cnt < config_.max_instr_cnt; instr_cnt += config_.instr_step) {
+        for (size_t instr_cnt = config_.min_instr_cnt; instr_cnt < config_.max_instr_cnt;
+             instr_cnt += config_.instr_step) {
             UopsCacheResult res = run_test(instr_cnt, pmc.get(), uops_events);
             coarse_counts.push_back(instr_cnt);
             coarse_results.push_back(res);
 
-            if (has_uops && dsb_idx != std::string::npos && mite_idx != std::string::npos && !res.avg_events_counts.empty()) {
+            if (has_uops && dsb_idx != std::string::npos && mite_idx != std::string::npos &&
+                !res.avg_events_counts.empty()) {
                 uint64_t dsb = res.avg_events_counts[dsb_idx];
                 uint64_t mite = res.avg_events_counts[mite_idx];
                 double share = (dsb + mite) > 0 ? static_cast<double>(dsb) / (dsb + mite) : 0.0;
                 if (share < config_.dsb_share_stop && coarse_counts.size() >= config_.coarse_ignore_first) {
                     saturation_reached = true;
-                    SPDLOG_INFO("[{}] DSB share dropped to {:.3f} at instr_cnt={}, stopping coarse scan", name(), share, instr_cnt);
+                    SPDLOG_INFO("[{}] DSB share dropped to {:.3f} at instr_cnt={}, stopping coarse scan", name(), share,
+                                instr_cnt);
                     break;
                 }
             }
@@ -141,24 +146,25 @@ class UopsCacheMeasurer final : public core::Measurer {
         SPDLOG_INFO("[{}] measurement complete", name());
     }
 
-  private:
-    static constexpr double kDSBShareHigh = 0.9;       // share above this is considered "good"
-    static constexpr double kDSBShareLow = 0.5;        // share below this indicates saturation
-    static constexpr double kDSBShareStop = 0.3;       // stop coarse scan when share falls below this
-    static constexpr double kDSBShareRefine = 0.8;     // threshold for binary search (last good)
-    static constexpr double kDSBDropSignificant = 0.2; // minimum drop to detect saturation
-    static constexpr size_t kCoarseIgnoreFirst = 3;    // ignore first N coarse points (warmup)
+   private:
+    static constexpr double kDSBShareHigh = 0.9;        // share above this is considered "good"
+    static constexpr double kDSBShareLow = 0.5;         // share below this indicates saturation
+    static constexpr double kDSBShareStop = 0.3;        // stop coarse scan when share falls below this
+    static constexpr double kDSBShareRefine = 0.8;      // threshold for binary search (last good)
+    static constexpr double kDSBDropSignificant = 0.2;  // minimum drop to detect saturation
+    static constexpr size_t kCoarseIgnoreFirst = 3;     // ignore first N coarse points (warmup)
 
-    UopsCacheResult run_test(size_t instr_cnt, platform::pmc::PmcGroup* pmc, const std::vector<std::string>& uops_events) {
-        void* func = platform::arch::generate_uops_cache_codegenerate(instr_cnt, config_.iterations, {config_.instr.instr_type});
+    UopsCacheResult run_test(size_t instr_cnt, platform::pmc::PmcGroup* pmc,
+                             const std::vector<std::string>& uops_events) {
+        void* func =
+            platform::arch::generate_uops_cache_codegenerate(instr_cnt, config_.iterations, {config_.instr.instr_type});
         if (!func) {
             SPDLOG_ERROR("[{}] failed to generate test function for instr_cnt={}", name(), instr_cnt);
             return {};
         }
 
         auto f = reinterpret_cast<void (*)()>(func);
-        for (size_t i = 0; i < config_.warmup_iterations; ++i)
-            f();
+        for (size_t i = 0; i < config_.warmup_iterations; ++i) f();
 
         std::vector<double> ticks_per_instr;
         std::vector<uint64_t> raw_ticks;
@@ -186,7 +192,8 @@ class UopsCacheMeasurer final : public core::Measurer {
             }
         }
 
-        double avg_ticks_per_instr = std::accumulate(ticks_per_instr.begin(), ticks_per_instr.end(), 0.0) / config_.repeats;
+        double avg_ticks_per_instr =
+            std::accumulate(ticks_per_instr.begin(), ticks_per_instr.end(), 0.0) / config_.repeats;
         double avg_raw_ticks = std::accumulate(raw_ticks.begin(), raw_ticks.end(), 0.0) / config_.repeats;
 
         double ticks_std = 0.0;
@@ -209,7 +216,8 @@ class UopsCacheMeasurer final : public core::Measurer {
             }
         }
 
-        SPDLOG_INFO("[{}] instr_cnt={}: avg_ticks_per_instr={:.4g} (std={:.4g})", name(), instr_cnt, avg_ticks_per_instr, ticks_std);
+        SPDLOG_INFO("[{}] instr_cnt={}: avg_ticks_per_instr={:.4g} (std={:.4g})", name(), instr_cnt,
+                    avg_ticks_per_instr, ticks_std);
         if (!avg_events_counts.empty()) {
             for (size_t i = 0; i < uops_events.size(); ++i) {
                 SPDLOG_INFO("  {} avg = {:.4g}", uops_events[i], static_cast<double>(avg_events_counts[i]));
@@ -252,7 +260,7 @@ class UopsCacheMeasurer final : public core::Measurer {
             double drop = dsb_share[i - 1] - dsb_share[i];
             if (drop > max_drop) {
                 max_drop = drop;
-                drop_idx = i; // i is the index where share becomes low
+                drop_idx = i;  // i is the index where share becomes low
             }
         }
 
@@ -299,4 +307,4 @@ class UopsCacheMeasurer final : public core::Measurer {
     Config config_;
 };
 
-} // namespace silicon_probe::uops_cache
+}  // namespace silicon_probe::uops_cache

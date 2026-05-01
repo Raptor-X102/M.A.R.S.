@@ -1,33 +1,33 @@
 #pragma once
 
-#include "measurement/cache/boundary_analyzer.hpp"
-#include "measurement/cache/cache_profiler_list.hpp"
-#include "infra/logging.hpp"
-#include "core/measurer.hpp"
-#include "platform/arch.hpp"
-#include "platform/os.hpp"
-#include "platform/pmc.hpp"
-#include "platform/events_discovery.hpp"
-#include "shared_types/cache_types.hpp"
-
 #include <algorithm>
 #include <bitset>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
-#include <cmath>
+#include <memory>
 #include <numeric>
 #include <optional>
 #include <stdexcept>
 #include <utility>
 #include <vector>
-#include <memory>
+
+#include "core/measurer.hpp"
+#include "infra/logging.hpp"
+#include "measurement/cache/boundary_analyzer.hpp"
+#include "measurement/cache/cache_profiler_list.hpp"
+#include "platform/arch.hpp"
+#include "platform/events_discovery.hpp"
+#include "platform/os.hpp"
+#include "platform/pmc.hpp"
+#include "shared_types/cache_types.hpp"
 
 namespace silicon_probe::cache {
 
 using CacheLevel = silicon_probe::shared_types::CacheLevel;
 
 class CacheMeasurer final : public core::Measurer {
-  public:
+   public:
     static constexpr size_t kL1MaxSize = 128 * 1024;
     static constexpr size_t kL2MaxSize = 2 * 1024 * 1024;
     static constexpr size_t kL3MaxSize = 128 * 1024 * 1024;
@@ -83,7 +83,7 @@ class CacheMeasurer final : public core::Measurer {
         platform::MeasurementEnvironmentOptions environment;
     };
 
-  private:
+   private:
     struct MeasurementResult {
         size_t size_bytes = 0;
         double cycles_per_element = 0.0;
@@ -99,13 +99,12 @@ class CacheMeasurer final : public core::Measurer {
     Config config_;
     size_t cache_line_size_ = 0;
 
-public:
+   public:
     CacheMeasurer() : CacheMeasurer(Config{}) {}
 
     explicit CacheMeasurer(Config config) : config_(std::move(config)), cache_line_size_(platform::cache_line_size()) {
         SPDLOG_INFO("[{}] configured with levels: L1={}, L2={}, L3={}", name(),
-                    config_.levels.test(level_index(CacheLevel::l1d)),
-                    config_.levels.test(level_index(CacheLevel::l2)),
+                    config_.levels.test(level_index(CacheLevel::l1d)), config_.levels.test(level_index(CacheLevel::l2)),
                     config_.levels.test(level_index(CacheLevel::l3)));
     }
 
@@ -131,7 +130,7 @@ public:
         SPDLOG_INFO("[{}] cache measurement complete", name());
     }
 
-private:
+   private:
     void measure_level(shared_types::CpuInfoData& data, CacheLevel level, size_t min_size, size_t max_size,
                        std::optional<size_t> shared_types::CpuInfoData::* target_field) {
         SPDLOG_INFO("=== Measuring {} ===", level_name(level));
@@ -178,8 +177,8 @@ private:
                                 config_.decision_tolerance * 100, size_latency, size_misses, final_size);
                 } else {
                     final_size = size_misses;
-                    SPDLOG_INFO("Misses method used (more accurate), latency gave {} but misses gave {}",
-                                size_latency, size_misses);
+                    SPDLOG_INFO("Misses method used (more accurate), latency gave {} but misses gave {}", size_latency,
+                                size_misses);
                 }
             } else {
                 final_size = size_misses;
@@ -202,7 +201,8 @@ private:
         }
     }
 
-    std::unique_ptr<platform::pmc::PmcGroup> open_pmc_for_level(CacheLevel level, shared_types::CpuInfoData& data) const {
+    std::unique_ptr<platform::pmc::PmcGroup> open_pmc_for_level(CacheLevel level,
+                                                                shared_types::CpuInfoData& data) const {
         auto events = platform::discover_cache_miss_events(level, data);
         if (events.empty()) {
             SPDLOG_DEBUG("No miss events found for {}, using latency-only", level_name(level));
@@ -224,7 +224,7 @@ private:
     }
 
     std::vector<MeasurementResult> measure_range(size_t min_size, size_t max_size,
-                                                  std::unique_ptr<platform::pmc::PmcGroup>& pmc) {
+                                                 std::unique_ptr<platform::pmc::PmcGroup>& pmc) {
         std::vector<MeasurementResult> results;
         for (size_t size = min_size; size <= max_size; size *= 2) {
             if (pmc) {
@@ -390,8 +390,8 @@ private:
             }
         }
 
-        double baseline = std::accumulate(baseline_samples.begin(), baseline_samples.end(), 0.0)
-                          / static_cast<double>(baseline_samples.size());
+        double baseline = std::accumulate(baseline_samples.begin(), baseline_samples.end(), 0.0) /
+                          static_cast<double>(baseline_samples.size());
 
         double refinement_growth_factor = growth_factor_for(right);
         if (right >= config_.l1_max && right < config_.l2_max) {
@@ -405,14 +405,12 @@ private:
 
         return analyzer.refine_boundary(
             left, right, config_.precision,
-            [this](size_t size) -> double {
-                return do_single_measurement_without_pmc(size).cycles_per_element;
-            },
+            [this](size_t size) -> double { return do_single_measurement_without_pmc(size).cycles_per_element; },
             baseline);
     }
 
-    size_t refine_boundary_misses(const std::vector<MeasurementResult>& results, size_t miss_index,
-                                  CacheLevel level, std::unique_ptr<platform::pmc::PmcGroup>& pmc) {
+    size_t refine_boundary_misses(const std::vector<MeasurementResult>& results, size_t miss_index, CacheLevel level,
+                                  std::unique_ptr<platform::pmc::PmcGroup>& pmc) {
         const size_t left = results[miss_index - 1].size_bytes;
         const size_t right = results[miss_index].size_bytes;
 
@@ -439,9 +437,7 @@ private:
 
         return analyzer.refine_boundary(
             left, right, config_.precision,
-            [this, &pmc](size_t size) -> double {
-                return do_single_measurement_with_pmc(size, *pmc).miss_rate;
-            },
+            [this, &pmc](size_t size) -> double { return do_single_measurement_with_pmc(size, *pmc).miss_rate; },
             baseline);
     }
 
@@ -469,12 +465,15 @@ private:
 
     static const char* level_name(CacheLevel level) noexcept {
         switch (level) {
-        case CacheLevel::l1d: return "L1d";
-        case CacheLevel::l2:  return "L2";
-        case CacheLevel::l3:  return "L3";
+            case CacheLevel::l1d:
+                return "L1d";
+            case CacheLevel::l2:
+                return "L2";
+            case CacheLevel::l3:
+                return "L3";
         }
         return "unknown";
     }
 };
 
-} // namespace silicon_probe::cache
+}  // namespace silicon_probe::cache

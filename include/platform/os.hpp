@@ -1,10 +1,10 @@
 #pragma once
 
-#include "platform/os_errors.hpp"
-
 #include <cstddef>
 #include <cstdint>
 #include <optional>
+
+#include "platform/os_errors.hpp"
 
 namespace silicon_probe::platform {
 
@@ -30,14 +30,14 @@ void disable_turbo_boost();
 void restore_turbo_boost();
 
 class ScopedThreadAffinity {
-public:
+   public:
     explicit ScopedThreadAffinity(int cpu);
     ~ScopedThreadAffinity();
 
     ScopedThreadAffinity(const ScopedThreadAffinity&) = delete;
     ScopedThreadAffinity& operator=(const ScopedThreadAffinity&) = delete;
 
-private:
+   private:
     bool active_ = false;
     int previous_cpu_count_ = 0;
     struct cpu_set_t_storage;
@@ -45,7 +45,7 @@ private:
 };
 
 class ScopedPriority {
-public:
+   public:
     ScopedPriority();
     ~ScopedPriority();
 
@@ -54,7 +54,7 @@ public:
 };
 
 class ScopedFrequencyLock {
-public:
+   public:
     ScopedFrequencyLock();
     ~ScopedFrequencyLock();
 
@@ -63,17 +63,17 @@ public:
 };
 
 class ScopedMeasurementEnvironment {
-public:
+   public:
     explicit ScopedMeasurementEnvironment(const MeasurementEnvironmentOptions& options);
     ~ScopedMeasurementEnvironment() = default;
 
     ScopedMeasurementEnvironment(const ScopedMeasurementEnvironment&) = delete;
     ScopedMeasurementEnvironment& operator=(const ScopedMeasurementEnvironment&) = delete;
 
-private:
+   private:
     std::optional<ScopedThreadAffinity> affinity_;
     std::optional<ScopedPriority> priority_;
     std::optional<ScopedFrequencyLock> frequency_lock_;
 };
 
-} // namespace silicon_probe::platform
+}  // namespace silicon_probe::platform

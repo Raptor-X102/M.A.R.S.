@@ -58,5 +58,5 @@ TEST(UopsCacheTableTest, FindsApproximateSaturationFromTable) {
     }
 }
 
-} // namespace
-} // namespace silicon_probe::uops_cache
+}  // namespace
+}  // namespace silicon_probe::uops_cache

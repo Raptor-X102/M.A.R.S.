@@ -2,8 +2,8 @@
 #pragma once
 
 #include <cstdint>
-#include <vector>
 #include <memory>
+#include <vector>
 
 namespace silicon_probe::platform::pmc {
 
@@ -20,12 +20,12 @@ enum class EventType : int {
 };
 
 struct CounterValues {
-    std::vector<uint64_t> values;   // order matches the events in group
+    std::vector<uint64_t> values;  // order matches the events in group
     bool valid = false;
 };
 
 class PmcGroup {
-public:
+   public:
     virtual ~PmcGroup() = default;
 
     // Create a group of counters for the given event types
@@ -42,4 +42,4 @@ public:
     static bool is_supported() noexcept;
 };
 
-} // namespace
+}  // namespace silicon_probe::platform::pmc

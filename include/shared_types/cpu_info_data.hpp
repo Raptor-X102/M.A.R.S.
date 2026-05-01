@@ -4,6 +4,7 @@
 #include <optional>
 #include <string>
 #include <vector>
+
 #include "shared_types/cpu_vendor.hpp"
 
 namespace silicon_probe::shared_types {
@@ -36,19 +37,19 @@ struct CpuInfoData {
     std::optional<size_t> tlb_l2_size;
     std::optional<size_t> tlb_page_size_bytes;
 
-    std::optional<size_t> btb_size; // branch target buffer
-    std::optional<size_t> ras_size; // return address stack
-    std::optional<size_t> bht_size; // branch history table
+    std::optional<size_t> btb_size;  // branch target buffer
+    std::optional<size_t> ras_size;  // return address stack
+    std::optional<size_t> bht_size;  // branch history table
     std::optional<size_t> uops_cache_size;
-    std::optional<size_t> rob_size; // reorder buffer
-    std::optional<size_t> s2l_fwd_max_size; // store-to-load forwarding max size
-    std::optional<size_t> s2l_fwd_max_offset; // store-to-load forwarding max offset
+    std::optional<size_t> rob_size;            // reorder buffer
+    std::optional<size_t> s2l_fwd_max_size;    // store-to-load forwarding max size
+    std::optional<size_t> s2l_fwd_max_offset;  // store-to-load forwarding max offset
     std::optional<size_t> write_buffer_size;
     std::optional<size_t> pipeline_depth;
 
-    std::optional<bool> execution_ports_independent; // for now only for add & mul instructions
+    std::optional<bool> execution_ports_independent;  // for now only for add & mul instructions
 
     std::optional<platform::cpu_vendor::CpuVendor> cpu_vendor;
 };
 
-} // namespace silicon_probe::shared_types
+}  // namespace silicon_probe::shared_types

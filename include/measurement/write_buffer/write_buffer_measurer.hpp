@@ -1,16 +1,17 @@
 // write_buffer_measurer.hpp
 #pragma once
 
-#include "infra/logging.hpp"
-#include "core/measurer.hpp"
-#include "platform/arch.hpp"
-#include "platform/pmc.hpp"
-#include "platform/os.hpp"
-#include "platform/events_discovery.hpp"
-#include <memory>
-#include <numeric>
 #include <cmath>
 #include <cstring>
+#include <memory>
+#include <numeric>
+
+#include "core/measurer.hpp"
+#include "infra/logging.hpp"
+#include "platform/arch.hpp"
+#include "platform/events_discovery.hpp"
+#include "platform/os.hpp"
+#include "platform/pmc.hpp"
 
 namespace silicon_probe::write_buffer {
 
@@ -21,7 +22,7 @@ struct WriteBufferResult {
 };
 
 class WriteBufferMeasurer final : public core::Measurer {
-public:
+   public:
     static constexpr size_t kDefaultMaxWrites = 128;
     static constexpr size_t kDefaultMinWrites = 1;
     static constexpr size_t kDefaultWritesStep = 1;
@@ -47,9 +48,8 @@ public:
 
     WriteBufferMeasurer() : WriteBufferMeasurer(Config{}) {}
     explicit WriteBufferMeasurer(Config config) : config_(std::move(config)) {
-        SPDLOG_INFO("[{}] cfg: min_writes={} max_writes={} step={} samples_per_repeat={} repeats={}",
-                    name(), config_.min_writes, config_.max_writes, config_.writes_step,
-                    config_.iterations, config_.repeats);
+        SPDLOG_INFO("[{}] cfg: min_writes={} max_writes={} step={} samples_per_repeat={} repeats={}", name(),
+                    config_.min_writes, config_.max_writes, config_.writes_step, config_.iterations, config_.repeats);
     }
 
     std::string_view name() const noexcept override { return "write_buffer"; }
@@ -96,8 +96,7 @@ public:
         volatile int dummy = 0;
         SPDLOG_INFO("| writes | latency(ticks) | stddev |");
         if (has_pmc) {
-            for (const auto& ev : events)
-                SPDLOG_INFO("|        | {} (per sample) |", ev);
+            for (const auto& ev : events) SPDLOG_INFO("|        | {} (per sample) |", ev);
         }
 
         std::vector<size_t> writes_list;
@@ -116,7 +115,8 @@ public:
             if (has_pmc) {
                 SPDLOG_INFO("| {:6} | {:12.2f} | {:6.2f} |", num_writes, res.avg_latency_ticks, res.latency_stddev);
                 for (size_t i = 0; i < events.size(); ++i) {
-                    double per_sample = (res.avg_events.size() > i) ? double(res.avg_events[i]) / config_.iterations : 0.0;
+                    double per_sample =
+                        (res.avg_events.size() > i) ? double(res.avg_events[i]) / config_.iterations : 0.0;
                     double total = (res.avg_events.size() > i) ? double(res.avg_events[i]) : 0.0;
                     SPDLOG_INFO("|        | {}: {:.2f} per sample (total {}) |", events[i], per_sample, total);
                 }
@@ -130,12 +130,11 @@ public:
         }
     }
 
-private:
+   private:
     Config config_;
 
-    WriteBufferResult measure_for_writes(size_t num_writes, int* fill_base,
-                                         volatile int* extra_addr, volatile int& dummy,
-                                         platform::pmc::PmcGroup* pmc) {
+    WriteBufferResult measure_for_writes(size_t num_writes, int* fill_base, volatile int* extra_addr,
+                                         volatile int& dummy, platform::pmc::PmcGroup* pmc) {
         const size_t stride = kCacheLineSize / kBytesPerEntry;
 
         // warmup
@@ -204,25 +203,22 @@ private:
         if (pmc && !pmc_samples.empty()) {
             avg_events.assign(pmc_samples[0].size(), 0);
             for (const auto& sample : pmc_samples)
-                for (size_t i = 0; i < sample.size(); ++i)
-                    avg_events[i] += sample[i];
-            for (size_t i = 0; i < avg_events.size(); ++i)
-                avg_events[i] /= config_.repeats;
+                for (size_t i = 0; i < sample.size(); ++i) avg_events[i] += sample[i];
+            for (size_t i = 0; i < avg_events.size(); ++i) avg_events[i] /= config_.repeats;
         }
         if (pmc) {
-            SPDLOG_DEBUG("[{}] num_writes={}, samples: ticks={:.2f}+-{:.2f}", 
-                         name(), num_writes, avg, stddev);
+            SPDLOG_DEBUG("[{}] num_writes={}, samples: ticks={:.2f}+-{:.2f}", name(), num_writes, avg, stddev);
             for (size_t i = 0; i < avg_events.size(); ++i) {
-                SPDLOG_DEBUG("[{}]   event{} = {} total, {:.2f} per iter", 
-                             name(), i, avg_events[i], double(avg_events[i]) / config_.iterations);
+                SPDLOG_DEBUG("[{}]   event{} = {} total, {:.2f} per iter", name(), i, avg_events[i],
+                             double(avg_events[i]) / config_.iterations);
             }
         }
         return {avg, stddev, std::move(avg_events)};
     }
 
     size_t analyze_buffer_capacity(const std::vector<WriteBufferResult>& results,
-                                   const std::vector<size_t>& writes_list,
-                                   bool has_pmc, size_t sb_idx, size_t bound_idx) {
+                                   const std::vector<size_t>& writes_list, bool has_pmc, size_t sb_idx,
+                                   size_t bound_idx) {
         double base_latency = results[0].avg_latency_ticks;
         size_t capacity = writes_list.back();
 
@@ -251,4 +247,4 @@ private:
     }
 };
 
-} // namespace silicon_probe::write_buffer
+}  // namespace silicon_probe::write_buffer

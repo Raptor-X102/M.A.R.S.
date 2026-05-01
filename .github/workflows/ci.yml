@@ -62,7 +62,7 @@ jobs:
 
       - name: Configure
         run: |
-          cmake -S . -B build-static-analysis -G Ninja \
+          cmake -S . -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=Debug \
             -DMARS_BUILD_APPS=ON \
             -DMARS_BUILD_TESTS=ON \
@@ -72,7 +72,7 @@ jobs:
       - name: Run cppcheck
         run: |
           cppcheck \
-            --project=build-static-analysis/compile_commands.json \
+            --project=build/compile_commands.json \
             --enable=warning,style,performance,portability,information \
             --inconclusive \
             --force \

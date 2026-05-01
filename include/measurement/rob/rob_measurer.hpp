@@ -1,25 +1,25 @@
 // rob_measurer.hpp
 #pragma once
 
-#include "infra/logging.hpp"
+#include <algorithm>
+#include <cmath>
+#include <cstddef>
+#include <cstdint>
+#include <cstdio>
+#include <numeric>
+#include <random>
+#include <vector>
+
 #include "core/measurer.hpp"
+#include "infra/logging.hpp"
 #include "platform/arch.hpp"
 #include "platform/os.hpp"
 #include "platform/pmc.hpp"
 
-#include <algorithm>
-#include <cstddef>
-#include <cstdint>
-#include <cmath>
-#include <numeric>
-#include <vector>
-#include <random>
-#include <cstdio>
-
 namespace silicon_probe::rob {
 
 class RobMeasurer final : public core::Measurer {
-  public:
+   public:
     static constexpr size_t kDefaultMinInstrCnt = 50;
     static constexpr size_t kDefaultMaxInstrCnt = 600;
     static constexpr size_t kDefaultInstrCntStep = 10;
@@ -46,7 +46,7 @@ class RobMeasurer final : public core::Measurer {
         double fallback_jump_ratio = 0.5;
     };
 
-  private:
+   private:
     Config config_;
 
     struct Result {
@@ -56,11 +56,12 @@ class RobMeasurer final : public core::Measurer {
         double max_cycles_per_iter;
     };
 
-  public:
+   public:
     RobMeasurer() : RobMeasurer(Config{}) {}
     explicit RobMeasurer(Config config) : config_(std::move(config)) {
-        SPDLOG_INFO("[{}] configured: min={}, max={}, step={}, inner_its={}, outer_its={}, instr_type={}", name(), config_.min_instr_cnt,
-                    config_.max_instr_cnt, config_.instr_cnt_step, config_.inner_iterations, config_.outer_iterations, config_.instr_type);
+        SPDLOG_INFO("[{}] configured: min={}, max={}, step={}, inner_its={}, outer_its={}, instr_type={}", name(),
+                    config_.min_instr_cnt, config_.max_instr_cnt, config_.instr_cnt_step, config_.inner_iterations,
+                    config_.outer_iterations, config_.instr_type);
     }
 
     std::string_view name() const noexcept override { return "rob"; }
@@ -76,7 +77,6 @@ class RobMeasurer final : public core::Measurer {
         std::vector<Result> results;
 
         for (size_t filler = config_.min_instr_cnt; filler <= config_.max_instr_cnt; filler += config_.instr_cnt_step) {
-
             FuncPtr fn = reinterpret_cast<FuncPtr>(platform::arch::generate_rob_code(filler, config_.instr_type));
             if (!fn) {
                 SPDLOG_WARN("[{}] JIT failed for filler={}", name(), filler);
@@ -115,8 +115,8 @@ class RobMeasurer final : public core::Measurer {
 
             results.push_back({filler, min_per_iter, avg_per_iter, max_per_iter});
 
-            SPDLOG_INFO("[{}] filler={:3d}  min={:6.2f}  avg={:6.2f}  max={:6.2f}", name(), filler, min_per_iter, avg_per_iter,
-                        max_per_iter);
+            SPDLOG_INFO("[{}] filler={:3d}  min={:6.2f}  avg={:6.2f}  max={:6.2f}", name(), filler, min_per_iter,
+                        avg_per_iter, max_per_iter);
 
             platform::arch::release_rob_code();
         }
@@ -128,7 +128,8 @@ class RobMeasurer final : public core::Measurer {
 
         int rob_size = detectRobSaturation(results);
         if (rob_size < 0) {
-            SPDLOG_ERROR("[{}] could not detect ROB saturation in range [{}, {}]", name(), config_.min_instr_cnt, config_.max_instr_cnt);
+            SPDLOG_ERROR("[{}] could not detect ROB saturation in range [{}, {}]", name(), config_.min_instr_cnt,
+                         config_.max_instr_cnt);
         } else {
             SPDLOG_INFO("[{}] ROB size estimated: {} entries", name(), rob_size);
             data.rob_size = rob_size;
@@ -138,7 +139,7 @@ class RobMeasurer final : public core::Measurer {
         SPDLOG_INFO("[{}] ROB measurement complete", name());
     }
 
-  private:
+   private:
     int detectRobSaturation(const std::vector<Result>& results) {
         if (results.size() < 10) return -1;
 
@@ -150,7 +151,8 @@ class RobMeasurer final : public core::Measurer {
 
         // Compute baseline median from first 20% of points (low filler range)
         size_t baseline_cnt = std::max<size_t>(
-            config_.baseline_min_samples, static_cast<size_t>(std::ceil(static_cast<double>(results.size()) * config_.baseline_fraction)));
+            config_.baseline_min_samples,
+            static_cast<size_t>(std::ceil(static_cast<double>(results.size()) * config_.baseline_fraction)));
         baseline_cnt = std::min(baseline_cnt, results.size());
         std::vector<double> baseline_vals(values.begin(), values.begin() + baseline_cnt);
         std::sort(baseline_vals.begin(), baseline_vals.end());
@@ -194,7 +196,7 @@ class RobMeasurer final : public core::Measurer {
                 max_diff_idx = i;
             }
         }
-        if (max_diff > baseline * config_.fallback_jump_ratio) { // significant jump
+        if (max_diff > baseline * config_.fallback_jump_ratio) {  // significant jump
             return static_cast<int>(results[max_diff_idx + 1].filler) + 1;
         }
 
@@ -202,4 +204,4 @@ class RobMeasurer final : public core::Measurer {
     }
 };
 
-} // namespace silicon_probe::rob
+}  // namespace silicon_probe::rob

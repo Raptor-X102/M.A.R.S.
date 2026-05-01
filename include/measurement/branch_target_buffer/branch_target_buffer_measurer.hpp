@@ -1,16 +1,17 @@
 #pragma once
 
-#include "infra/logging.hpp"
-#include "core/measurer.hpp"
-#include "platform/arch.hpp"
-#include "platform/pmc.hpp"
-#include "platform/os.hpp"
-#include "platform/events_discovery.hpp"
-#include <vector>
-#include <string>
 #include <algorithm>
-#include <numeric>
 #include <cmath>
+#include <numeric>
+#include <string>
+#include <vector>
+
+#include "core/measurer.hpp"
+#include "infra/logging.hpp"
+#include "platform/arch.hpp"
+#include "platform/events_discovery.hpp"
+#include "platform/os.hpp"
+#include "platform/pmc.hpp"
 
 namespace silicon_probe::branch_target_buffer {
 
@@ -27,7 +28,7 @@ struct BranchTargetBufferResult {
 };
 
 class BranchTargetBufferMeasurer final : public core::Measurer {
-  public:
+   public:
     static constexpr size_t kDefaultMinBlocksCnt = 3500;
     static constexpr size_t kDefaultMaxBlocksCnt = 5000;
     static constexpr size_t kDefaultBlocksStep = 100;
@@ -55,10 +56,11 @@ class BranchTargetBufferMeasurer final : public core::Measurer {
 
     BranchTargetBufferMeasurer() : BranchTargetBufferMeasurer(Config{}) {}
     explicit BranchTargetBufferMeasurer(Config config) : config_(std::move(config)) {
-        SPDLOG_INFO("[{}] configured: min_blocks_cnt = {}, max_blocks_cnt = {}, blocks_step = {}, iterations={}, "
-                    "repeats={}, alignment={}",
-                    name(), config_.min_blocks_cnt, config_.max_blocks_cnt, config_.blocks_step, config_.iterations, config_.repeats,
-                    config_.alignment);
+        SPDLOG_INFO(
+            "[{}] configured: min_blocks_cnt = {}, max_blocks_cnt = {}, blocks_step = {}, iterations={}, "
+            "repeats={}, alignment={}",
+            name(), config_.min_blocks_cnt, config_.max_blocks_cnt, config_.blocks_step, config_.iterations,
+            config_.repeats, config_.alignment);
     }
 
     std::string_view name() const noexcept override { return "branch target buffer"; }
@@ -89,7 +91,8 @@ class BranchTargetBufferMeasurer final : public core::Measurer {
         bool saturation_detected = false;
         size_t first_bad_point = 0;
 
-        for (size_t blocks_cnt = config_.min_blocks_cnt; blocks_cnt <= config_.max_blocks_cnt; blocks_cnt += config_.blocks_step) {
+        for (size_t blocks_cnt = config_.min_blocks_cnt; blocks_cnt <= config_.max_blocks_cnt;
+             blocks_cnt += config_.blocks_step) {
             BranchTargetBufferResult res = run_test(blocks_cnt, pmc.get());
             coarse_counts.push_back(blocks_cnt);
             coarse_results.push_back(res);
@@ -97,8 +100,8 @@ class BranchTargetBufferMeasurer final : public core::Measurer {
             if (use_events && !saturation_detected) {
                 double rate = computeMispredictionRate(res, blocks_cnt);
                 if (rate > config_.misprediction_saturation_threshold) {
-                    SPDLOG_INFO("[{}] Saturation detected (misprediction rate = {:.4f} > {:.4f}) at blocks_cnt = {}", name(), rate,
-                                config_.misprediction_saturation_threshold, blocks_cnt);
+                    SPDLOG_INFO("[{}] Saturation detected (misprediction rate = {:.4f} > {:.4f}) at blocks_cnt = {}",
+                                name(), rate, config_.misprediction_saturation_threshold, blocks_cnt);
                     saturation_detected = true;
                     first_bad_point = blocks_cnt;
                     break;
@@ -132,7 +135,7 @@ class BranchTargetBufferMeasurer final : public core::Measurer {
         SPDLOG_INFO("[{}] Measurement complete", name());
     }
 
-  private:
+   private:
     Config config_;
 
     BranchTargetBufferResult run_test(size_t blocks_cnt, platform::pmc::PmcGroup* pmc) {
@@ -143,7 +146,8 @@ class BranchTargetBufferMeasurer final : public core::Measurer {
         std::vector<uint64_t> all_counts;
         all_counts.reserve(config_.repeats);
 
-        auto funcs = platform::arch::generate_branch_target_buffer_code(blocks_cnt, config_.iterations, config_.alignment);
+        auto funcs =
+            platform::arch::generate_branch_target_buffer_code(blocks_cnt, config_.iterations, config_.alignment);
         if (funcs.size() < 2 || !funcs[0] || !funcs[1]) {
             SPDLOG_ERROR("[{}] Failed to generate functions for blocks_cnt={}", name(), blocks_cnt);
             return {};
@@ -180,7 +184,8 @@ class BranchTargetBufferMeasurer final : public core::Measurer {
             }
         }
 
-        double avg_ticks_per_block = std::accumulate(ticks_per_block.begin(), ticks_per_block.end(), 0.0) / config_.repeats;
+        double avg_ticks_per_block =
+            std::accumulate(ticks_per_block.begin(), ticks_per_block.end(), 0.0) / config_.repeats;
         double avg_raw_ticks = std::accumulate(raw_ticks.begin(), raw_ticks.end(), 0.0) / config_.repeats;
 
         double ticks_std = 0.0;
@@ -200,10 +205,11 @@ class BranchTargetBufferMeasurer final : public core::Measurer {
 
         if (pmc) {
             double rate = static_cast<double>(avg_events_counts) / (blocks_cnt * config_.iterations);
-            SPDLOG_INFO("[{}]\nblocks_cnt={}: avg_ticks_per_block={:.4e} (std={:.4e}), misprediction_rate={:.4f}", name(), blocks_cnt,
-                        avg_ticks_per_block, ticks_std, rate);
+            SPDLOG_INFO("[{}]\nblocks_cnt={}: avg_ticks_per_block={:.4e} (std={:.4e}), misprediction_rate={:.4f}",
+                        name(), blocks_cnt, avg_ticks_per_block, ticks_std, rate);
         } else {
-            SPDLOG_INFO("[{}]\nblocks_cnt={}: avg_ticks_per_block={:.4e} (std={:.4e})", name(), blocks_cnt, avg_ticks_per_block, ticks_std);
+            SPDLOG_INFO("[{}]\nblocks_cnt={}: avg_ticks_per_block={:.4e} (std={:.4e})", name(), blocks_cnt,
+                        avg_ticks_per_block, ticks_std);
         }
 
         return {avg_ticks_per_block, avg_raw_ticks, ticks_std, avg_events_counts};
@@ -217,7 +223,8 @@ class BranchTargetBufferMeasurer final : public core::Measurer {
 
     double computeTimePerBlock(const BranchTargetBufferResult& res) const { return res.avg_ticks_per_block; }
 
-    size_t findApproxSaturation(const std::vector<size_t>& counts, const std::vector<BranchTargetBufferResult>& results, bool use_events) {
+    size_t findApproxSaturation(const std::vector<size_t>& counts, const std::vector<BranchTargetBufferResult>& results,
+                                bool use_events) {
         if (counts.size() < 4) return 0;
 
         if (use_events) {
@@ -343,4 +350,4 @@ class BranchTargetBufferMeasurer final : public core::Measurer {
     }
 };
 
-} // namespace silicon_probe::branch_target_buffer
+}  // namespace silicon_probe::branch_target_buffer

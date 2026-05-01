@@ -1,23 +1,22 @@
 #pragma once
 
-#include "shared_types/cpu_info_data.hpp"
-#include "core/measurer_registry.hpp"
-#include "infra/logging.hpp"
-
 #include <exception>
 #include <utility>
+
+#include "core/measurer_registry.hpp"
+#include "infra/logging.hpp"
+#include "shared_types/cpu_info_data.hpp"
 
 namespace silicon_probe::core {
 
 class ProbeService {
-private:
+   private:
     MeasurerRegistry registry_;
     shared_types::CpuInfoData data_;
     bool measured_ = false;
 
-public:
-    explicit ProbeService(MeasurerRegistry registry)
-        : registry_(std::move(registry)) {}
+   public:
+    explicit ProbeService(MeasurerRegistry registry) : registry_(std::move(registry)) {}
 
     const shared_types::CpuInfoData& run() {
         SPDLOG_INFO("Starting CPU measurement pipeline");
@@ -37,9 +36,7 @@ public:
         return data_;
     }
 
-    const shared_types::CpuInfoData& data() const noexcept {
-        return data_;
-    }
+    const shared_types::CpuInfoData& data() const noexcept { return data_; }
 };
 
-} // namespace silicon_probe::core
+}  // namespace silicon_probe::core

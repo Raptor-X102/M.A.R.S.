@@ -1,9 +1,9 @@
-#include "app/application.hpp"
-#include "app/config.hpp"
-
 #include <CLI/CLI.hpp>
 #include <exception>
 #include <iostream>
+
+#include "app/application.hpp"
+#include "app/config.hpp"
 
 int main(int argc, char** argv) {
     silicon_probe::app::BootstrapOptionsParser parser{};

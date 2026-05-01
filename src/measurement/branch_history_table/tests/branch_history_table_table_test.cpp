@@ -73,5 +73,5 @@ TEST(BranchHistoryTableTableTest, DetectsSaturationFromTable) {
     }
 }
 
-} // namespace
-} // namespace silicon_probe::branch_history_table
+}  // namespace
+}  // namespace silicon_probe::branch_history_table
