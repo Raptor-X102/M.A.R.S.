@@ -1,12 +1,12 @@
 common:
   environment:
     bind_cpu: 0
-    realtime_priority: false
-    lock_frequency: false
+    realtime_priority: true
+    lock_frequency: true
 
 benchmarks:
   cache:
-    enabled: false
+    enabled: true
     levels: [l1, l2, l3]
     limits:
         l1_max: 128KiB
@@ -48,7 +48,7 @@ benchmarks:
       huge_pages: false
 
   rob:
-    enabled: false
+    enabled: true
 
     measurement:
       min_instr_cnt: 50
@@ -67,7 +67,7 @@ benchmarks:
       fallback_jump_ratio: 0.50
 
   branch_history_table:
-    enabled: false
+    enabled: true
 
     measurement:
       min_period: 16
@@ -76,7 +76,7 @@ benchmarks:
       iterations: 100000000
 
   return_address_stack:
-    enabled: false
+    enabled: true
 
     measurement:
       min_recursion_depth: 1
@@ -92,7 +92,7 @@ benchmarks:
       required_consecutive_points: 3
 
   exec_ports:
-    enabled: false
+    enabled: true
 
     measurement:
       instr_cnt: 100000
@@ -112,7 +112,7 @@ benchmarks:
     #   lock_frequency: true
 
   uops_cache:
-    enabled: false
+    enabled: true
 
     measurement:
       min_instr_cnt: 1200
@@ -132,7 +132,7 @@ benchmarks:
       coarse_ignore_first: 3
 
   branch_target_buffer:
-    enabled: false
+    enabled: true
 
     measurement:
       min_blocks_cnt: 3500
@@ -151,7 +151,7 @@ benchmarks:
       coarse_ignore_first: 2
   
   store_to_load_forwarding:
-    enabled: false
+    enabled: true
 
     measurement:
       repeats: 10
@@ -159,7 +159,7 @@ benchmarks:
       #alignment: 16
 
   write_buffer:
-    enabled: false
+    enabled: true
 
     measurement:
       #repeats: 10

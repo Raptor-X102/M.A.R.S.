@@ -25,7 +25,98 @@ cmake --build build
 
 После этого исполняемый файл обычно находится здесь:
 
-[`build/mars`](/home/tiomik/projectX/M.A.R.S./build/mars)
+[`build/src/cli/mars`](/home/rach/rAch-kaplin/M.A.R.S./build/src/cli/mars)
+
+---
+
+## Запуск через Docker
+
+В корне репозитория есть готовые файлы:
+
+- [`Dockerfile`](/home/rach/rAch-kaplin/M.A.R.S./Dockerfile)
+- [`docker-compose.yml`](/home/rach/rAch-kaplin/M.A.R.S./docker-compose.yml)
+- [`docker.md`](/home/rach/rAch-kaplin/M.A.R.S./docker.md)
+
+### Сборка образа
+
+```bash
+docker build -t mars-cli:local .
+```
+
+### Базовый запуск через Docker
+
+```bash
+docker run --rm mars-cli:local
+```
+
+### Запуск с явным конфигом и логом в файл
+
+```bash
+mkdir -p logs
+
+docker run --rm \
+  -v "$(pwd)/config:/opt/mars/config:ro" \
+  -v "$(pwd)/logs:/opt/mars/logs" \
+  mars-cli:local \
+  --config config/mars_example.yaml \
+  --log-level debug \
+  --log-file logs/docker.log
+```
+
+### Строгий режим через Docker
+
+Этот режим нужен, если вы хотите дать контейнеру больше шансов на корректную работу:
+
+- `bind_cpu`
+- `realtime_priority`
+- `lock_frequency`
+- low-level PMU/perf measurements
+
+Команда:
+
+```bash
+docker run --rm \
+  --cpuset-cpus="0" \
+  --privileged \
+  --security-opt seccomp=unconfined \
+  --ulimit rtprio=99 \
+  --ulimit memlock=-1 \
+  -v "$(pwd)/config:/opt/mars/config:ro" \
+  -v "$(pwd)/logs:/opt/mars/logs" \
+  -v /sys:/sys:rw \
+  mars-cli:local \
+  --config config/mars_example.yaml
+```
+
+---
+
+## Запуск через Docker Compose
+
+### Сборка
+
+```bash
+docker compose build
+```
+
+### Обычный запуск
+
+```bash
+docker compose run --rm mars
+```
+
+### Строгий запуск
+
+```bash
+docker compose run --rm mars-strict
+```
+
+### Выбрать другой CPU для strict-режима
+
+```bash
+MARS_CPUSET=3 docker compose run --rm mars-strict
+```
+
+Полное объяснение Docker-конфигурации, прав и тестовых команд вынесено в [`doc/docker.md`](/home/rach/rAch-kaplin/M.A.R.S./docker.md).
 
 ---
 
@@ -34,43 +125,43 @@ cmake --build build
 Запуск с конфигом по умолчанию:
 
 ```bash
-./build/mars
+./build/src/cli/mars
 ```
 
 Запуск с явным конфигом:
 
 ```bash
-./build/mars --config config/mars_example.yaml
+./build/src/cli/mars --config config/mars_example.yaml
 ```
 
 Запуск с подробным логом:
 
 ```bash
-./build/mars --log-level debug
+./build/src/cli/mars --log-level debug
 ```
 
 Запуск без вывода summary:
 
 ```bash
-./build/mars --no-summary
+./build/src/cli/mars --no-summary
 ```
 
 Запуск без логов в консоль:
 
 ```bash
-./build/mars --no-console
+./build/src/cli/mars --no-console
 ```
 
 Запуск с логом в файл:
 
 ```bash
-./build/mars --log-file mars.log
+./build/src/cli/mars --log-file mars.log
 ```
 
 Комбинированный пример:
 
 ```bash
-./build/mars \
+./build/src/cli/mars \
   --config config/mars_example.yaml \
   --log-level info \
   --log-file mars.log
@@ -95,23 +186,23 @@ cmake --build build
 Опции со значением можно передавать так:
 
 ```bash
-./build/mars --config config/mars_example.yaml
-./build/mars -c config/mars_example.yaml
-./build/mars --log-level debug
-./build/mars --log-file mars.log
+./build/src/cli/mars --config config/mars_example.yaml
+./build/src/cli/mars -c config/mars_example.yaml
+./build/src/cli/mars --log-level debug
+./build/src/cli/mars --log-file mars.log
 ```
 
 Флаги без значения передаются просто наличием:
 
 ```bash
-./build/mars --no-console
-./build/mars --no-summary
+./build/src/cli/mars --no-console
+./build/src/cli/mars --no-summary
 ```
 
 Можно комбинировать:
 
 ```bash
-./build/mars -c config/mars_example.yaml --log-level trace --log-file trace.log --no-summary
+./build/src/cli/mars -c config/mars_example.yaml --log-level trace --log-file trace.log --no-summary
 ```
 
 ---
@@ -131,9 +222,9 @@ cmake --build build
 Примеры:
 
 ```bash
-./build/mars --log-level info
-./build/mars --log-level debug
-./build/mars --log-level off
+./build/src/cli/mars --log-level info
+./build/src/cli/mars --log-level debug
+./build/src/cli/mars --log-level off
 ```
 
 ---
@@ -393,4 +484,3 @@ probe:
 | Парсер CLI-опций | [`include/app/config.hpp`](/home/tiomik/projectX/M.A.R.S./include/app/config.hpp) |
 | Загрузка YAML | [`src/app/config_loader.cpp`](/home/tiomik/projectX/M.A.R.S./src/app/config_loader.cpp) |
 | Пример конфига | [`config/mars_example.yaml`](/home/tiomik/projectX/M.A.R.S./config/mars_example.yaml) |
-
