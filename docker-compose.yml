@@ -1,0 +1,30 @@
+services:
+  mars:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: mars-cli:local
+    working_dir: /opt/mars
+    command: ["--config", "config/mars_example.yaml"]
+    volumes:
+      - ./config:/opt/mars/config:ro
+
+  mars-strict:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: mars-cli:local
+    working_dir: /opt/mars
+    command: ["--config", "config/mars_example.yaml"]
+    cpuset: "${MARS_CPUSET:-0}"
+    privileged: true
+    security_opt:
+      - seccomp=unconfined
+    ulimits:
+      rtprio: 99
+      memlock:
+        soft: -1
+        hard: -1
+    volumes:
+      - ./config:/opt/mars/config:ro
+      - /sys:/sys:rw
