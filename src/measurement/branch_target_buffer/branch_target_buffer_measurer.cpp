@@ -1,8 +1,6 @@
 // measurement/branch_target_buffer/branch_target_buffer_measurer.cpp
 #include "measurement/branch_target_buffer/branch_target_buffer_measurer.hpp"
 
-#include <numeric>
-
 namespace silicon_probe::branch_target_buffer {
 
 BranchTargetBufferMeasurer::BranchTargetBufferMeasurer() : BranchTargetBufferMeasurer(Config{}) {}

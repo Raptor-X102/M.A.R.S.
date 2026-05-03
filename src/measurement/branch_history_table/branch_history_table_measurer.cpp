@@ -1,14 +1,7 @@
 #include "measurement/branch_history_table/branch_history_table_measurer.hpp"
 
-#include <algorithm>
-#include <cmath>
-#include <random>
-#include <vector>
-
-#include "core/measurer.hpp"
 #include "infra/logging.hpp"
 #include "platform/arch.hpp"
-#include "platform/os.hpp"
 #include "platform/pmc.hpp"
 
 namespace silicon_probe::branch_history_table {
