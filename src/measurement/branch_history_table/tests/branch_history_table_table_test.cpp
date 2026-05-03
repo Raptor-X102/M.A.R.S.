@@ -14,7 +14,7 @@ namespace {
 
 struct BhtCase {
     const char* name;
-    std::vector<BranchHistoryTableMeasurer::RawResult> results;
+    std::vector<BranchHistoryTableMeasurer::BranchHistoryTableResult> results;
     int expected_size;
 };
 
