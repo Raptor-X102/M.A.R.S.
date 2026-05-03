@@ -4,7 +4,7 @@ mars_add_test(mars_bht_tests
 
 target_link_libraries(mars_bht_tests
     PRIVATE
-        mars::branch_history_table   # добавить
+        mars::branch_history_table 
         mars::platform
         mars::core
         mars::infra_logging
