@@ -127,15 +127,15 @@ endif()
 
 add_subdirectory(include/infra)
 add_subdirectory(include/platform)
-add_subdirectory(include/measurement)
+#add_subdirectory(include/measurement)
 add_subdirectory(include/core)
 add_subdirectory(src/app)
+add_subdirectory(src/measurement)
 
 if(MARS_BUILD_TESTS)
     if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/src/core/CMakeLists.txt)
         add_subdirectory(src/core)
     endif()
-    add_subdirectory(src/measurement)
 endif()
 
 if(MARS_BUILD_APPS)

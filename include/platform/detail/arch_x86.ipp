@@ -628,7 +628,7 @@ private:
 
 } // namespace x86_exec_ports_detail
 
-inline void* generate_exec_ports_codegenerate(size_t instr_cnt, const std::vector<InstrType>& types) {
+inline void* generate_exec_ports_code(size_t instr_cnt, const std::vector<InstrType>& types) {
     return x86_exec_ports_detail::ExecPortsCodeGenerator::instance().generate(instr_cnt, types);
 }
 
@@ -785,7 +785,7 @@ private:
 
 } // namespace x86_uops_cache_detail
 
-inline void* generate_uops_cache_codegenerate(size_t instr_cnt, 
+inline void* generate_uops_cache_code(size_t instr_cnt, 
                                               size_t iterations, 
                                               const std::vector<InstrType>& types) {
     return x86_uops_cache_detail::UopsCacheCodeGenerator::instance().generate(instr_cnt,iterations, types);

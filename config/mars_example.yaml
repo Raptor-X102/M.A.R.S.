@@ -1,8 +1,8 @@
 common:
   environment:
     bind_cpu: 0
-    realtime_priority: false
-    lock_frequency: false
+    realtime_priority: true
+    lock_frequency: true
 
 benchmarks:
   cache:
@@ -40,7 +40,7 @@ benchmarks:
         l1_miss_rate_threshold: 0.01
 
   tlb:
-    enabled: true
+    enabled: false
 
     measurement:
       max_pages: 4096
@@ -67,7 +67,7 @@ benchmarks:
       fallback_jump_ratio: 0.50
 
   branch_history_table:
-    enabled: false
+    enabled: true
 
     measurement:
       min_period: 16

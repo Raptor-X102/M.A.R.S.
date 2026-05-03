@@ -1,3 +1,4 @@
+// measurement/cache/boundary_analyzer.hpp
 #pragma once
 
 #include <algorithm>
@@ -20,33 +21,10 @@ struct BoundaryAnalyzerConfig {
 };
 
 class BoundaryAnalyzer {
-   private:
-    BoundaryAnalyzerConfig config_;
+public:
+    explicit BoundaryAnalyzer(BoundaryAnalyzerConfig config = {});
 
-   public:
-    explicit BoundaryAnalyzer(BoundaryAnalyzerConfig config = {}) : config_(config) {}
-
-    static Statistics compute_stats(const std::vector<double>& samples) {
-        Statistics statistics{};
-        if (samples.empty()) {
-            return statistics;
-        }
-
-        if (samples.size() == 1) {
-            statistics.mean = samples.front();
-            return statistics;
-        }
-
-        const double sum = std::accumulate(samples.begin(), samples.end(), 0.0);
-        statistics.mean = sum / static_cast<double>(samples.size());
-
-        double squared_sum = 0.0;
-        for (const double sample : samples) {
-            squared_sum += (sample - statistics.mean) * (sample - statistics.mean);
-        }
-        statistics.stddev = std::sqrt(squared_sum / static_cast<double>(samples.size() - 1));
-        return statistics;
-    }
+    static Statistics compute_stats(const std::vector<double>& samples);
 
     template <typename MeasureFn>
     size_t refine_boundary(size_t left, size_t right, size_t precision, MeasureFn&& measure,
@@ -83,6 +61,9 @@ class BoundaryAnalyzer {
         SPDLOG_DEBUG("[boundary] final={} bytes", boundary);
         return boundary;
     }
+
+private:
+    BoundaryAnalyzerConfig config_;
 };
 
 }  // namespace silicon_probe::cache
