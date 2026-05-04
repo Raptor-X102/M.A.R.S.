@@ -4,6 +4,7 @@ mars_add_test(mars_exec_ports_tests
 
 target_link_libraries(mars_exec_ports_tests
     PRIVATE
+        mars::exec_ports
         mars::platform
         mars::core
         mars::infra_logging

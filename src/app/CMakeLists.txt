@@ -19,6 +19,7 @@ target_link_libraries(mars_app
         mars::uops_cache
         mars::branch_target_buffer
         mars::store_to_load_forwarding
+        mars::write_buffer
         CLI11::CLI11
     PRIVATE
         ${MARS_YAMLCPP_TARGET}
