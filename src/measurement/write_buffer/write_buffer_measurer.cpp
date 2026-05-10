@@ -2,6 +2,7 @@
 #include "measurement/write_buffer/write_buffer_measurer.hpp"
 
 #include <numeric>
+#include <algorithm>
 #include <cmath>
 
 namespace silicon_probe::write_buffer {
@@ -176,31 +177,64 @@ WriteBufferResult WriteBufferMeasurer::measure_for_writes(size_t num_writes, int
     return {avg, stddev, std::move(avg_events)};
 }
 
-size_t WriteBufferMeasurer::analyze_buffer_capacity(const std::vector<WriteBufferResult>& results,
-                                                    const std::vector<size_t>& writes_list,
-                                                    bool has_pmc, size_t sb_idx, size_t bound_idx) {
-    double base_latency = results[0].avg_latency_ticks;
+size_t WriteBufferMeasurer::analyze_buffer_capacity(
+    const std::vector<WriteBufferResult>& results,
+    const std::vector<size_t>& writes_list,
+    bool /*has_pmc*/, size_t sb_idx, size_t bound_idx) {
+
+    if (results.size() < config_.baseline_window + 2)
+        return writes_list.back();
+
+    // Baseline latency: median of first baseline_window points
+    std::vector<double> base_samples;
+    for (size_t i = 0; i < config_.baseline_window; ++i)
+        base_samples.push_back(results[i].avg_latency_ticks);
+    std::sort(base_samples.begin(), base_samples.end());
+    double baseline = base_samples[base_samples.size() / 2];
+
+    double spike_threshold = baseline * config_.latency_spike_ratio;
+    double hold_threshold = baseline * 1.5;   // fixed relative threshold for follow-up check
+
     size_t capacity = writes_list.back();
-
-    for (size_t i = 0; i < results.size(); ++i) {
-        bool stall_overflow = false;
-        if (has_pmc) {
-            double stalls_per_sample = 0.0;
-            if (sb_idx != std::string::npos && sb_idx < results[i].avg_events.size())
-                stalls_per_sample = double(results[i].avg_events[sb_idx]) / config_.iterations;
-            else if (bound_idx != std::string::npos && bound_idx < results[i].avg_events.size())
-                stalls_per_sample = double(results[i].avg_events[bound_idx]) / config_.iterations;
-
-            if (stalls_per_sample > 10.0) stall_overflow = true;
-        }
-
-        bool latency_spike = (results[i].avg_latency_ticks > base_latency * 1.15);
-
-        if (stall_overflow || latency_spike) {
-            capacity = writes_list[i];
-            break;
+    for (size_t i = 1; i < results.size(); ++i) {
+        if (results[i].avg_latency_ticks > spike_threshold) {
+            // Verify that the next point(s) also exceed hold_threshold
+            size_t next_idx = i + 1;
+            if (next_idx < results.size() &&
+                results[next_idx].avg_latency_ticks > hold_threshold) {
+                capacity = writes_list[i];
+                break;
+            }
+            // If only one point spikes but next falls, continue searching
         }
     }
+
+    // Fallback: if no stable spike, use stall events with a high relative threshold
+    if (capacity == writes_list.back()) {
+        double max_stalls = 0.0;
+        for (size_t i = 0; i < results.size(); ++i) {
+            double stalls = 0.0;
+            if (sb_idx != std::string::npos && sb_idx < results[i].avg_events.size())
+                stalls = double(results[i].avg_events[sb_idx]) / config_.iterations;
+            else if (bound_idx != std::string::npos && bound_idx < results[i].avg_events.size())
+                stalls = double(results[i].avg_events[bound_idx]) / config_.iterations;
+            if (stalls > max_stalls) max_stalls = stalls;
+        }
+        for (size_t i = 0; i < results.size(); ++i) {
+            double stalls = 0.0;
+            if (sb_idx != std::string::npos && sb_idx < results[i].avg_events.size())
+                stalls = double(results[i].avg_events[sb_idx]) / config_.iterations;
+            else if (bound_idx != std::string::npos && bound_idx < results[i].avg_events.size())
+                stalls = double(results[i].avg_events[bound_idx]) / config_.iterations;
+            if (stalls > max_stalls * config_.stall_fallback_ratio) {
+                capacity = writes_list[i];
+                break;
+            }
+        }
+    }
+
+    SPDLOG_INFO("[{}] baseline = {:.2f}, threshold = {:.2f}, capacity = {}",
+                name(), baseline, spike_threshold, capacity);
     return capacity;
 }
 

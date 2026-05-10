@@ -6,7 +6,7 @@ common:
 
 benchmarks:
   cache:
-    enabled: false
+    enabled: true
     levels: [l1, l2, l3]
     limits:
         l1_max: 128KiB
@@ -40,15 +40,15 @@ benchmarks:
         l1_miss_rate_threshold: 0.01
 
   tlb:
-    enabled: false
+    enabled: true
 
     measurement:
       max_pages: 4096
       iterations: 2000000
-      huge_pages: false
+      huge_pages: true
 
   rob:
-    enabled: false
+    enabled: true
 
     measurement:
       min_instr_cnt: 50
@@ -76,7 +76,7 @@ benchmarks:
       iterations: 100000000
 
   return_address_stack:
-    enabled: false
+    enabled: true
 
     measurement:
       min_recursion_depth: 1
@@ -94,7 +94,7 @@ benchmarks:
       noise_estimation_ratio: 0.7     # more samples for noise estimation
 
   exec_ports:
-    enabled: false
+    enabled: true
 
     measurement:
       instr_cnt: 100000
@@ -109,7 +109,7 @@ benchmarks:
         name: scalar float mul
 
   uops_cache:
-    enabled: false
+    enabled: true
 
     measurement:
       min_instr_cnt: 1200
@@ -129,7 +129,7 @@ benchmarks:
       coarse_ignore_first: 3
 
   branch_target_buffer:
-    enabled: false
+    enabled: true
 
     measurement:
       min_blocks_cnt: 3500
@@ -148,7 +148,7 @@ benchmarks:
       coarse_ignore_first: 2
   
   store_to_load_forwarding:
-    enabled: false
+    enabled: true
 
     measurement:
       repeats: 10
@@ -156,11 +156,18 @@ benchmarks:
       #alignment: 16
 
   write_buffer:
-    enabled: false
+    enabled: true
 
     measurement:
-      #repeats: 10
-      iterations: 1000
-      #warmup_iterations: 10
-      #alignment: 16
-         
+      max_writes: 64
+      min_writes: 1
+      writes_step: 1
+      iterations: 5000
+      repeats: 30
+      warmup_iterations: 5
+    detection:
+      latency_spike_ratio: 2.0     
+      latency_jump_ratio: 0.5     
+      stall_confirm_ratio: 0.8   
+      stall_fallback_ratio: 0.9 
+      baseline_window: 3       

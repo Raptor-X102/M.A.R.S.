@@ -1000,10 +1000,10 @@ class S2LFwdConfigParser final
 
 class WriteBufferConfigParser final
     : public BenchmarkConfigParserBase<silicon_probe::write_buffer::WriteBufferMeasurer::Config> {
-   public:
+public:
     WriteBufferConfigParser() : BenchmarkConfigParserBase("write_buffer") {}
 
-   private:
+private:
     void parse_specific(const YAML::Node& section, const std::string& path,
                         silicon_probe::write_buffer::WriteBufferMeasurer::Config& config) const override {
         with_mapping(section, "measurement", path,
@@ -1034,16 +1034,29 @@ class WriteBufferConfigParser final
                                             });
                      });
 
-        with_mapping(section, "detection", path, [&](const YAML::Node& detection, const std::string& detection_path) {
-            with_optional_node(detection, "latency_growth_ratio", detection_path,
-                               [&](const YAML::Node& node, const std::string& node_path) {
-                                   config.latency_growth_ratio = parse_double_scalar(node, node_path);
-                               });
-            with_optional_node(detection, "pmc_saturation_ratio", detection_path,
-                               [&](const YAML::Node& node, const std::string& node_path) {
-                                   config.pmc_saturation_ratio = parse_double_scalar(node, node_path);
-                               });
-        });
+        with_mapping(section, "detection", path,
+                     [&](const YAML::Node& detection, const std::string& detection_path) {
+                         with_optional_node(detection, "latency_spike_ratio", detection_path,
+                                            [&](const YAML::Node& node, const std::string& node_path) {
+                                                config.latency_spike_ratio = parse_double_scalar(node, node_path);
+                                            });
+                         with_optional_node(detection, "latency_jump_ratio", detection_path,
+                                            [&](const YAML::Node& node, const std::string& node_path) {
+                                                config.latency_jump_ratio = parse_double_scalar(node, node_path);
+                                            });
+                         with_optional_node(detection, "stall_confirm_ratio", detection_path,
+                                            [&](const YAML::Node& node, const std::string& node_path) {
+                                                config.stall_confirm_ratio = parse_double_scalar(node, node_path);
+                                            });
+                         with_optional_node(detection, "stall_fallback_ratio", detection_path,
+                                            [&](const YAML::Node& node, const std::string& node_path) {
+                                                config.stall_fallback_ratio = parse_double_scalar(node, node_path);
+                                            });
+                         with_optional_node(detection, "baseline_window", detection_path,
+                                            [&](const YAML::Node& node, const std::string& node_path) {
+                                                config.baseline_window = parse_size_scalar(node, node_path);
+                                            });
+                     });
     }
 };
 
