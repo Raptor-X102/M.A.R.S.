@@ -67,7 +67,7 @@ benchmarks:
       fallback_jump_ratio: 0.50
 
   branch_history_table:
-    enabled: false
+    enabled: true
 
     measurement:
       min_period: 16
@@ -76,7 +76,7 @@ benchmarks:
       iterations: 100000000
 
   return_address_stack:
-    enabled: true
+    enabled: false
 
     measurement:
       min_recursion_depth: 1

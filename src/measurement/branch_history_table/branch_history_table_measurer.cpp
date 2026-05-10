@@ -105,100 +105,92 @@ int BranchHistoryTableMeasurer::detectBHTSaturation(const std::vector<BranchHist
         misses.push_back(r.miss_per_iter);
     }
 
-    size_t baseline_cnt = std::min(kBaselineMaxSamples,
-                                   static_cast<size_t>(std::ceil(results.size() * kBaselineFraction)));
-    if (baseline_cnt < 2) baseline_cnt = results.size() / 2;
-    std::vector<double> baseline_vals(misses.begin(), misses.begin() + baseline_cnt);
-    std::sort(baseline_vals.begin(), baseline_vals.end());
-    double baseline = baseline_vals[baseline_vals.size() / 2];
-    double threshold = baseline + kBaselineOffset;
+    // 1. Baseline: use the smallest observed miss rate (typically first small periods)
+    double baseline = *std::min_element(misses.begin(), misses.end());
 
-    BHTEstimates est;
+    // 2. Asymptotic miss rate: average of last 3 points (or last point if fewer)
+    size_t n = misses.size();
+    double max_miss = 0.0;
+    if (n >= 3) {
+        double sum = 0.0;
+        for (size_t i = n - 3; i < n; ++i) sum += misses[i];
+        max_miss = sum / 3.0;
+    } else {
+        max_miss = misses.back();
+    }
 
-    // Method 1: Baseline + offset, take previous period if sharp jump
-    for (size_t i = 1; i < misses.size(); ++i) {
-        if (misses[i] > threshold) {
-            if (misses[i] - misses[i-1] > 0.1 && misses[i-1] < 0.05) {
-                est.baseline_offset = static_cast<int>(periods[i-1]);
-            } else {
-                est.baseline_offset = static_cast<int>(periods[i]);
-            }
+    // 3. Find period where miss rate reaches 90% of the rise from baseline to max_miss
+    // Use 95% of the rise to saturation (more accurate for modern CPUs)
+    const double saturation_fraction = 0.95;
+    double threshold = baseline + saturation_fraction * (max_miss - baseline);
+    int saturation_period = -1;
+    for (size_t i = 0; i < n; ++i) {
+        if (misses[i] >= threshold) {
+            saturation_period = static_cast<int>(periods[i]);
             break;
         }
     }
 
-    // Method 2: Maximum delta (largest increase)
-    double max_delta = 0.0;
-    size_t max_delta_idx = 0;
-    for (size_t i = 1; i < misses.size(); ++i) {
+    // 4. Alternative method: first period where the derivative (increase per doubling) becomes small
+    //    after a significant initial rise. This helps when 90% threshold is too early.
+    int derivative_period = -1;
+    const double high_rise_threshold = 0.15;   // require at least 0.15 increase per doubling initially
+    const double low_rise_threshold = 0.03;    // after saturation, increase per doubling < 0.03
+    bool seen_high_rise = false;
+    for (size_t i = 1; i < n; ++i) {
         double delta = misses[i] - misses[i-1];
-        if (delta > max_delta) {
-            max_delta = delta;
-            max_delta_idx = i;
-        }
-    }
-    if (max_delta > kMinDelta) {
-        if (max_delta > 0.2 && max_delta_idx > 0 && misses[max_delta_idx-1] < 0.05) {
-            est.max_delta = static_cast<int>(periods[max_delta_idx-1]);
-        } else {
-            est.max_delta = static_cast<int>(periods[max_delta_idx]);
-        }
-    }
-
-    // Method 3: Inflection point (maximum second derivative on log2 scale)
-    std::vector<double> second_deriv;
-    for (size_t i = 1; i < misses.size() - 1; ++i) {
-        double dx = std::log2(periods[i+1]) - std::log2(periods[i-1]);
-        if (dx > 0) {
-            double dy = misses[i+1] - misses[i-1];
-            double deriv = dy / dx;
-            if (i > 1) {
-                double prev_deriv = (misses[i] - misses[i-2]) / (std::log2(periods[i]) - std::log2(periods[i-2]));
-                second_deriv.push_back(deriv - prev_deriv);
-            } else {
-                second_deriv.push_back(0);
+        // If period doubled (or roughly doubled, allow ratio 2x)
+        double period_ratio = periods[i] / periods[i-1];
+        if (period_ratio >= 1.9 && period_ratio <= 2.1) {
+            if (!seen_high_rise && delta >= high_rise_threshold) {
+                seen_high_rise = true;
+            }
+            if (seen_high_rise && delta < low_rise_threshold) {
+                derivative_period = static_cast<int>(periods[i-1]); // take the period before the drop
+                break;
             }
         }
     }
-    if (!second_deriv.empty()) {
-        auto max_it = std::max_element(second_deriv.begin(), second_deriv.end());
-        size_t idx = std::distance(second_deriv.begin(), max_it) + 1;
-        if (idx < periods.size()) {
-            est.inflection_point = static_cast<int>(periods[idx]);
-        }
-    }
 
-    // Find sharp jump directly (fallback for when all methods overestimate)
+    // 5. Sharp jump fallback (relaxed conditions)
     int sharp_jump = -1;
-    for (size_t i = 1; i < misses.size(); ++i) {
-        if (misses[i] > 0.3 && misses[i-1] < 0.05 && periods[i] / periods[i-1] == 2) {
+    for (size_t i = 1; i < n; ++i) {
+        double period_ratio = periods[i] / periods[i-1];
+        if (misses[i] > 0.25 && misses[i-1] < 0.10 && period_ratio >= 1.9 && period_ratio <= 2.1) {
             sharp_jump = static_cast<int>(periods[i-1]);
             break;
         }
     }
 
-    std::vector<int> candidates;
-    if (est.baseline_offset > 0) candidates.push_back(est.baseline_offset);
-    if (est.max_delta > 0) candidates.push_back(est.max_delta);
-    if (est.inflection_point > 0) candidates.push_back(est.inflection_point);
-
-    if (candidates.empty()) {
-        SPDLOG_WARN("[{}] no candidate found", name());
-        return sharp_jump > 0 ? sharp_jump : -1;
+    // Combine candidates: we prefer the saturation_period (90% threshold) but if derivative method
+    // gives a larger period, it may be more accurate. Use the larger of the two if they are close,
+    // otherwise fallback.
+    int best = saturation_period;
+    if (derivative_period > 0) {
+        // If derivative period is within factor 2 of saturation period, take the larger one.
+        if (best > 0 && derivative_period > best * 1.5) {
+            SPDLOG_WARN("[{}] derivative period {} is much larger than saturation period {}, using derivative",
+                        name(), derivative_period, best);
+            best = derivative_period;
+        } else if (derivative_period > best) {
+            best = derivative_period;
+        }
     }
 
-    int best = *std::min_element(candidates.begin(), candidates.end());
-
-    if (sharp_jump > 0 && best > sharp_jump) {
-        SPDLOG_WARN("[{}] all methods overestimated (min={}, sharp_jump={}), using sharp_jump",
-                    name(), best, sharp_jump);
+    // If both failed, use sharp_jump
+    if (best <= 0 && sharp_jump > 0) {
         best = sharp_jump;
     }
 
-    SPDLOG_INFO("[{}] BHT estimation: baseline={:.4f}, threshold={:.4f}", name(), baseline, threshold);
-    SPDLOG_INFO("  baseline+offset candidate = {}", est.baseline_offset);
-    SPDLOG_INFO("  max delta candidate        = {} (delta={:.4f})", est.max_delta, max_delta);
-    SPDLOG_INFO("  inflection point candidate = {}", est.inflection_point);
+    if (best <= 0) {
+        SPDLOG_WARN("[{}] no reliable BHT size found, defaulting to largest period", name());
+        best = static_cast<int>(periods.back());
+    }
+
+    SPDLOG_INFO("[{}] BHT estimation: baseline={:.4f}, max_miss={:.4f}, threshold={:.4f}", name(), baseline, max_miss, threshold);
+    SPDLOG_INFO("  saturation (90% rise) period = {}", saturation_period);
+    SPDLOG_INFO("  derivative (rise then plateau) period = {}", derivative_period);
+    SPDLOG_INFO("  sharp jump period = {}", sharp_jump);
     SPDLOG_INFO("  selected BHT size = {}", best);
 
     return best;
