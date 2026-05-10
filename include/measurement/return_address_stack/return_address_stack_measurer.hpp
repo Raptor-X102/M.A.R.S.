@@ -27,11 +27,14 @@ public:
         size_t max_recursion_depth = kDefaultMaxRecursion;
         size_t recursion_depth_step = kDefaultRecursionStep;
         size_t iterations = kDefaultIterations;
-        double trim_ratio = 0.02;
-        size_t baseline_min_depth = 8;
-        size_t baseline_max_depth = 16;
-        double saturation_threshold_ratio = 1.5;
-        size_t required_consecutive_points = 3;
+        double trim_ratio = 0.02;               // trimming outliers before averaging
+
+        // --- RAS detection parameters ---
+        size_t smoothing_window = 3;            // median filter window (odd number)
+        double noise_estimation_ratio = 0.5;    // fraction of deltas used for noise estimation (0..1)
+        double threshold_multiplier = 5.0;      // multiplier for MAD: threshold = median + k * MAD
+        size_t sustained_window = 3;            // number of points after jump to check for stability
+        double sustained_ratio = 1.15;          // required after_avg / before_avg to accept jump
     };
 
     ReturnAddressStackMeasurer();

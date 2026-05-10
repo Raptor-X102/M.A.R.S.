@@ -6,7 +6,7 @@ common:
 
 benchmarks:
   cache:
-    enabled: true
+    enabled: false
     levels: [l1, l2, l3]
     limits:
         l1_max: 128KiB
@@ -48,11 +48,11 @@ benchmarks:
       huge_pages: false
 
   rob:
-    enabled: true
+    enabled: false
 
     measurement:
       min_instr_cnt: 50
-      max_instr_cnt: 600
+      max_instr_cnt: 300
       instr_cnt_step: 10
       warmup_iterations: 2
       inner_iterations: 8192
@@ -67,7 +67,7 @@ benchmarks:
       fallback_jump_ratio: 0.50
 
   branch_history_table:
-    enabled: true
+    enabled: false
 
     measurement:
       min_period: 16
@@ -82,17 +82,19 @@ benchmarks:
       min_recursion_depth: 1
       max_recursion_depth: 48
       recursion_depth_step: 1
-      iterations: 1000000
-
+      iterations: 5000000
+    
     detection:
-      trim_ratio: 0.02
-      baseline_min_depth: 8
-      baseline_max_depth: 16
-      saturation_threshold_ratio: 1.5
-      required_consecutive_points: 3
+      trim_ratio: 0.05              # trim 5% outliers from each end
+      smoothing_window: 3           # median filter window (will be made odd)
+      detection:
+      threshold_multiplier: 6.0       # higher = more noise resistant
+      sustained_ratio: 1.20           # need bigger jump to confirm
+      sustained_window: 4             # more confidence required
+      noise_estimation_ratio: 0.7     # more samples for noise estimation
 
   exec_ports:
-    enabled: true
+    enabled: false
 
     measurement:
       instr_cnt: 100000
@@ -106,17 +108,12 @@ benchmarks:
         type: mul_float
         name: scalar float mul
 
-    # environment:
-    #   bind_cpu: 2
-    #   realtime_priority: true
-    #   lock_frequency: true
-
   uops_cache:
-    enabled: true
+    enabled: false
 
     measurement:
       min_instr_cnt: 1200
-      max_instr_cnt: 5000
+      max_instr_cnt: 3000
       instr_step: 100
       iterations: 100000
       repeats: 10
@@ -132,7 +129,7 @@ benchmarks:
       coarse_ignore_first: 3
 
   branch_target_buffer:
-    enabled: true
+    enabled: false
 
     measurement:
       min_blocks_cnt: 3500
@@ -151,7 +148,7 @@ benchmarks:
       coarse_ignore_first: 2
   
   store_to_load_forwarding:
-    enabled: true
+    enabled: false
 
     measurement:
       repeats: 10
@@ -159,7 +156,7 @@ benchmarks:
       #alignment: 16
 
   write_buffer:
-    enabled: true
+    enabled: false
 
     measurement:
       #repeats: 10

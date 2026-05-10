@@ -718,13 +718,14 @@ class BhtConfigParser final
 
 class RasConfigParser final
     : public BenchmarkConfigParserBase<silicon_probe::return_address_stack::ReturnAddressStackMeasurer::Config> {
-   public:
+public:
     RasConfigParser() : BenchmarkConfigParserBase("return_address_stack") {}
 
-   private:
+private:
     void parse_specific(
         const YAML::Node& section, const std::string& path,
         silicon_probe::return_address_stack::ReturnAddressStackMeasurer::Config& config) const override {
+        
         with_mapping(section, "measurement", path,
                      [&](const YAML::Node& measurement, const std::string& measurement_path) {
                          with_optional_node(measurement, "min_recursion_depth", measurement_path,
@@ -750,21 +751,33 @@ class RasConfigParser final
                                [&](const YAML::Node& node, const std::string& node_path) {
                                    config.trim_ratio = parse_double_scalar(node, node_path);
                                });
-            with_optional_node(detection, "baseline_min_depth", detection_path,
+            with_optional_node(detection, "smoothing_window", detection_path,
                                [&](const YAML::Node& node, const std::string& node_path) {
-                                   config.baseline_min_depth = parse_size_scalar(node, node_path);
+                                   config.smoothing_window = parse_size_scalar(node, node_path);
+                                   // Ensure odd number
+                                   if (config.smoothing_window % 2 == 0) config.smoothing_window++;
                                });
-            with_optional_node(detection, "baseline_max_depth", detection_path,
+            with_optional_node(detection, "noise_estimation_ratio", detection_path,
                                [&](const YAML::Node& node, const std::string& node_path) {
-                                   config.baseline_max_depth = parse_size_scalar(node, node_path);
+                                   config.noise_estimation_ratio = parse_double_scalar(node, node_path);
+                                   // Clamp to [0.1, 0.9]
+                                   config.noise_estimation_ratio = std::clamp(config.noise_estimation_ratio, 0.1, 0.9);
                                });
-            with_optional_node(detection, "saturation_threshold_ratio", detection_path,
+            with_optional_node(detection, "threshold_multiplier", detection_path,
                                [&](const YAML::Node& node, const std::string& node_path) {
-                                   config.saturation_threshold_ratio = parse_double_scalar(node, node_path);
+                                   config.threshold_multiplier = parse_double_scalar(node, node_path);
+                                   // Ensure positive
+                                   config.threshold_multiplier = std::max(1.0, config.threshold_multiplier);
                                });
-            with_optional_node(detection, "required_consecutive_points", detection_path,
+            with_optional_node(detection, "sustained_window", detection_path,
                                [&](const YAML::Node& node, const std::string& node_path) {
-                                   config.required_consecutive_points = parse_size_scalar(node, node_path);
+                                   config.sustained_window = parse_size_scalar(node, node_path);
+                                   config.sustained_window = std::max<size_t>(2, config.sustained_window);
+                               });
+            with_optional_node(detection, "sustained_ratio", detection_path,
+                               [&](const YAML::Node& node, const std::string& node_path) {
+                                   config.sustained_ratio = parse_double_scalar(node, node_path);
+                                   config.sustained_ratio = std::max(1.01, config.sustained_ratio);
                                });
         });
     }

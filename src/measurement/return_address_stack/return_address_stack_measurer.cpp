@@ -18,6 +18,7 @@ std::string_view ReturnAddressStackMeasurer::name() const noexcept {
     return "return address stack";
 }
 
+__attribute__((noinline, noclone))
 void ReturnAddressStackMeasurer::recursive_func(size_t depth, size_t iteration) {
     if (iteration >= depth) return;
     recursive_func(depth, iteration + 1);
@@ -81,37 +82,65 @@ void ReturnAddressStackMeasurer::measure(shared_types::CpuInfoData& data) {
 }
 
 int ReturnAddressStackMeasurer::detectRASSaturation(const std::vector<Result>& results) const {
-    if (results.size() < std::max<size_t>(config_.baseline_max_depth, config_.required_consecutive_points + 1)) {
-        return -1;
+    // Need enough points for meaningful detection
+    if (results.size() < config_.sustained_window + 2) return -1;
+
+    // ----- 1. Median smoothing -----
+    size_t win = config_.smoothing_window;
+    if (win % 2 == 0) ++win;   // ensure odd
+    int half = static_cast<int>(win / 2);
+    std::vector<double> raw(results.size());
+    for (size_t i = 0; i < results.size(); ++i) raw[i] = results[i].avg_exec_time;
+
+    std::vector<double> smoothed(raw.size());
+    for (size_t i = 0; i < raw.size(); ++i) {
+        int left = static_cast<int>(i) - half;
+        int right = static_cast<int>(i) + half;
+        if (left < 0) left = 0;
+        if (right >= static_cast<int>(raw.size())) right = static_cast<int>(raw.size()) - 1;
+        std::vector<double> window;
+        for (int j = left; j <= right; ++j) window.push_back(raw[j]);
+        std::sort(window.begin(), window.end());
+        smoothed[i] = window[window.size() / 2];
     }
+
+    // ----- 2. Deltas -----
     std::vector<double> deltas;
-    for (size_t i = 1; i < results.size(); ++i)
-        deltas.push_back(results[i].avg_exec_time - results[i - 1].avg_exec_time);
+    deltas.reserve(smoothed.size() - 1);
+    for (size_t i = 1; i < smoothed.size(); ++i)
+        deltas.push_back(smoothed[i] - smoothed[i-1]);
 
-    // Baseline: median of deltas for depths 8..16 (indices 7..15)
-    const size_t baseline_start = config_.baseline_min_depth > 0 ? config_.baseline_min_depth - 1 : 0;
-    const size_t baseline_end = std::min(config_.baseline_max_depth, deltas.size());
-    if (baseline_start >= baseline_end) {
-        return -1;
-    }
+    if (deltas.size() < config_.sustained_window + 2) return -1;
 
-    std::vector<double> baseline_vals(deltas.begin() + baseline_start, deltas.begin() + baseline_end);
-    std::sort(baseline_vals.begin(), baseline_vals.end());
-    double baseline = baseline_vals[baseline_vals.size() / 2];
-    const double threshold = baseline * config_.saturation_threshold_ratio;
+    // ----- 3. Noise estimation on first 'ratio' fraction of deltas -----
+    size_t noise_len = static_cast<size_t>(deltas.size() * config_.noise_estimation_ratio);
+    if (noise_len < 2) noise_len = deltas.size();
+    std::vector<double> noise(deltas.begin(), deltas.begin() + noise_len);
+    std::sort(noise.begin(), noise.end());
+    double median = noise[noise.size() / 2];
+    std::vector<double> abs_dev;
+    abs_dev.reserve(noise.size());
+    for (double d : noise) abs_dev.push_back(std::abs(d - median));
+    std::sort(abs_dev.begin(), abs_dev.end());
+    double mad = abs_dev[abs_dev.size() / 2];
+    double threshold = median + config_.threshold_multiplier * mad;
 
-    // Find first depth where delta > threshold and next 2 deltas also > threshold
-    const size_t required_points = std::max<size_t>(1, config_.required_consecutive_points);
-    for (size_t i = config_.baseline_min_depth; i + required_points <= deltas.size(); ++i) {
-        bool stable = true;
-        for (size_t offset = 0; offset < required_points; ++offset) {
-            if (deltas[i + offset] <= threshold) {
-                stable = false;
-                break;
+    // ----- 4. Find first jump where average level after stays significantly higher -----
+    const size_t W = config_.sustained_window;
+    for (size_t i = 0; i + W < deltas.size(); ++i) {
+        if (deltas[i] > threshold) {
+            // Average of W points after the jump (starting from depth i+1)
+            double after_sum = 0.0;
+            for (size_t j = 1; j <= W; ++j) after_sum += smoothed[i + j];
+            double after_avg = after_sum / W;
+            // Average of W points before the jump (ending at depth i)
+            double before_sum = 0.0;
+            for (size_t j = 0; j < W; ++j) before_sum += smoothed[i - j];
+            double before_avg = before_sum / W;
+            if (after_avg >= before_avg * config_.sustained_ratio) {
+                // results[i].depth is the depth before the jump (correct RAS size)
+                return static_cast<int>(results[i].depth);
             }
-        }
-        if (stable) {
-            return results[i].depth;  // depth at which delta occurred
         }
     }
     return -1;
