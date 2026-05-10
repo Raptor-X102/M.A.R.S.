@@ -63,7 +63,7 @@ class SummaryPrinter {
             stream << "Store-to-load forwarding size: " << *data.s2l_fwd_max_size << " bytes\n";
         }
         if (data.s2l_fwd_max_offset) {
-            stream << "Store-to-load forwarding size: " << *data.s2l_fwd_max_offset << " bytes\n";
+            stream << "Store-to-load forwarding offset: " << *data.s2l_fwd_max_offset << " bytes\n";
         }
         if (data.write_buffer_size) {
             stream << "Write buffer size: " << *data.write_buffer_size << " entries\n";

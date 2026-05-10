@@ -23,7 +23,7 @@ struct WriteBufferResult {
 
 class WriteBufferMeasurer final : public core::Measurer {
 public:
-    static constexpr size_t kDefaultMaxWrites = 128;
+    static constexpr size_t kDefaultMaxWrites = 64;
     static constexpr size_t kDefaultMinWrites = 1;
     static constexpr size_t kDefaultWritesStep = 1;
     static constexpr size_t kDefaultIterations = 5000;
@@ -42,8 +42,12 @@ public:
         size_t iterations = kDefaultIterations;
         size_t repeats = kDefaultRepeats;
         size_t warmup_iterations = kDefaultWarmupIterations;
-        double latency_growth_ratio = 2.0;
-        double pmc_saturation_ratio = 0.1;
+
+        double latency_spike_ratio = 2.0;        // latency > baseline * this → overflow
+        double latency_jump_ratio = 0.5;         // (lat[i] - lat[i-1]) / lat[i-1] > this → overflow
+        double stall_confirm_ratio = 0.8;        // if latency spike found, require stalls > max_stalls * this
+        double stall_fallback_ratio = 0.9;       // if no latency spike, first point where stalls > max_stalls * this
+        size_t baseline_window = 3;              // number of initial points for baseline latency
     };
 
     WriteBufferMeasurer();

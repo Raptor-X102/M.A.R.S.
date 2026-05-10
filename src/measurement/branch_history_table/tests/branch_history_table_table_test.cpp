@@ -30,7 +30,7 @@ TEST(BranchHistoryTableTableTest, DetectsSaturationFromTable) {
                 {256, 0.41},
                 {512, 0.44},
             },
-            128,
+            256,
         },
         {
             "threshold_035_fallback",
@@ -42,7 +42,7 @@ TEST(BranchHistoryTableTableTest, DetectsSaturationFromTable) {
                 {256, 0.36},
                 {512, 0.39},
             },
-            128,
+            256,
         },
         {
             "inflection_fallback",
@@ -53,7 +53,7 @@ TEST(BranchHistoryTableTableTest, DetectsSaturationFromTable) {
                 {128, 0.20},
                 {256, 0.21},
             },
-            64,
+            128,
         },
         {
             "insufficient_points",

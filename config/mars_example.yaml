@@ -40,19 +40,19 @@ benchmarks:
         l1_miss_rate_threshold: 0.01
 
   tlb:
-    enabled: false
+    enabled: true
 
     measurement:
       max_pages: 4096
       iterations: 2000000
-      huge_pages: false
+      huge_pages: true
 
   rob:
     enabled: true
 
     measurement:
       min_instr_cnt: 50
-      max_instr_cnt: 600
+      max_instr_cnt: 300
       instr_cnt_step: 10
       warmup_iterations: 2
       inner_iterations: 8192
@@ -82,14 +82,16 @@ benchmarks:
       min_recursion_depth: 1
       max_recursion_depth: 48
       recursion_depth_step: 1
-      iterations: 1000000
-
+      iterations: 5000000
+    
     detection:
-      trim_ratio: 0.02
-      baseline_min_depth: 8
-      baseline_max_depth: 16
-      saturation_threshold_ratio: 1.5
-      required_consecutive_points: 3
+      trim_ratio: 0.05              # trim 5% outliers from each end
+      smoothing_window: 3           # median filter window (will be made odd)
+      detection:
+      threshold_multiplier: 6.0       # higher = more noise resistant
+      sustained_ratio: 1.20           # need bigger jump to confirm
+      sustained_window: 4             # more confidence required
+      noise_estimation_ratio: 0.7     # more samples for noise estimation
 
   exec_ports:
     enabled: true
@@ -106,17 +108,12 @@ benchmarks:
         type: mul_float
         name: scalar float mul
 
-    # environment:
-    #   bind_cpu: 2
-    #   realtime_priority: true
-    #   lock_frequency: true
-
   uops_cache:
     enabled: true
 
     measurement:
       min_instr_cnt: 1200
-      max_instr_cnt: 5000
+      max_instr_cnt: 3000
       instr_step: 100
       iterations: 100000
       repeats: 10
@@ -162,8 +159,15 @@ benchmarks:
     enabled: true
 
     measurement:
-      #repeats: 10
-      iterations: 1000
-      #warmup_iterations: 10
-      #alignment: 16
-         
+      max_writes: 64
+      min_writes: 1
+      writes_step: 1
+      iterations: 5000
+      repeats: 30
+      warmup_iterations: 5
+    detection:
+      latency_spike_ratio: 2.0     
+      latency_jump_ratio: 0.5     
+      stall_confirm_ratio: 0.8   
+      stall_fallback_ratio: 0.9 
+      baseline_window: 3       
