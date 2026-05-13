@@ -32,9 +32,9 @@ class PmcGroup {
     static std::unique_ptr<PmcGroup> create(const std::vector<EventType>& events);
     static std::unique_ptr<PmcGroup> create_raw(const std::vector<std::string>& event_names);
 
-    virtual void reset() = 0;
-    virtual void enable() = 0;
-    virtual void disable() = 0;
+    virtual void reset()               = 0;
+    virtual void enable()              = 0;
+    virtual void disable()             = 0;
     virtual CounterValues read() const = 0;
 
     virtual std::vector<EventType> get_event_types() const = 0;

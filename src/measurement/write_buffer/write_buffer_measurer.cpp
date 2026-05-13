@@ -10,19 +10,24 @@ namespace silicon_probe::write_buffer {
 WriteBufferMeasurer::WriteBufferMeasurer() : WriteBufferMeasurer(Config{}) {}
 
 WriteBufferMeasurer::WriteBufferMeasurer(Config config) : config_(std::move(config)) {
-    SPDLOG_INFO("[{}] cfg: min_writes={} max_writes={} step={} samples_per_repeat={} repeats={}", name(),
-                config_.min_writes, config_.max_writes, config_.writes_step, config_.iterations, config_.repeats);
+    SPDLOG_INFO(
+        "[{}] cfg: min_writes={} max_writes={} step={} samples_per_repeat={} repeats={}",
+        name(),
+        config_.min_writes,
+        config_.max_writes,
+        config_.writes_step,
+        config_.iterations,
+        config_.repeats
+    );
 }
 
-std::string_view WriteBufferMeasurer::name() const noexcept {
-    return "write_buffer";
-}
+std::string_view WriteBufferMeasurer::name() const noexcept { return "write_buffer"; }
 
 void WriteBufferMeasurer::measure(shared_types::CpuInfoData& data) {
     SPDLOG_INFO("[{}] start", name());
     platform::ScopedMeasurementEnvironment env{config_.environment};
 
-    auto events = platform::discover_write_buffer_events(data);
+    auto events  = platform::discover_write_buffer_events(data);
     bool has_pmc = !events.empty();
     std::unique_ptr<platform::pmc::PmcGroup> pmc;
     size_t sb_idx = std::string::npos, bound_idx = std::string::npos;
@@ -33,8 +38,10 @@ void WriteBufferMeasurer::measure(shared_types::CpuInfoData& data) {
             has_pmc = false;
         } else {
             for (size_t i = 0; i < events.size(); ++i) {
-                if (events[i].find("resource_stalls.sb") != std::string::npos) sb_idx = i;
-                if (events[i].find("exe_activity.bound_on_stores") != std::string::npos) bound_idx = i;
+                if (events[i].find("resource_stalls.sb") != std::string::npos)
+                    sb_idx = i;
+                if (events[i].find("exe_activity.bound_on_stores") != std::string::npos)
+                    bound_idx = i;
             }
         }
     }
@@ -59,19 +66,19 @@ void WriteBufferMeasurer::measure(shared_types::CpuInfoData& data) {
 
     volatile int dummy = 0;
     SPDLOG_INFO("| writes | latency(ticks) | stddev |");
-    for (const auto& ev : events) SPDLOG_INFO("|        | {} (per sample) |", ev);
+    for (const auto& ev : events)
+        SPDLOG_INFO("|        | {} (per sample) |", ev);
 
     std::vector<size_t> writes_list;
     std::vector<WriteBufferResult> results;
 
-    auto* fill_base = static_cast<int*>(fill_area.get());
+    auto* fill_base  = static_cast<int*>(fill_area.get());
     auto* extra_base = static_cast<int*>(extra_area.get());
 
-    for (size_t num_writes = config_.min_writes; num_writes <= config_.max_writes;
-         num_writes += config_.writes_step) {
+    for (size_t num_writes = config_.min_writes; num_writes <= config_.max_writes; num_writes += config_.writes_step) {
         size_t region_offset = (num_writes - 1) * region_size / kBytesPerEntry;
 
-        int* fill_ptr = fill_base + region_offset;
+        int* fill_ptr           = fill_base + region_offset;
         volatile int* extra_ptr = extra_base + region_offset;
 
         writes_list.push_back(num_writes);
@@ -83,7 +90,7 @@ void WriteBufferMeasurer::measure(shared_types::CpuInfoData& data) {
 
         for (size_t i = 0; i < events.size(); ++i) {
             double per_sample = (res.avg_events.size() > i) ? double(res.avg_events[i]) / config_.iterations : 0.0;
-            double total = (res.avg_events.size() > i) ? double(res.avg_events[i]) : 0.0;
+            double total      = (res.avg_events.size() > i) ? double(res.avg_events[i]) : 0.0;
             SPDLOG_INFO("|        | {}: {:.2f} per sample (total {}) |", events[i], per_sample, total);
         }
     }
@@ -95,8 +102,13 @@ void WriteBufferMeasurer::measure(shared_types::CpuInfoData& data) {
     }
 }
 
-WriteBufferResult WriteBufferMeasurer::measure_for_writes(size_t num_writes, int* fill_base, volatile int* extra_addr,
-                                                          volatile int& dummy, platform::pmc::PmcGroup* pmc) {
+WriteBufferResult WriteBufferMeasurer::measure_for_writes(
+    size_t num_writes,
+    int* fill_base,
+    volatile int* extra_addr,
+    volatile int& dummy,
+    platform::pmc::PmcGroup* pmc
+) {
     const size_t stride = kCacheLineSize / kBytesPerEntry;
 
     // warmup
@@ -111,7 +123,8 @@ WriteBufferResult WriteBufferMeasurer::measure_for_writes(size_t num_writes, int
     std::vector<double> time_samples;
     std::vector<std::vector<uint64_t>> pmc_samples;
     time_samples.reserve(config_.repeats);
-    if (pmc) pmc_samples.reserve(config_.repeats);
+    if (pmc)
+        pmc_samples.reserve(config_.repeats);
 
     for (size_t r = 0; r < config_.repeats; ++r) {
         if (pmc) {
@@ -134,10 +147,10 @@ WriteBufferResult WriteBufferMeasurer::measure_for_writes(size_t num_writes, int
             }
 
             // measure critical store+load pair
-            uint64_t start = platform::arch::tick();
+            uint64_t start                  = platform::arch::tick();
             const_cast<int*>(extra_addr)[0] = 0xdeadbeef;
-            dummy = *extra_addr;
-            uint64_t end = platform::arch::tick();
+            dummy                           = *extra_addr;
+            uint64_t end                    = platform::arch::tick();
             total_ticks += (end - start);
             platform::arch::lfence();
         }
@@ -145,14 +158,15 @@ WriteBufferResult WriteBufferMeasurer::measure_for_writes(size_t num_writes, int
         if (pmc) {
             pmc->disable();
             auto cv = pmc->read();
-            if (cv.valid) pmc_samples.push_back(std::move(cv.values));
+            if (cv.valid)
+                pmc_samples.push_back(std::move(cv.values));
         }
 
         double avg_ticks = static_cast<double>(total_ticks) / config_.iterations;
         time_samples.push_back(avg_ticks);
     }
 
-    double avg = std::accumulate(time_samples.begin(), time_samples.end(), 0.0) / config_.repeats;
+    double avg    = std::accumulate(time_samples.begin(), time_samples.end(), 0.0) / config_.repeats;
     double stddev = 0.0;
     for (double v : time_samples) {
         double d = v - avg;
@@ -164,14 +178,21 @@ WriteBufferResult WriteBufferMeasurer::measure_for_writes(size_t num_writes, int
     if (pmc && !pmc_samples.empty()) {
         avg_events.assign(pmc_samples[0].size(), 0);
         for (const auto& sample : pmc_samples)
-            for (size_t i = 0; i < sample.size(); ++i) avg_events[i] += sample[i];
-        for (size_t i = 0; i < avg_events.size(); ++i) avg_events[i] /= config_.repeats;
+            for (size_t i = 0; i < sample.size(); ++i)
+                avg_events[i] += sample[i];
+        for (size_t i = 0; i < avg_events.size(); ++i)
+            avg_events[i] /= config_.repeats;
     }
     if (pmc) {
         SPDLOG_DEBUG("[{}] num_writes={}, samples: ticks={:.2f}+-{:.2f}", name(), num_writes, avg, stddev);
         for (size_t i = 0; i < avg_events.size(); ++i) {
-            SPDLOG_DEBUG("[{}]   event{} = {} total, {:.2f} per iter", name(), i, avg_events[i],
-                         double(avg_events[i]) / config_.iterations);
+            SPDLOG_DEBUG(
+                "[{}]   event{} = {} total, {:.2f} per iter",
+                name(),
+                i,
+                avg_events[i],
+                double(avg_events[i]) / config_.iterations
+            );
         }
     }
     return {avg, stddev, std::move(avg_events)};
@@ -180,8 +201,10 @@ WriteBufferResult WriteBufferMeasurer::measure_for_writes(size_t num_writes, int
 size_t WriteBufferMeasurer::analyze_buffer_capacity(
     const std::vector<WriteBufferResult>& results,
     const std::vector<size_t>& writes_list,
-    bool /*has_pmc*/, size_t sb_idx, size_t bound_idx) {
-
+    bool /*has_pmc*/,
+    size_t sb_idx,
+    size_t bound_idx
+) {
     if (results.size() < config_.baseline_window + 2)
         return writes_list.back();
 
@@ -193,15 +216,14 @@ size_t WriteBufferMeasurer::analyze_buffer_capacity(
     double baseline = base_samples[base_samples.size() / 2];
 
     double spike_threshold = baseline * config_.latency_spike_ratio;
-    double hold_threshold = baseline * 1.5;   // fixed relative threshold for follow-up check
+    double hold_threshold  = baseline * 1.5;  // fixed relative threshold for follow-up check
 
     size_t capacity = writes_list.back();
     for (size_t i = 1; i < results.size(); ++i) {
         if (results[i].avg_latency_ticks > spike_threshold) {
             // Verify that the next point(s) also exceed hold_threshold
             size_t next_idx = i + 1;
-            if (next_idx < results.size() &&
-                results[next_idx].avg_latency_ticks > hold_threshold) {
+            if (next_idx < results.size() && results[next_idx].avg_latency_ticks > hold_threshold) {
                 capacity = writes_list[i];
                 break;
             }
@@ -218,7 +240,8 @@ size_t WriteBufferMeasurer::analyze_buffer_capacity(
                 stalls = double(results[i].avg_events[sb_idx]) / config_.iterations;
             else if (bound_idx != std::string::npos && bound_idx < results[i].avg_events.size())
                 stalls = double(results[i].avg_events[bound_idx]) / config_.iterations;
-            if (stalls > max_stalls) max_stalls = stalls;
+            if (stalls > max_stalls)
+                max_stalls = stalls;
         }
         for (size_t i = 0; i < results.size(); ++i) {
             double stalls = 0.0;
@@ -233,8 +256,13 @@ size_t WriteBufferMeasurer::analyze_buffer_capacity(
         }
     }
 
-    SPDLOG_INFO("[{}] baseline = {:.2f}, threshold = {:.2f}, capacity = {}",
-                name(), baseline, spike_threshold, capacity);
+    SPDLOG_INFO(
+        "[{}] baseline = {:.2f}, threshold = {:.2f}, capacity = {}",
+        name(),
+        baseline,
+        spike_threshold,
+        capacity
+    );
     return capacity;
 }
 

@@ -16,8 +16,8 @@
 namespace {
 
 constexpr uint64_t kCalibrationSleepNs = 10ULL * 1000ULL * 1000ULL;
-constexpr int kCalibrationIterations = 5;
-constexpr uint64_t kNsPerSecond = 1'000'000'000ULL;
+constexpr int kCalibrationIterations   = 5;
+constexpr uint64_t kNsPerSecond        = 1'000'000'000ULL;
 constexpr size_t kDefaultCacheLineSize = 64;
 
 struct PriorityState {
@@ -28,9 +28,9 @@ struct PriorityState {
 
 PriorityState g_priority_state{};
 std::string g_saved_governor;
-bool g_governor_saved = false;
+bool g_governor_saved           = false;
 uint64_t g_cached_tsc_frequency = 0;
-bool g_turbo_boost_saved = false;
+bool g_turbo_boost_saved        = false;
 std::string g_turbo_boost_path;
 
 uint64_t calibrate_tsc() {
@@ -45,11 +45,11 @@ uint64_t calibrate_tsc() {
         timespec remainder{};
 
         const uint64_t start = silicon_probe::platform::arch::tick();
-        const int result = clock_nanosleep(CLOCK_MONOTONIC_RAW, 0, &request, &remainder);
+        const int result     = clock_nanosleep(CLOCK_MONOTONIC_RAW, 0, &request, &remainder);
         if (result != 0) {
             continue;
         }
-        const uint64_t end = silicon_probe::platform::arch::tick();
+        const uint64_t end    = silicon_probe::platform::arch::tick();
         const uint64_t cycles = end - start;
 
         if (best_cycles == 0 || cycles < best_cycles) {
@@ -106,7 +106,7 @@ uint64_t tick_frequency() {
 
 void* huge_alloc(size_t size) {
     constexpr size_t huge_page_size = 2 * 1024 * 1024;
-    const size_t aligned_size = (size + huge_page_size - 1) & ~(huge_page_size - 1);
+    const size_t aligned_size       = (size + huge_page_size - 1) & ~(huge_page_size - 1);
     void* ptr = mmap(nullptr, aligned_size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB, -1, 0);
     return ptr == MAP_FAILED ? nullptr : ptr;
 }
@@ -117,12 +117,12 @@ void huge_free(void* ptr, size_t size) {
     }
 
     constexpr size_t huge_page_size = 2 * 1024 * 1024;
-    const size_t aligned_size = (size + huge_page_size - 1) & ~(huge_page_size - 1);
+    const size_t aligned_size       = (size + huge_page_size - 1) & ~(huge_page_size - 1);
     munmap(ptr, aligned_size);
 }
 
 void* aligned_alloc(size_t alignment, size_t size) {
-    void* ptr = nullptr;
+    void* ptr        = nullptr;
     const int result = posix_memalign(&ptr, alignment, size);
     if (result != 0) {
         throw std::bad_alloc();
@@ -141,7 +141,7 @@ void set_realtime_priority() {
 
     sched_param realtime{};
     realtime.sched_priority = sched_get_priority_max(SCHED_FIFO);
-    const int result = pthread_setschedparam(pthread_self(), SCHED_FIFO, &realtime);
+    const int result        = pthread_setschedparam(pthread_self(), SCHED_FIFO, &realtime);
     if (result != 0) {
         state.valid = false;
         if (result == EPERM) {
@@ -230,11 +230,14 @@ void restore_cpu_frequency() {
 }
 
 void disable_turbo_boost() {
-    if (g_turbo_boost_saved) return;
+    if (g_turbo_boost_saved)
+        return;
 
     // Try generic path first, then vendor-specific
-    const std::vector<std::string> paths = {"/sys/devices/system/cpu/cpufreq/boost",
-                                            "/sys/devices/system/cpu/intel_pstate/no_turbo"};
+    const std::vector<std::string> paths = {
+        "/sys/devices/system/cpu/cpufreq/boost",
+        "/sys/devices/system/cpu/intel_pstate/no_turbo"
+    };
 
     for (const auto& p : paths) {
         std::ifstream in{p};
@@ -260,7 +263,8 @@ void disable_turbo_boost() {
 }
 
 void restore_turbo_boost() {
-    if (!g_turbo_boost_saved) return;
+    if (!g_turbo_boost_saved)
+        return;
     const std::string& path = g_turbo_boost_path;
 
     std::ofstream out{path};

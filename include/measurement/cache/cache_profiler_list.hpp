@@ -17,7 +17,7 @@
 namespace silicon_probe::cache {
 
 class CacheProfilerList {
-public:
+   public:
     enum class MemoryType {
         aligned,
         huge_page,
@@ -29,18 +29,22 @@ public:
 
     struct MemoryDeleter {
         MemoryType type = MemoryType::aligned;
-        size_t size = 0;
+        size_t size     = 0;
 
         void operator()(char* ptr) const;
     };
 
-    CacheProfilerList(size_t cache_line_size, size_t count, unsigned int seed = 12345,
-                      MemoryType memory_type = MemoryType::aligned);
+    CacheProfilerList(
+        size_t cache_line_size,
+        size_t count,
+        unsigned int seed      = 12345,
+        MemoryType memory_type = MemoryType::aligned
+    );
     ~CacheProfilerList();
 
-    CacheProfilerList(const CacheProfilerList&) = delete;
-    CacheProfilerList& operator=(const CacheProfilerList&) = delete;
-    CacheProfilerList(CacheProfilerList&&) noexcept = default;
+    CacheProfilerList(const CacheProfilerList&)                = delete;
+    CacheProfilerList& operator=(const CacheProfilerList&)     = delete;
+    CacheProfilerList(CacheProfilerList&&) noexcept            = default;
     CacheProfilerList& operator=(CacheProfilerList&&) noexcept = default;
 
     Element* first() const noexcept;
@@ -49,12 +53,12 @@ public:
     size_t total_size() const noexcept;
     void flush_from_cache() const;
 
-private:
-    size_t line_size_ = 0;
+   private:
+    size_t line_size_     = 0;
     size_t element_count_ = 0;
     std::unique_ptr<char, MemoryDeleter> memory_;
     MemoryType memory_type_ = MemoryType::aligned;
-    Element* elements_ = nullptr;
+    Element* elements_      = nullptr;
 
     static std::string build_error_message(const std::string& prefix, size_t value);
     Element* element_at(size_t index) const noexcept;

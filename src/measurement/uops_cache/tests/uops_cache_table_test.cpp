@@ -53,8 +53,10 @@ TEST(UopsCacheTableTest, FindsApproximateSaturationFromTable) {
     for (const auto& test_case : cases) {
         SCOPED_TRACE(test_case.name);
         UopsCacheMeasurer measurer;
-        EXPECT_EQ(measurer.findApproxSaturation(test_case.counts, test_case.results, test_case.events),
-                  test_case.expected_approx_saturation);
+        EXPECT_EQ(
+            measurer.findApproxSaturation(test_case.counts, test_case.results, test_case.events),
+            test_case.expected_approx_saturation
+        );
     }
 }
 

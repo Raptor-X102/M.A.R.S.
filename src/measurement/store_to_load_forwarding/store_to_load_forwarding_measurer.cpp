@@ -8,20 +8,25 @@ namespace silicon_probe::store_to_load_forwarding {
 StoreToLoadForwardingMeasurer::StoreToLoadForwardingMeasurer() : StoreToLoadForwardingMeasurer(Config{}) {}
 
 StoreToLoadForwardingMeasurer::StoreToLoadForwardingMeasurer(Config config) : config_(std::move(config)) {
-    SPDLOG_INFO("[{}] cfg: offsets={}..{} step={} iter={} repeats={} growth={}", name(), config_.min_offset,
-                config_.max_offset, config_.offset_step, config_.iterations, config_.repeats,
-                config_.time_growth_ratio);
+    SPDLOG_INFO(
+        "[{}] cfg: offsets={}..{} step={} iter={} repeats={} growth={}",
+        name(),
+        config_.min_offset,
+        config_.max_offset,
+        config_.offset_step,
+        config_.iterations,
+        config_.repeats,
+        config_.time_growth_ratio
+    );
 }
 
-std::string_view StoreToLoadForwardingMeasurer::name() const noexcept {
-    return "store-to-load forwarding";
-}
+std::string_view StoreToLoadForwardingMeasurer::name() const noexcept { return "store-to-load forwarding"; }
 
 void StoreToLoadForwardingMeasurer::measure(shared_types::CpuInfoData& data) {
     SPDLOG_INFO("[{}] start", name());
     platform::ScopedMeasurementEnvironment env{config_.environment};
 
-    auto events = platform::discover_s2l_forwarding_events(data);
+    auto events  = platform::discover_s2l_forwarding_events(data);
     bool has_pmc = !events.empty();
     std::unique_ptr<platform::pmc::PmcGroup> pmc;
     size_t sf_idx = std::string::npos;
@@ -33,16 +38,18 @@ void StoreToLoadForwardingMeasurer::measure(shared_types::CpuInfoData& data) {
             has_pmc = false;
         } else {
             for (size_t i = 0; i < events.size(); ++i)
-                if (events[i].find("store_forward") != std::string::npos) sf_idx = i;
+                if (events[i].find("store_forward") != std::string::npos)
+                    sf_idx = i;
         }
     }
 
-    size_t best_size = 0;
+    size_t best_size   = 0;
     size_t best_offset = 0;
 
     // Try sizes 8,4,2,1
     for (size_t size : {8, 4, 2, 1}) {
-        if (size > kDefaultBufferSize) continue;
+        if (size > kDefaultBufferSize)
+            continue;
         SPDLOG_INFO("[{}] testing access size = {} bytes", name(), size);
 
         size_t max_off = std::min(config_.max_offset, kDefaultBufferSize - size);
@@ -53,22 +60,33 @@ void StoreToLoadForwardingMeasurer::measure(shared_types::CpuInfoData& data) {
         for (size_t off = config_.min_offset; off <= max_off; off += config_.offset_step) {
             StoreToLoadForwardingResult res;
             switch (size) {
-                case 8: res = run_test<8>(off, pmc.get(), events); break;
-                case 4: res = run_test<4>(off, pmc.get(), events); break;
-                case 2: res = run_test<2>(off, pmc.get(), events); break;
-                case 1: res = run_test<1>(off, pmc.get(), events); break;
-                default: __builtin_unreachable();
+                case 8:
+                    res = run_test<8>(off, pmc.get(), events);
+                    break;
+                case 4:
+                    res = run_test<4>(off, pmc.get(), events);
+                    break;
+                case 2:
+                    res = run_test<2>(off, pmc.get(), events);
+                    break;
+                case 1:
+                    res = run_test<1>(off, pmc.get(), events);
+                    break;
+                default:
+                    __builtin_unreachable();
             }
             results.push_back(res);
             offsets.push_back(off);
         }
-        if (results.empty()) continue;
+        if (results.empty())
+            continue;
 
         // Check if forwarding works at offset 0
         bool zero_works = false;
         if (has_pmc && sf_idx != std::string::npos && results[0].avg_events.size() > sf_idx) {
             double ratio = double(results[0].avg_events[sf_idx]) / config_.iterations;
-            if (ratio < config_.pmc_saturation_ratio) zero_works = true;
+            if (ratio < config_.pmc_saturation_ratio)
+                zero_works = true;
         } else {
             if (max_off > 0 && results[0].avg_ticks < results.back().avg_ticks * config_.time_growth_ratio)
                 zero_works = true;
@@ -80,17 +98,19 @@ void StoreToLoadForwardingMeasurer::measure(shared_types::CpuInfoData& data) {
         }
 
         // Size works at offset 0 -> find max working offset
-        best_size = size;
-        best_offset = 0;
+        best_size         = size;
+        best_offset       = 0;
         double base_ticks = results[0].avg_ticks;
 
         for (size_t i = 1; i < results.size(); ++i) {
             bool ok = false;
             if (has_pmc && sf_idx != std::string::npos && results[i].avg_events.size() > sf_idx) {
                 double ratio = double(results[i].avg_events[sf_idx]) / config_.iterations;
-                if (ratio < config_.pmc_saturation_ratio) ok = true;
+                if (ratio < config_.pmc_saturation_ratio)
+                    ok = true;
             } else {
-                if (results[i].avg_ticks < base_ticks * config_.time_growth_ratio) ok = true;
+                if (results[i].avg_ticks < base_ticks * config_.time_growth_ratio)
+                    ok = true;
             }
             if (ok)
                 best_offset = offsets[i];
@@ -102,14 +122,17 @@ void StoreToLoadForwardingMeasurer::measure(shared_types::CpuInfoData& data) {
         break;  // largest working size found
     }
 
-    data.s2l_fwd_max_size = best_size;
+    data.s2l_fwd_max_size   = best_size;
     data.s2l_fwd_max_offset = best_offset;
     SPDLOG_INFO("[{}] result: size={} bytes, max_offset={}", name(), best_size, best_offset);
 }
 
 template <size_t N>
-StoreToLoadForwardingResult StoreToLoadForwardingMeasurer::run_test(size_t offset, platform::pmc::PmcGroup* pmc,
-                                                                   const std::vector<std::string>& ev_names) {
+StoreToLoadForwardingResult StoreToLoadForwardingMeasurer::run_test(
+    size_t offset,
+    platform::pmc::PmcGroup* pmc,
+    const std::vector<std::string>& ev_names
+) {
     static_assert(N == 1 || N == 2 || N == 4 || N == 8, "size must be 1,2,4,8");
     constexpr size_t buffer_bytes = kDefaultBufferSize;
     alignas(64) char buffer[buffer_bytes];
@@ -120,11 +143,12 @@ StoreToLoadForwardingResult StoreToLoadForwardingMeasurer::run_test(size_t offse
     std::vector<std::vector<uint64_t>> all_counts;
 
     using StoreT = typename std::conditional<
-        N == 1, uint8_t,
-        typename std::conditional<N == 2, uint16_t,
-                                  typename std::conditional<N == 4, uint32_t, uint64_t>::type>::type>::type;
+        N == 1,
+        uint8_t,
+        typename std::conditional<N == 2, uint16_t, typename std::conditional<N == 4, uint32_t, uint64_t>::type>::
+            type>::type;
     volatile StoreT* store_ptr = reinterpret_cast<volatile StoreT*>(buffer);
-    volatile StoreT* load_ptr = reinterpret_cast<volatile StoreT*>(buffer + offset);
+    volatile StoreT* load_ptr  = reinterpret_cast<volatile StoreT*>(buffer + offset);
 
     for (size_t i = 0; i < config_.warmup_iterations; ++i) {
         *store_ptr = static_cast<StoreT>(i);
@@ -148,7 +172,8 @@ StoreToLoadForwardingResult StoreToLoadForwardingMeasurer::run_test(size_t offse
         }
         uint64_t end = platform::arch::tick();
 
-        if (pmc) pmc->disable();
+        if (pmc)
+            pmc->disable();
 
         uint64_t total = end - start;
         ticks_vec.push_back(static_cast<double>(total) / config_.iterations);
@@ -161,7 +186,7 @@ StoreToLoadForwardingResult StoreToLoadForwardingMeasurer::run_test(size_t offse
 
     (void)dummy;
 
-    double avg = std::accumulate(ticks_vec.begin(), ticks_vec.end(), 0.0) / config_.repeats;
+    double avg    = std::accumulate(ticks_vec.begin(), ticks_vec.end(), 0.0) / config_.repeats;
     double stddev = 0.0;
     for (double v : ticks_vec) {
         double d = v - avg;
@@ -173,8 +198,10 @@ StoreToLoadForwardingResult StoreToLoadForwardingMeasurer::run_test(size_t offse
     if (!all_counts.empty()) {
         avg_ev.resize(all_counts[0].size(), 0);
         for (const auto& cnt : all_counts)
-            for (size_t i = 0; i < cnt.size(); ++i) avg_ev[i] += cnt[i];
-        for (size_t i = 0; i < avg_ev.size(); ++i) avg_ev[i] /= config_.repeats;
+            for (size_t i = 0; i < cnt.size(); ++i)
+                avg_ev[i] += cnt[i];
+        for (size_t i = 0; i < avg_ev.size(); ++i)
+            avg_ev[i] /= config_.repeats;
     }
 
     SPDLOG_INFO("[{}] \nsize={} off={}: avg={:.3g} std={:.3g}", name(), N, offset, avg, stddev);
@@ -188,12 +215,24 @@ StoreToLoadForwardingResult StoreToLoadForwardingMeasurer::run_test(size_t offse
 
 // Explicit template instantiations
 template StoreToLoadForwardingResult StoreToLoadForwardingMeasurer::run_test<1>(
-    size_t offset, platform::pmc::PmcGroup* pmc, const std::vector<std::string>& ev_names);
+    size_t offset,
+    platform::pmc::PmcGroup* pmc,
+    const std::vector<std::string>& ev_names
+);
 template StoreToLoadForwardingResult StoreToLoadForwardingMeasurer::run_test<2>(
-    size_t offset, platform::pmc::PmcGroup* pmc, const std::vector<std::string>& ev_names);
+    size_t offset,
+    platform::pmc::PmcGroup* pmc,
+    const std::vector<std::string>& ev_names
+);
 template StoreToLoadForwardingResult StoreToLoadForwardingMeasurer::run_test<4>(
-    size_t offset, platform::pmc::PmcGroup* pmc, const std::vector<std::string>& ev_names);
+    size_t offset,
+    platform::pmc::PmcGroup* pmc,
+    const std::vector<std::string>& ev_names
+);
 template StoreToLoadForwardingResult StoreToLoadForwardingMeasurer::run_test<8>(
-    size_t offset, platform::pmc::PmcGroup* pmc, const std::vector<std::string>& ev_names);
+    size_t offset,
+    platform::pmc::PmcGroup* pmc,
+    const std::vector<std::string>& ev_names
+);
 
 }  // namespace silicon_probe::store_to_load_forwarding

@@ -94,15 +94,15 @@ TEST(TlbMeasurerTableTest, DistributesPageNodesAcrossCacheLines) {
     };
 
     constexpr size_t page_count = 96;
-    constexpr size_t page_size = 4096;
-    void* const base = ::operator new(page_count * page_size, std::align_val_t(64));
+    constexpr size_t page_size  = 4096;
+    void* const base            = ::operator new(page_count * page_size, std::align_val_t(64));
 
     for (const auto& test_case : cases) {
         SCOPED_TRACE(test_case.name);
 
         const auto nodes =
             TlbMeasurer::make_page_nodes(base, page_count, test_case.page_size_bytes, test_case.cache_line_bytes);
-        const auto* bytes = static_cast<std::byte*>(base);
+        const auto* bytes      = static_cast<std::byte*>(base);
         const auto* node_bytes = reinterpret_cast<const std::byte*>(nodes.at(test_case.page_index));
         const size_t offset =
             static_cast<size_t>(node_bytes - bytes - test_case.page_index * test_case.page_size_bytes);
