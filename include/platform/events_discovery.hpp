@@ -21,7 +21,7 @@ std::vector<std::string> discover_uops_events(shared_types::CpuInfoData& data);
 std::optional<std::string> discover_branch_target_buffer_events(shared_types::CpuInfoData& data);
 std::vector<std::string> discover_s2l_forwarding_events(shared_types::CpuInfoData& data);
 std::vector<std::string> discover_write_buffer_events(shared_types::CpuInfoData& data);
-std::vector<std::string> discover_cache_miss_events(silicon_probe::shared_types::CacheLevel level,
-                                                    shared_types::CpuInfoData& data);
+std::vector<std::string>
+discover_cache_miss_events(silicon_probe::shared_types::CacheLevel level, shared_types::CpuInfoData& data);
 
 }  // namespace silicon_probe::platform

@@ -22,32 +22,32 @@ struct WriteBufferResult {
 };
 
 class WriteBufferMeasurer final : public core::Measurer {
-public:
-    static constexpr size_t kDefaultMaxWrites = 64;
-    static constexpr size_t kDefaultMinWrites = 1;
-    static constexpr size_t kDefaultWritesStep = 1;
-    static constexpr size_t kDefaultIterations = 5000;
-    static constexpr size_t kDefaultRepeats = 30;
+   public:
+    static constexpr size_t kDefaultMaxWrites        = 64;
+    static constexpr size_t kDefaultMinWrites        = 1;
+    static constexpr size_t kDefaultWritesStep       = 1;
+    static constexpr size_t kDefaultIterations       = 5000;
+    static constexpr size_t kDefaultRepeats          = 30;
     static constexpr size_t kDefaultWarmupIterations = 5;
-    static constexpr size_t kBufferSizeMB = 16;
-    static constexpr size_t kBytesPerEntry = 4;
-    static constexpr size_t kCacheLineSize = 64;
+    static constexpr size_t kBufferSizeMB            = 16;
+    static constexpr size_t kBytesPerEntry           = 4;
+    static constexpr size_t kCacheLineSize           = 64;
 
     struct Config {
         bool enabled = true;
         platform::MeasurementEnvironmentOptions environment;
-        size_t max_writes = kDefaultMaxWrites;
-        size_t min_writes = kDefaultMinWrites;
-        size_t writes_step = kDefaultWritesStep;
-        size_t iterations = kDefaultIterations;
-        size_t repeats = kDefaultRepeats;
+        size_t max_writes        = kDefaultMaxWrites;
+        size_t min_writes        = kDefaultMinWrites;
+        size_t writes_step       = kDefaultWritesStep;
+        size_t iterations        = kDefaultIterations;
+        size_t repeats           = kDefaultRepeats;
         size_t warmup_iterations = kDefaultWarmupIterations;
 
-        double latency_spike_ratio = 2.0;        // latency > baseline * this → overflow
-        double latency_jump_ratio = 0.5;         // (lat[i] - lat[i-1]) / lat[i-1] > this → overflow
-        double stall_confirm_ratio = 0.8;        // if latency spike found, require stalls > max_stalls * this
-        double stall_fallback_ratio = 0.9;       // if no latency spike, first point where stalls > max_stalls * this
-        size_t baseline_window = 3;              // number of initial points for baseline latency
+        double latency_spike_ratio  = 2.0;  // latency > baseline * this → overflow
+        double latency_jump_ratio   = 0.5;  // (lat[i] - lat[i-1]) / lat[i-1] > this → overflow
+        double stall_confirm_ratio  = 0.8;  // if latency spike found, require stalls > max_stalls * this
+        double stall_fallback_ratio = 0.9;  // if no latency spike, first point where stalls > max_stalls * this
+        size_t baseline_window      = 3;    // number of initial points for baseline latency
     };
 
     WriteBufferMeasurer();
@@ -56,14 +56,23 @@ public:
     std::string_view name() const noexcept override;
     void measure(shared_types::CpuInfoData& data) override;
 
-private:
+   private:
     Config config_;
 
-    WriteBufferResult measure_for_writes(size_t num_writes, int* fill_base, volatile int* extra_addr,
-                                         volatile int& dummy, platform::pmc::PmcGroup* pmc);
-    size_t analyze_buffer_capacity(const std::vector<WriteBufferResult>& results,
-                                   const std::vector<size_t>& writes_list, bool has_pmc,
-                                   size_t sb_idx, size_t bound_idx);
+    WriteBufferResult measure_for_writes(
+        size_t num_writes,
+        int* fill_base,
+        volatile int* extra_addr,
+        volatile int& dummy,
+        platform::pmc::PmcGroup* pmc
+    );
+    size_t analyze_buffer_capacity(
+        const std::vector<WriteBufferResult>& results,
+        const std::vector<size_t>& writes_list,
+        bool has_pmc,
+        size_t sb_idx,
+        size_t bound_idx
+    );
 };
 
 }  // namespace silicon_probe::write_buffer

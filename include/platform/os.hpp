@@ -11,7 +11,7 @@ namespace silicon_probe::platform {
 struct MeasurementEnvironmentOptions {
     std::optional<int> cpu;
     bool realtime_priority = false;
-    bool lock_frequency = false;
+    bool lock_frequency    = false;
 };
 
 void bind_thread_to_cpu(int cpu);
@@ -34,11 +34,11 @@ class ScopedThreadAffinity {
     explicit ScopedThreadAffinity(int cpu);
     ~ScopedThreadAffinity();
 
-    ScopedThreadAffinity(const ScopedThreadAffinity&) = delete;
+    ScopedThreadAffinity(const ScopedThreadAffinity&)            = delete;
     ScopedThreadAffinity& operator=(const ScopedThreadAffinity&) = delete;
 
    private:
-    bool active_ = false;
+    bool active_            = false;
     int previous_cpu_count_ = 0;
     struct cpu_set_t_storage;
     cpu_set_t_storage* previous_affinity_ = nullptr;
@@ -49,7 +49,7 @@ class ScopedPriority {
     ScopedPriority();
     ~ScopedPriority();
 
-    ScopedPriority(const ScopedPriority&) = delete;
+    ScopedPriority(const ScopedPriority&)            = delete;
     ScopedPriority& operator=(const ScopedPriority&) = delete;
 };
 
@@ -58,7 +58,7 @@ class ScopedFrequencyLock {
     ScopedFrequencyLock();
     ~ScopedFrequencyLock();
 
-    ScopedFrequencyLock(const ScopedFrequencyLock&) = delete;
+    ScopedFrequencyLock(const ScopedFrequencyLock&)            = delete;
     ScopedFrequencyLock& operator=(const ScopedFrequencyLock&) = delete;
 };
 
@@ -67,7 +67,7 @@ class ScopedMeasurementEnvironment {
     explicit ScopedMeasurementEnvironment(const MeasurementEnvironmentOptions& options);
     ~ScopedMeasurementEnvironment() = default;
 
-    ScopedMeasurementEnvironment(const ScopedMeasurementEnvironment&) = delete;
+    ScopedMeasurementEnvironment(const ScopedMeasurementEnvironment&)            = delete;
     ScopedMeasurementEnvironment& operator=(const ScopedMeasurementEnvironment&) = delete;
 
    private:

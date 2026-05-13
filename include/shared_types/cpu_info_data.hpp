@@ -10,18 +10,18 @@
 namespace silicon_probe::shared_types {
 
 struct TlbSummaryPoint {
-    size_t pages = 0;
-    size_t bytes = 0;
-    double min_cycles_per_access = 0.0;
+    size_t pages                    = 0;
+    size_t bytes                    = 0;
+    double min_cycles_per_access    = 0.0;
     double median_cycles_per_access = 0.0;
-    double mean_cycles_per_access = 0.0;
-    double max_cycles_per_access = 0.0;
+    double mean_cycles_per_access   = 0.0;
+    double max_cycles_per_access    = 0.0;
 };
 
 struct TlbRawPoint {
-    size_t pages = 0;
-    size_t bytes = 0;
-    size_t repeat = 0;
+    size_t pages             = 0;
+    size_t bytes             = 0;
+    size_t repeat            = 0;
     double cycles_per_access = 0.0;
 };
 

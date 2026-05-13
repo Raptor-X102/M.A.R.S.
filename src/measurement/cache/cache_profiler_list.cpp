@@ -28,7 +28,7 @@ CacheProfilerList::Element* CacheProfilerList::element_at(size_t index) const no
 }
 
 void CacheProfilerList::allocate(size_t count) {
-    element_count_ = count;
+    element_count_     = count;
     const size_t bytes = count * line_size_;
 
     void* raw_memory = nullptr;
@@ -41,8 +41,7 @@ void CacheProfilerList::allocate(size_t count) {
         raw_memory = platform::aligned_alloc(line_size_, bytes);
     }
 
-    memory_ = std::unique_ptr<char, MemoryDeleter>(static_cast<char*>(raw_memory),
-                                                   MemoryDeleter{memory_type_, bytes});
+    memory_ = std::unique_ptr<char, MemoryDeleter>(static_cast<char*>(raw_memory), MemoryDeleter{memory_type_, bytes});
     elements_ = static_cast<Element*>(raw_memory);
 }
 
@@ -74,15 +73,17 @@ void CacheProfilerList::verify_cycle() const {
             static_cast<size_t>(reinterpret_cast<char*>(current) - reinterpret_cast<char*>(elements_)) / line_size_;
         if (index >= element_count_) {
             throw std::runtime_error(
-                build_error_message("Cycle verification failed: pointer out of bounds at iteration ", iteration));
+                build_error_message("Cycle verification failed: pointer out of bounds at iteration ", iteration)
+            );
         }
         if (visited[index]) {
             throw std::runtime_error(
-                build_error_message("Cycle verification failed: duplicate visit at index ", index));
+                build_error_message("Cycle verification failed: duplicate visit at index ", index)
+            );
         }
 
         visited[index] = true;
-        current = current->next;
+        current        = current->next;
     }
 
     if (current != elements_) {
@@ -99,8 +100,12 @@ CacheProfilerList::CacheProfilerList(size_t cache_line_size, size_t count, unsig
         throw std::invalid_argument("Element count cannot be zero");
     }
 
-    SPDLOG_DEBUG("Creating cache profiler list: count={}, line_size={}, total_size={}", count, cache_line_size,
-                 count * cache_line_size);
+    SPDLOG_DEBUG(
+        "Creating cache profiler list: count={}, line_size={}, total_size={}",
+        count,
+        cache_line_size,
+        count * cache_line_size
+    );
 
     allocate(count);
     setup_random_cycle(seed);
@@ -111,25 +116,17 @@ CacheProfilerList::~CacheProfilerList() {
     SPDLOG_DEBUG("Destroying cache profiler list with {} elements", element_count_);
 }
 
-CacheProfilerList::Element* CacheProfilerList::first() const noexcept {
-    return elements_;
-}
+CacheProfilerList::Element* CacheProfilerList::first() const noexcept { return elements_; }
 
-size_t CacheProfilerList::element_count() const noexcept {
-    return element_count_;
-}
+size_t CacheProfilerList::element_count() const noexcept { return element_count_; }
 
-size_t CacheProfilerList::line_size() const noexcept {
-    return line_size_;
-}
+size_t CacheProfilerList::line_size() const noexcept { return line_size_; }
 
-size_t CacheProfilerList::total_size() const noexcept {
-    return element_count_ * line_size_;
-}
+size_t CacheProfilerList::total_size() const noexcept { return element_count_ * line_size_; }
 
 void CacheProfilerList::flush_from_cache() const {
     char* current = reinterpret_cast<char*>(elements_);
-    char* end = current + total_size();
+    char* end     = current + total_size();
 
     while (current < end) {
         platform::arch::clflush(current);

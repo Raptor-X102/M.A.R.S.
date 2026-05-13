@@ -16,10 +16,10 @@ using LogLevel = spdlog::level::level_enum;
 struct LoggingConfig {
     LogLevel level = spdlog::level::info;
 
-    bool console_output = true;
-    bool flush_on_write = true;
+    bool console_output    = true;
+    bool flush_on_write    = true;
     bool include_timestamp = true;
-    bool include_location = true;
+    bool include_location  = true;
 
     std::string log_file;
 };
@@ -78,7 +78,7 @@ class Logger {
 
     ~Logger() { spdlog::shutdown(); }
 
-    Logger(const Logger&) = delete;
+    Logger(const Logger&)            = delete;
     Logger& operator=(const Logger&) = delete;
 };
 

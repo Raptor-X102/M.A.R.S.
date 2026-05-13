@@ -10,7 +10,7 @@ int main(int argc, char** argv) {
 
     try {
         const auto bootstrap = parser.parse(argc, argv);
-        const auto config = silicon_probe::app::ApplicationConfigLoader::load(bootstrap);
+        const auto config    = silicon_probe::app::ApplicationConfigLoader::load(bootstrap);
 
         return silicon_probe::app::execute(config);
     } catch (const CLI::ParseError& error) {

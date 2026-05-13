@@ -40,13 +40,13 @@ static uint64_t map_event_to_perf_config(EventType ev) {
 
 static int open_perf_counter(EventType event) {
     struct perf_event_attr attr = {};
-    attr.size = sizeof(attr);
-    attr.type = PERF_TYPE_HARDWARE;
-    attr.config = map_event_to_perf_config(event);
-    attr.disabled = 1;
-    attr.exclude_kernel = 1;
-    attr.exclude_hv = 1;
-    attr.exclude_idle = 1;
+    attr.size                   = sizeof(attr);
+    attr.type                   = PERF_TYPE_HARDWARE;
+    attr.config                 = map_event_to_perf_config(event);
+    attr.disabled               = 1;
+    attr.exclude_kernel         = 1;
+    attr.exclude_hv             = 1;
+    attr.exclude_idle           = 1;
 
     int fd = syscall(__NR_perf_event_open, &attr, 0, -1, -1, 0);
     return fd;
@@ -57,9 +57,9 @@ static bool encode_event(const std::string& event_name, struct perf_event_attr& 
     std::call_once(init_flag, []() { pfm_initialize(); });
 
     pfm_perf_encode_arg_t arg = {};
-    arg.attr = &attr;
-    arg.size = sizeof(pfm_perf_encode_arg_t);
-    attr.size = sizeof(struct perf_event_attr);
+    arg.attr                  = &attr;
+    arg.size                  = sizeof(pfm_perf_encode_arg_t);
+    attr.size                 = sizeof(struct perf_event_attr);
 
     int ret = pfm_get_os_event_encoding(event_name.c_str(), PFM_PLM3, PFM_OS_PERF_EVENT_EXT, &arg);
 
@@ -71,10 +71,10 @@ static int open_raw_counter_by_name(const std::string& event_name) {
     if (!encode_event(event_name, attr)) {
         return -1;
     }
-    attr.disabled = 1;
+    attr.disabled       = 1;
     attr.exclude_kernel = 1;
-    attr.exclude_hv = 1;
-    attr.exclude_idle = 1;
+    attr.exclude_hv     = 1;
+    attr.exclude_idle   = 1;
 
     int fd = syscall(__NR_perf_event_open, &attr, 0, -1, -1, 0);
     return fd;
@@ -94,19 +94,22 @@ class PmcGroupLinux final : public PmcGroup {
 
     void reset() override {
         for (int fd : fds_) {
-            if (fd >= 0) ioctl(fd, PERF_EVENT_IOC_RESET, 0);
+            if (fd >= 0)
+                ioctl(fd, PERF_EVENT_IOC_RESET, 0);
         }
     }
 
     void enable() override {
         for (int fd : fds_) {
-            if (fd >= 0) ioctl(fd, PERF_EVENT_IOC_ENABLE, 0);
+            if (fd >= 0)
+                ioctl(fd, PERF_EVENT_IOC_ENABLE, 0);
         }
     }
 
     void disable() override {
         for (int fd : fds_) {
-            if (fd >= 0) ioctl(fd, PERF_EVENT_IOC_DISABLE, 0);
+            if (fd >= 0)
+                ioctl(fd, PERF_EVENT_IOC_DISABLE, 0);
         }
     }
 
@@ -132,14 +135,16 @@ class PmcGroupLinux final : public PmcGroup {
    private:
     bool valid() const noexcept {
         for (int fd : fds_) {
-            if (fd < 0) return false;
+            if (fd < 0)
+                return false;
         }
         return !fds_.empty();
     }
 
     void cleanup() {
         for (int fd : fds_) {
-            if (fd >= 0) close(fd);
+            if (fd >= 0)
+                close(fd);
         }
     }
 
@@ -155,7 +160,8 @@ std::unique_ptr<PmcGroup> PmcGroup::create(const std::vector<EventType>& events)
     for (EventType ev : events) {
         int fd = open_perf_counter(ev);
         if (fd < 0) {
-            for (int opened : fds) close(opened);
+            for (int opened : fds)
+                close(opened);
             return nullptr;
         }
         fds.push_back(fd);
@@ -166,11 +172,11 @@ std::unique_ptr<PmcGroup> PmcGroup::create(const std::vector<EventType>& events)
 
 bool PmcGroup::is_supported() noexcept {
     struct perf_event_attr attr = {};
-    attr.size = sizeof(attr);
-    attr.type = PERF_TYPE_SOFTWARE;
-    attr.config = PERF_COUNT_SW_CPU_CLOCK;
-    attr.disabled = 1;
-    int fd = syscall(__NR_perf_event_open, &attr, 0, -1, -1, 0);
+    attr.size                   = sizeof(attr);
+    attr.type                   = PERF_TYPE_SOFTWARE;
+    attr.config                 = PERF_COUNT_SW_CPU_CLOCK;
+    attr.disabled               = 1;
+    int fd                      = syscall(__NR_perf_event_open, &attr, 0, -1, -1, 0);
     if (fd >= 0) {
         close(fd);
         return true;
@@ -182,7 +188,8 @@ class PmcGroupRawLinux final : public PmcGroup {
    public:
     PmcGroupRawLinux(std::vector<int> fds, std::vector<std::string> names)
         : fds_(std::move(fds)), event_names_(std::move(names)) {
-        if (!valid()) cleanup();
+        if (!valid())
+            cleanup();
         // print_initial_values();
     }
 
@@ -190,19 +197,22 @@ class PmcGroupRawLinux final : public PmcGroup {
 
     void reset() override {
         for (int fd : fds_) {
-            if (fd >= 0) ioctl(fd, PERF_EVENT_IOC_RESET, 0);
+            if (fd >= 0)
+                ioctl(fd, PERF_EVENT_IOC_RESET, 0);
         }
     }
 
     void enable() override {
         for (int fd : fds_) {
-            if (fd >= 0) ioctl(fd, PERF_EVENT_IOC_ENABLE, 0);
+            if (fd >= 0)
+                ioctl(fd, PERF_EVENT_IOC_ENABLE, 0);
         }
     }
 
     void disable() override {
         for (int fd : fds_) {
-            if (fd >= 0) ioctl(fd, PERF_EVENT_IOC_DISABLE, 0);
+            if (fd >= 0)
+                ioctl(fd, PERF_EVENT_IOC_DISABLE, 0);
         }
     }
 
@@ -230,13 +240,15 @@ class PmcGroupRawLinux final : public PmcGroup {
    private:
     bool valid() const noexcept {
         for (int fd : fds_)
-            if (fd < 0) return false;
+            if (fd < 0)
+                return false;
         return !fds_.empty();
     }
 
     void cleanup() {
         for (int fd : fds_)
-            if (fd >= 0) close(fd);
+            if (fd >= 0)
+                close(fd);
     }
 
     std::vector<int> fds_;
@@ -249,7 +261,8 @@ std::unique_ptr<PmcGroup> PmcGroup::create_raw(const std::vector<std::string>& e
     for (const auto& name : event_names) {
         int fd = open_raw_counter_by_name(name);
         if (fd < 0) {
-            for (int f : fds) close(f);
+            for (int f : fds)
+                close(f);
             return nullptr;
         }
         fds.push_back(fd);

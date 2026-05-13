@@ -20,7 +20,7 @@ Statistics BoundaryAnalyzer::compute_stats(const std::vector<double>& samples) {
     }
 
     const double sum = std::accumulate(samples.begin(), samples.end(), 0.0);
-    statistics.mean = sum / static_cast<double>(samples.size());
+    statistics.mean  = sum / static_cast<double>(samples.size());
 
     double squared_sum = 0.0;
     for (const double sample : samples) {
