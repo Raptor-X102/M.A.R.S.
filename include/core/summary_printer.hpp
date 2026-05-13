@@ -78,7 +78,7 @@ class SummaryPrinter {
         return text;
     }
 
-    static std::string center_text(std::string text, size_t width) {
+    static std::string center_text(const std::string& text, size_t width) {
         const size_t length = visible_length(text);
         if (length >= width) {
             return truncate_visible(text, width);
