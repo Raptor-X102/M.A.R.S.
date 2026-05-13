@@ -19,12 +19,12 @@ class ProbeService {
     explicit ProbeService(MeasurerRegistry registry) : registry_(std::move(registry)) {}
 
     const shared_types::CpuInfoData& run() {
-        SPDLOG_INFO("Starting CPU measurement pipeline");
+        SPDLOG_INFO("Starting CPU measurement pipeline ({} measurers)", registry_.measurers().size());
         data_ = shared_types::CpuInfoData{};
 
         for (const auto& measurer : registry_.measurers()) {
             try {
-                SPDLOG_INFO("Running measurer: {}", measurer->name());
+                SPDLOG_DEBUG("Running measurer: {}", measurer->name());
                 measurer->measure(data_);
             } catch (const std::exception& error) {
                 SPDLOG_ERROR("Measurer '{}' failed: {}", measurer->name(), error.what());

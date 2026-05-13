@@ -8,7 +8,7 @@ namespace silicon_probe::uops_cache {
 UopsCacheMeasurer::UopsCacheMeasurer() : UopsCacheMeasurer(Config{}) {}
 
 UopsCacheMeasurer::UopsCacheMeasurer(Config config) : config_(std::move(config)) {
-    SPDLOG_INFO(
+    SPDLOG_DEBUG(
         "[{}] configured: min_instr_cnt = {}, max_instr_cnt = {}, instr_step = {}, iterations={}, "
         "repeats={}, instr = [{}, {}]",
         name(),
@@ -34,7 +34,7 @@ void UopsCacheMeasurer::measure(shared_types::CpuInfoData& data) {
     if (uops_events.empty()) {
         SPDLOG_WARN("[{}] No uops events found. Falling back to time-only measurement.", name());
     } else {
-        SPDLOG_INFO("[{}] Found {} uops events", name(), uops_events.size());
+        SPDLOG_DEBUG("[{}] Found {} uops events", name(), uops_events.size());
         has_uops = true;
     }
 
@@ -73,7 +73,7 @@ void UopsCacheMeasurer::measure(shared_types::CpuInfoData& data) {
             double share  = (dsb + mite) > 0 ? static_cast<double>(dsb) / (dsb + mite) : 0.0;
             if (share < config_.dsb_share_stop && coarse_counts.size() >= config_.coarse_ignore_first) {
                 saturation_reached = true;
-                SPDLOG_INFO(
+                SPDLOG_DEBUG(
                     "[{}] DSB share dropped to {:.3f} at instr_cnt={}, stopping coarse scan",
                     name(),
                     share,
@@ -169,21 +169,21 @@ UopsCacheResult UopsCacheMeasurer::run_test(
         }
     }
 
-    SPDLOG_INFO(
+    SPDLOG_DEBUG(
         "[{}] instr_cnt={}: avg_ticks_per_instr={:.4g} (std={:.4g})",
         name(),
         instr_cnt,
         avg_ticks_per_instr,
-        ticks_std
+            ticks_std
     );
     if (!avg_events_counts.empty()) {
         for (size_t i = 0; i < uops_events.size(); ++i) {
-            SPDLOG_INFO("  {} avg = {:.4g}", uops_events[i], static_cast<double>(avg_events_counts[i]));
+            SPDLOG_DEBUG("  {} avg = {:.4g}", uops_events[i], static_cast<double>(avg_events_counts[i]));
         }
         if (uops_events.size() >= 2) {
             double dsb  = static_cast<double>(avg_events_counts[1]);
             double mite = static_cast<double>(avg_events_counts[0]);
-            SPDLOG_INFO(" uops_cache share to all = {:.4g}", dsb / (dsb + mite));
+            SPDLOG_DEBUG(" uops_cache share to all = {:.4g}", dsb / (dsb + mite));
         }
     }
 

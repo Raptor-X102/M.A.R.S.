@@ -9,7 +9,7 @@ CacheMeasurer::CacheMeasurer() : CacheMeasurer(Config{}) {}
 
 CacheMeasurer::CacheMeasurer(Config config)
     : config_(std::move(config)), cache_line_size_(platform::cache_line_size()) {
-    SPDLOG_INFO(
+    SPDLOG_DEBUG(
         "[{}] configured with levels: L1={}, L2={}, L3={}",
         name(),
         config_.levels.test(level_index(CacheLevel::l1d)),
@@ -47,7 +47,7 @@ void CacheMeasurer::measure_level(
     size_t max_size,
     std::optional<size_t> shared_types::CpuInfoData::* target_field
 ) {
-    SPDLOG_INFO("=== Measuring {} ===", level_name(level));
+    SPDLOG_INFO("[{}] measuring {}", name(), level_name(level));
 
     if (min_size == 0 || min_size > max_size) {
         SPDLOG_WARN("Skipping invalid range for {}: min={}, max={}", level_name(level), min_size, max_size);
@@ -87,7 +87,7 @@ void CacheMeasurer::measure_level(
             double avg  = (size_latency + size_misses) / 2.0;
             if (diff / avg <= config_.decision_tolerance) {
                 final_size = static_cast<size_t>(std::round(avg));
-                SPDLOG_INFO(
+                SPDLOG_DEBUG(
                     "Both methods agree within {}%: latency={}, misses={}, final={}",
                     config_.decision_tolerance * 100,
                     size_latency,
@@ -96,7 +96,7 @@ void CacheMeasurer::measure_level(
                 );
             } else {
                 final_size = size_misses;
-                SPDLOG_INFO(
+                SPDLOG_DEBUG(
                     "Misses method used (more accurate), latency gave {} but misses gave {}",
                     size_latency,
                     size_misses
@@ -104,11 +104,11 @@ void CacheMeasurer::measure_level(
             }
         } else {
             final_size = size_misses;
-            SPDLOG_INFO("Only misses method available, result={}", final_size);
+            SPDLOG_DEBUG("Only misses method available, result={}", final_size);
         }
     } else if (size_latency > 0) {
         final_size = size_latency;
-        SPDLOG_INFO("Only latency method available, result={}", final_size);
+        SPDLOG_DEBUG("Only latency method available, result={}", final_size);
     } else {
         final_size = results.front().size_bytes;
         SPDLOG_WARN("No reliable boundary, using smallest size={}", final_size);
@@ -142,7 +142,7 @@ CacheMeasurer::open_pmc_for_level(CacheLevel level, shared_types::CpuInfoData& d
             events_str += ", ";
         events_str += events[i];
     }
-    SPDLOG_INFO("Opened PMC for {} with events: {}", level_name(level), events_str);
+    SPDLOG_DEBUG("Opened PMC for {} with events: {}", level_name(level), events_str);
     return pmc;
 }
 
@@ -152,7 +152,7 @@ CacheMeasurer::measure_range(size_t min_size, size_t max_size, std::unique_ptr<p
     for (size_t size = min_size; size <= max_size; size *= 2) {
         if (pmc) {
             results.push_back(do_single_measurement_with_pmc(size, *pmc));
-            SPDLOG_INFO(
+            SPDLOG_DEBUG(
                 "Size={}, cycles/elem={}, miss_rate={:.6f}",
                 results.back().size_bytes,
                 results.back().cycles_per_element,
@@ -160,7 +160,7 @@ CacheMeasurer::measure_range(size_t min_size, size_t max_size, std::unique_ptr<p
             );
         } else {
             results.push_back(do_single_measurement_without_pmc(size));
-            SPDLOG_INFO("Size={}, cycles/elem={}", results.back().size_bytes, results.back().cycles_per_element);
+            SPDLOG_DEBUG("Size={}, cycles/elem={}", results.back().size_bytes, results.back().cycles_per_element);
         }
         if (size > max_size / 2) {
             break;

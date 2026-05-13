@@ -10,7 +10,7 @@ namespace silicon_probe::write_buffer {
 WriteBufferMeasurer::WriteBufferMeasurer() : WriteBufferMeasurer(Config{}) {}
 
 WriteBufferMeasurer::WriteBufferMeasurer(Config config) : config_(std::move(config)) {
-    SPDLOG_INFO(
+    SPDLOG_DEBUG(
         "[{}] cfg: min_writes={} max_writes={} step={} samples_per_repeat={} repeats={}",
         name(),
         config_.min_writes,
@@ -24,7 +24,7 @@ WriteBufferMeasurer::WriteBufferMeasurer(Config config) : config_(std::move(conf
 std::string_view WriteBufferMeasurer::name() const noexcept { return "write_buffer"; }
 
 void WriteBufferMeasurer::measure(shared_types::CpuInfoData& data) {
-    SPDLOG_INFO("[{}] start", name());
+    SPDLOG_INFO("[{}] starting write buffer measurement", name());
     platform::ScopedMeasurementEnvironment env{config_.environment};
 
     auto events  = platform::discover_write_buffer_events(data);
@@ -65,9 +65,9 @@ void WriteBufferMeasurer::measure(shared_types::CpuInfoData& data) {
     }
 
     volatile int dummy = 0;
-    SPDLOG_INFO("| writes | latency(ticks) | stddev |");
+    SPDLOG_DEBUG("| writes | latency(ticks) | stddev |");
     for (const auto& ev : events)
-        SPDLOG_INFO("|        | {} (per sample) |", ev);
+        SPDLOG_DEBUG("|        | {} (per sample) |", ev);
 
     std::vector<size_t> writes_list;
     std::vector<WriteBufferResult> results;
@@ -86,12 +86,12 @@ void WriteBufferMeasurer::measure(shared_types::CpuInfoData& data) {
         WriteBufferResult res = measure_for_writes(num_writes, fill_ptr, extra_ptr, dummy, pmc.get());
         results.push_back(res);
 
-        SPDLOG_INFO("| {:6} | {:12.2f} | {:6.2f} |", num_writes, res.avg_latency_ticks, res.latency_stddev);
+        SPDLOG_DEBUG("| {:6} | {:12.2f} | {:6.2f} |", num_writes, res.avg_latency_ticks, res.latency_stddev);
 
         for (size_t i = 0; i < events.size(); ++i) {
             double per_sample = (res.avg_events.size() > i) ? double(res.avg_events[i]) / config_.iterations : 0.0;
             double total      = (res.avg_events.size() > i) ? double(res.avg_events[i]) : 0.0;
-            SPDLOG_INFO("|        | {}: {:.2f} per sample (total {}) |", events[i], per_sample, total);
+            SPDLOG_DEBUG("|        | {}: {:.2f} per sample (total {}) |", events[i], per_sample, total);
         }
     }
 
@@ -100,6 +100,8 @@ void WriteBufferMeasurer::measure(shared_types::CpuInfoData& data) {
         SPDLOG_INFO("[{}] Estimated write buffer capacity: {} entries (each 4 bytes)", name(), capacity);
         data.write_buffer_size = capacity;
     }
+
+    SPDLOG_INFO("[{}] write buffer measurement complete", name());
 }
 
 WriteBufferResult WriteBufferMeasurer::measure_for_writes(
@@ -256,7 +258,7 @@ size_t WriteBufferMeasurer::analyze_buffer_capacity(
         }
     }
 
-    SPDLOG_INFO(
+    SPDLOG_DEBUG(
         "[{}] baseline = {:.2f}, threshold = {:.2f}, capacity = {}",
         name(),
         baseline,

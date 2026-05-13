@@ -154,7 +154,7 @@ void set_realtime_priority() {
         SPDLOG_WARN("mlockall failed, memory may still be paged");
     }
 
-    SPDLOG_INFO("Priority set: realtime");
+    SPDLOG_DEBUG("Priority set: realtime");
 }
 
 void restore_priority() {
@@ -255,7 +255,7 @@ void disable_turbo_boost() {
                 throw PermissionError("Failed to disable turbo boost at " + p);
             }
             g_turbo_boost_saved = true;
-            SPDLOG_INFO("Turbo boost disabled via {}", p);
+            SPDLOG_DEBUG("Turbo boost disabled via {}", p);
             return;
         }
     }
@@ -276,7 +276,7 @@ void restore_turbo_boost() {
     if (out.fail()) {
         SPDLOG_ERROR("Failed to re-enable turbo boost at {}", path);
     } else {
-        SPDLOG_INFO("Turbo boost restored");
+        SPDLOG_DEBUG("Turbo boost restored");
     }
     g_turbo_boost_saved = false;
 }
@@ -292,7 +292,7 @@ ScopedThreadAffinity::ScopedThreadAffinity(int cpu) : previous_affinity_(new cpu
     previous_cpu_count_ = CPU_COUNT(&previous_affinity_->set);
     bind_thread_to_cpu(cpu);
     active_ = true;
-    SPDLOG_INFO("Bound thread to CPU {}", cpu);
+    SPDLOG_DEBUG("Bound thread to CPU {}", cpu);
 }
 
 ScopedThreadAffinity::~ScopedThreadAffinity() {

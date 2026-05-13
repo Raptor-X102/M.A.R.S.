@@ -6,7 +6,7 @@ namespace silicon_probe::branch_target_buffer {
 BranchTargetBufferMeasurer::BranchTargetBufferMeasurer() : BranchTargetBufferMeasurer(Config{}) {}
 
 BranchTargetBufferMeasurer::BranchTargetBufferMeasurer(Config config) : config_(std::move(config)) {
-    SPDLOG_INFO(
+    SPDLOG_DEBUG(
         "[{}] configured: min_blocks_cnt = {}, max_blocks_cnt = {}, blocks_step = {}, iterations={}, "
         "repeats={}, alignment={}",
         name(),
@@ -31,7 +31,7 @@ void BranchTargetBufferMeasurer::measure(shared_types::CpuInfoData& data) {
     std::unique_ptr<platform::pmc::PmcGroup> pmc;
 
     if (use_events) {
-        SPDLOG_INFO("[{}] Found BTB event: {}", name(), *btb_event);
+        SPDLOG_DEBUG("[{}] Found BTB event: {}", name(), *btb_event);
         pmc = platform::pmc::PmcGroup::create_raw({*btb_event});
         if (!pmc) {
             SPDLOG_WARN("[{}] Failed to open BTB counter, falling back to time-based measurement.", name());
@@ -56,7 +56,7 @@ void BranchTargetBufferMeasurer::measure(shared_types::CpuInfoData& data) {
         if (use_events && !saturation_detected) {
             double rate = computeMispredictionRate(res, blocks_cnt);
             if (rate > config_.misprediction_saturation_threshold) {
-                SPDLOG_INFO(
+                SPDLOG_DEBUG(
                     "[{}] Saturation detected (misprediction rate = {:.4f} > {:.4f}) at blocks_cnt = {}",
                     name(),
                     rate,
@@ -82,7 +82,7 @@ void BranchTargetBufferMeasurer::measure(shared_types::CpuInfoData& data) {
         return;
     }
 
-    SPDLOG_INFO("[{}] Starting to refine saturation", name());
+    SPDLOG_DEBUG("[{}] Starting to refine saturation", name());
     size_t refined = 0;
     if (use_events) {
         refined = refineSaturation(approx_saturation, first_bad_point, pmc.get());
@@ -161,7 +161,7 @@ BranchTargetBufferResult BranchTargetBufferMeasurer::run_test(size_t blocks_cnt,
 
     if (pmc) {
         double rate = static_cast<double>(avg_events_counts) / (blocks_cnt * config_.iterations);
-        SPDLOG_INFO(
+        SPDLOG_DEBUG(
             "[{}]\nblocks_cnt={}: avg_ticks_per_block={:.4e} (std={:.4e}), misprediction_rate={:.4f}",
             name(),
             blocks_cnt,
@@ -170,7 +170,7 @@ BranchTargetBufferResult BranchTargetBufferMeasurer::run_test(size_t blocks_cnt,
             rate
         );
     } else {
-        SPDLOG_INFO(
+        SPDLOG_DEBUG(
             "[{}]\nblocks_cnt={}: avg_ticks_per_block={:.4e} (std={:.4e})",
             name(),
             blocks_cnt,

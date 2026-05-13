@@ -8,7 +8,7 @@ namespace silicon_probe::return_address_stack {
 ReturnAddressStackMeasurer::ReturnAddressStackMeasurer() : ReturnAddressStackMeasurer(Config{}) {}
 
 ReturnAddressStackMeasurer::ReturnAddressStackMeasurer(Config config) : config_(std::move(config)) {
-    SPDLOG_INFO(
+    SPDLOG_DEBUG(
         "[{}] configured: min_recursion_depth={}, max_recursion_depth={}, recursion_depth_step={}, iterations={}",
         name(),
         config_.min_recursion_depth,
@@ -62,7 +62,14 @@ void ReturnAddressStackMeasurer::measure(shared_types::CpuInfoData& data) {
 
         results.push_back({depth, min_time, avg_time, max_time});
 
-        SPDLOG_INFO("[{}] depth={:3d}  min={:3d}  avg={:6.2f}  max={:3d}", name(), depth, min_time, avg_time, max_time);
+        SPDLOG_DEBUG(
+            "[{}] depth={:3d}  min={:3d}  avg={:6.2f}  max={:3d}",
+            name(),
+            depth,
+            min_time,
+            avg_time,
+            max_time
+        );
     }
 
     if (results.empty()) {

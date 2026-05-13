@@ -10,7 +10,7 @@ namespace silicon_probe::exec_ports {
 ExecPortsMeasurer::ExecPortsMeasurer() : ExecPortsMeasurer(Config{}) {}
 
 ExecPortsMeasurer::ExecPortsMeasurer(Config config) : config_(std::move(config)) {
-    SPDLOG_INFO(
+    SPDLOG_DEBUG(
         "[{}] configured: instr_cnt={}, iterations={}, repeats={}, instr1 = [{}, {}], instr2 = [{}, {}]",
         name(),
         config_.instr_cnt,
@@ -43,7 +43,7 @@ void ExecPortsMeasurer::measure(shared_types::CpuInfoData& data) {
             name()
         );
     } else {
-        SPDLOG_INFO("[{}] Found {} port events", name(), port_events.size());
+        SPDLOG_DEBUG("[{}] Found {} port events", name(), port_events.size());
         has_ports = true;
     }
 
@@ -130,10 +130,10 @@ void ExecPortsMeasurer::measure(shared_types::CpuInfoData& data) {
             }
         }
 
-        SPDLOG_INFO("[{}] {}: avg_ticks = {:.4g} (std={:.4g})", name(), test_name, avg_ticks, ticks_std);
+        SPDLOG_DEBUG("[{}] {}: avg_ticks = {:.4g} (std={:.4g})", name(), test_name, avg_ticks, ticks_std);
         if (!avg_counts.empty()) {
             for (size_t i = 0; i < port_events.size(); ++i) {
-                SPDLOG_INFO("  {} avg = {:.4g}", port_events[i], static_cast<double>(avg_counts[i]));
+                SPDLOG_DEBUG("  {} avg = {:.4g}", port_events[i], static_cast<double>(avg_counts[i]));
             }
         }
 
@@ -346,7 +346,7 @@ PortContentionDecision ExecPortsMeasurer::detectPortContention(
         "  Result: ports are " + std::string(final_diff ? "DIFFERENT (independent)" : "THE SAME (dependent)") + "\n";
     detailed += "================================================\n";
 
-    SPDLOG_INFO(detailed);
+    SPDLOG_DEBUG(detailed);
 
     return {final_diff, final_conf, reasoning};
 }
