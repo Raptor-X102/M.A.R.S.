@@ -8,7 +8,7 @@ namespace silicon_probe::store_to_load_forwarding {
 StoreToLoadForwardingMeasurer::StoreToLoadForwardingMeasurer() : StoreToLoadForwardingMeasurer(Config{}) {}
 
 StoreToLoadForwardingMeasurer::StoreToLoadForwardingMeasurer(Config config) : config_(std::move(config)) {
-    SPDLOG_INFO(
+    SPDLOG_DEBUG(
         "[{}] cfg: offsets={}..{} step={} iter={} repeats={} growth={}",
         name(),
         config_.min_offset,
@@ -23,7 +23,7 @@ StoreToLoadForwardingMeasurer::StoreToLoadForwardingMeasurer(Config config) : co
 std::string_view StoreToLoadForwardingMeasurer::name() const noexcept { return "store-to-load forwarding"; }
 
 void StoreToLoadForwardingMeasurer::measure(shared_types::CpuInfoData& data) {
-    SPDLOG_INFO("[{}] start", name());
+    SPDLOG_INFO("[{}] starting store-to-load forwarding measurement", name());
     platform::ScopedMeasurementEnvironment env{config_.environment};
 
     auto events  = platform::discover_s2l_forwarding_events(data);
@@ -50,7 +50,7 @@ void StoreToLoadForwardingMeasurer::measure(shared_types::CpuInfoData& data) {
     for (size_t size : {8, 4, 2, 1}) {
         if (size > kDefaultBufferSize)
             continue;
-        SPDLOG_INFO("[{}] testing access size = {} bytes", name(), size);
+        SPDLOG_DEBUG("[{}] testing access size = {} bytes", name(), size);
 
         size_t max_off = std::min(config_.max_offset, kDefaultBufferSize - size);
         std::vector<StoreToLoadForwardingResult> results;
@@ -93,7 +93,7 @@ void StoreToLoadForwardingMeasurer::measure(shared_types::CpuInfoData& data) {
         }
 
         if (!zero_works) {
-            SPDLOG_INFO("[{}] size {} no STLF at offset 0, try smaller", name(), size);
+            SPDLOG_DEBUG("[{}] size {} no STLF at offset 0, try smaller", name(), size);
             continue;
         }
 
@@ -118,7 +118,7 @@ void StoreToLoadForwardingMeasurer::measure(shared_types::CpuInfoData& data) {
                 break;
         }
 
-        SPDLOG_INFO("[{}] size {} works, max offset = {}", name(), best_size, best_offset);
+        SPDLOG_DEBUG("[{}] size {} works, max offset = {}", name(), best_size, best_offset);
         break;  // largest working size found
     }
 
@@ -204,10 +204,10 @@ StoreToLoadForwardingResult StoreToLoadForwardingMeasurer::run_test(
             avg_ev[i] /= config_.repeats;
     }
 
-    SPDLOG_INFO("[{}] \nsize={} off={}: avg={:.3g} std={:.3g}", name(), N, offset, avg, stddev);
+    SPDLOG_DEBUG("[{}] size={} off={}: avg={:.3g} std={:.3g}", name(), N, offset, avg, stddev);
     if (!avg_ev.empty()) {
         for (size_t i = 0; i < ev_names.size(); ++i)
-            SPDLOG_INFO(" \n{} avg = {:.3g}", ev_names[i], double(avg_ev[i]));
+            SPDLOG_DEBUG("{} avg = {:.3g}", ev_names[i], double(avg_ev[i]));
     }
 
     return {avg, stddev, std::move(avg_ev)};

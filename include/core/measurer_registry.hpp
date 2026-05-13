@@ -33,7 +33,7 @@ class MeasurerRegistry {
             return;
         }
 
-        SPDLOG_INFO("Registered measurer: {}", key);
+        SPDLOG_DEBUG("Registered measurer: {}", key);
         measurer_map_.emplace(key, measurer.get());
         measurers_.push_back(std::move(measurer));
     }

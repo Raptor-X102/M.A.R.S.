@@ -9,7 +9,7 @@ namespace silicon_probe::branch_history_table {
 BranchHistoryTableMeasurer::BranchHistoryTableMeasurer() : BranchHistoryTableMeasurer(Config{}) {}
 
 BranchHistoryTableMeasurer::BranchHistoryTableMeasurer(Config config) : config_(std::move(config)) {
-    SPDLOG_INFO(
+    SPDLOG_DEBUG(
         "[{}] configured: min_period={}, max_period={}, coeff={}, iterations={}",
         name(),
         config_.min_period,
@@ -75,7 +75,7 @@ void BranchHistoryTableMeasurer::measure(shared_types::CpuInfoData& data) {
 
         results.push_back({period, miss_per_iter});
 
-        SPDLOG_INFO("[{}] period={:5d}  misses={:12}  miss_per_iter={:.4f}", name(), period, misses, miss_per_iter);
+        SPDLOG_DEBUG("[{}] period={:5d}  misses={:12}  miss_per_iter={:.4f}", name(), period, misses, miss_per_iter);
     }
 
     if (results.empty()) {
@@ -198,17 +198,17 @@ int BranchHistoryTableMeasurer::detectBHTSaturation(const std::vector<BranchHist
         best = static_cast<int>(periods.back());
     }
 
-    SPDLOG_INFO(
+    SPDLOG_DEBUG(
         "[{}] BHT estimation: baseline={:.4f}, max_miss={:.4f}, threshold={:.4f}",
         name(),
         baseline,
         max_miss,
         threshold
     );
-    SPDLOG_INFO("  saturation (90% rise) period = {}", saturation_period);
-    SPDLOG_INFO("  derivative (rise then plateau) period = {}", derivative_period);
-    SPDLOG_INFO("  sharp jump period = {}", sharp_jump);
-    SPDLOG_INFO("  selected BHT size = {}", best);
+    SPDLOG_DEBUG("  saturation (90% rise) period = {}", saturation_period);
+    SPDLOG_DEBUG("  derivative (rise then plateau) period = {}", derivative_period);
+    SPDLOG_DEBUG("  sharp jump period = {}", sharp_jump);
+    SPDLOG_DEBUG("  selected BHT size = {}", best);
 
     return best;
 }

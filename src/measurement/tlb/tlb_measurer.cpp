@@ -55,7 +55,7 @@ void TlbMeasurer::Mapping::release() noexcept {
 TlbMeasurer::TlbMeasurer() : TlbMeasurer(Config{}) {}
 
 TlbMeasurer::TlbMeasurer(Config config) : config_(std::move(config)) {
-    SPDLOG_INFO(
+    SPDLOG_DEBUG(
         "[{}] configured: pages {}..{}, iterations={}, page_size={}, huge_pages={}", name(), kMinPages,
         config_.max_pages, config_.iterations, page_size_bytes(), config_.use_huge_pages
     );
@@ -119,7 +119,7 @@ void TlbMeasurer::measure(shared_types::CpuInfoData& data) {
 
         points.push_back(point);
 
-        SPDLOG_INFO(
+        SPDLOG_DEBUG(
             "[{}] pages={}, bytes={}, median_cpa={:.3f}, min={:.3f}, max={:.3f}", name(), point.pages, point.bytes,
             point.median_cycles_per_access, point.min_cycles_per_access, point.max_cycles_per_access
         );
@@ -133,6 +133,15 @@ void TlbMeasurer::measure(shared_types::CpuInfoData& data) {
 
     if (boundaries.l2) {
         data.tlb_l2_size = points[*boundaries.l2].pages;
+    }
+
+    if (data.tlb_l1_size || data.tlb_l2_size) {
+        SPDLOG_INFO(
+            "[{}] result: L1={} pages, L2={} pages",
+            name(),
+            data.tlb_l1_size.value_or(0),
+            data.tlb_l2_size.value_or(0)
+        );
     }
 
     SPDLOG_INFO("[{}] TLB benchmark complete", name());

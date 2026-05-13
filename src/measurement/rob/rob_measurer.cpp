@@ -10,7 +10,7 @@ namespace silicon_probe::rob {
 RobMeasurer::RobMeasurer() : RobMeasurer(Config{}) {}
 
 RobMeasurer::RobMeasurer(Config config) : config_(std::move(config)) {
-    SPDLOG_INFO(
+    SPDLOG_DEBUG(
         "[{}] configured: min={}, max={}, step={}, inner_its={}, outer_its={}, instr_type={}",
         name(),
         config_.min_instr_cnt,
@@ -75,7 +75,7 @@ void RobMeasurer::measure(shared_types::CpuInfoData& data) {
 
         results.push_back({filler, min_per_iter, avg_per_iter, max_per_iter});
 
-        SPDLOG_INFO(
+        SPDLOG_DEBUG(
             "[{}] filler={:3d}  min={:6.2f}  avg={:6.2f}  max={:6.2f}",
             name(),
             filler,
