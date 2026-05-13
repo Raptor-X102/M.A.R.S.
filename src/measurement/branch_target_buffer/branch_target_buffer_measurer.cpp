@@ -97,15 +97,12 @@ void BranchTargetBufferMeasurer::measure(shared_types::CpuInfoData& data) {
 }
 
 BranchTargetBufferResult BranchTargetBufferMeasurer::run_test(size_t blocks_cnt, platform::pmc::PmcGroup* pmc) {
-    std::vector<double> ticks_per_block;
-    ticks_per_block.reserve(config_.repeats);
-    std::vector<uint64_t> raw_ticks;
-    raw_ticks.reserve(config_.repeats);
-    std::vector<uint64_t> all_counts;
-    all_counts.reserve(config_.repeats);
+    std::vector<double> ticks_per_block(config_.repeats);
+    std::vector<uint64_t> raw_ticks(config_.repeats);
+    std::vector<uint64_t> all_counts(config_.repeats);
 
     auto funcs = platform::arch::generate_branch_target_buffer_code(blocks_cnt, config_.iterations, config_.alignment);
-    if (!funcs[0] || !funcs[1]) {
+    if (funcs.size() < 2 || !funcs[0] || !funcs[1]) {
         SPDLOG_ERROR("[{}] Failed to generate functions for blocks_cnt={}", name(), blocks_cnt);
         return {};
     }
@@ -113,6 +110,7 @@ BranchTargetBufferResult BranchTargetBufferMeasurer::run_test(size_t blocks_cnt,
     auto warmup_func  = reinterpret_cast<void (*)()>(funcs[0]);
     auto measure_func = reinterpret_cast<void (*)()>(funcs[1]);
 
+    // warmup
     for (size_t i = 0; i < config_.warmup_iterations; ++i) {
         warmup_func();
     }
@@ -144,6 +142,7 @@ BranchTargetBufferResult BranchTargetBufferMeasurer::run_test(size_t blocks_cnt,
     double avg_ticks_per_block = std::accumulate(ticks_per_block.begin(), ticks_per_block.end(), 0.0) / config_.repeats;
     double avg_raw_ticks       = std::accumulate(raw_ticks.begin(), raw_ticks.end(), 0.0) / config_.repeats;
 
+    // Counting Standard Deviation Sample
     double ticks_std = 0.0;
     for (double t : ticks_per_block) {
         double diff = t - avg_ticks_per_block;
@@ -151,6 +150,7 @@ BranchTargetBufferResult BranchTargetBufferMeasurer::run_test(size_t blocks_cnt,
     }
     ticks_std = std::sqrt(ticks_std / config_.repeats);
 
+    // Averaging
     uint64_t avg_events_counts = 0;
     if (!all_counts.empty()) {
         for (uint64_t cnt : all_counts) {
@@ -195,7 +195,8 @@ size_t BranchTargetBufferMeasurer::findApproxSaturation(
     const std::vector<BranchTargetBufferResult>& results,
     bool use_events
 ) {
-    if (counts.size() < 4)
+    const int Min_res_cnt = 4;
+    if (counts.size() < Min_res_cnt) 
         return 0;
 
     if (use_events) {
@@ -206,21 +207,26 @@ size_t BranchTargetBufferMeasurer::findApproxSaturation(
                 return counts[i - 1];
             }
         }
+
         // Fallback: max growth
         double max_growth = 0.0;
         size_t growth_idx = 0;
+        double prev_rate = computeMispredictionRate(results[config_.coarse_ignore_first - 1],
+                                                    counts [config_.coarse_ignore_first - 1]);
         for (size_t i = config_.coarse_ignore_first; i < results.size(); ++i) {
             double cur_rate  = computeMispredictionRate(results[i], counts[i]);
-            double prev_rate = computeMispredictionRate(results[i - 1], counts[i - 1]);
             double growth    = cur_rate - prev_rate;
             if (growth > max_growth) {
                 max_growth = growth;
                 growth_idx = i;
             }
+            prev_rate = cur_rate; 
         }
+
         if (max_growth > config_.misprediction_growth_threshold && growth_idx > 0) {
             return counts[growth_idx - 1];
         }
+
         return 0;
     } else {
         // Time-based: find step with baseline comparison
