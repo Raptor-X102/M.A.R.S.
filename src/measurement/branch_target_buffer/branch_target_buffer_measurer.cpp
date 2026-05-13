@@ -1,4 +1,3 @@
-// measurement/branch_target_buffer/branch_target_buffer_measurer.cpp
 #include "measurement/branch_target_buffer/branch_target_buffer_measurer.hpp"
 
 namespace silicon_probe::branch_target_buffer {
@@ -6,6 +5,7 @@ namespace silicon_probe::branch_target_buffer {
 BranchTargetBufferMeasurer::BranchTargetBufferMeasurer() : BranchTargetBufferMeasurer(Config{}) {}
 
 BranchTargetBufferMeasurer::BranchTargetBufferMeasurer(Config config) : config_(std::move(config)) {
+    validateConfig();
     SPDLOG_DEBUG(
         "[{}] configured: min_blocks_cnt = {}, max_blocks_cnt = {}, blocks_step = {}, iterations={}, "
         "repeats={}, alignment={}",
@@ -20,6 +20,75 @@ BranchTargetBufferMeasurer::BranchTargetBufferMeasurer(Config config) : config_(
 }
 
 std::string_view BranchTargetBufferMeasurer::name() const noexcept { return "branch target buffer"; }
+
+void BranchTargetBufferMeasurer::validateConfig() {
+    // coarse_ignore_first must be >= 1 to avoid index -1
+    if (config_.coarse_ignore_first == 0) {
+        SPDLOG_WARN("[{}] coarse_ignore_first = 0 is invalid, setting to 1", name());
+        config_.coarse_ignore_first = 1;
+    }
+
+    // min_blocks_cnt cannot be zero (division by zero in computeMispredictionRate)
+    if (config_.min_blocks_cnt == 0) {
+        SPDLOG_WARN("[{}] min_blocks_cnt = 0 is invalid, setting to {}", name(), kDefaultMinBlocksCnt);
+        config_.min_blocks_cnt = kDefaultMinBlocksCnt;
+    }
+
+    // blocks_step cannot be zero (infinite loop)
+    if (config_.blocks_step == 0) {
+        SPDLOG_WARN("[{}] blocks_step = 0 is invalid, setting to {}", name(), kDefaultBlocksStep);
+        config_.blocks_step = kDefaultBlocksStep;
+    }
+
+    // repeats cannot be zero (division by zero in averaging)
+    if (config_.repeats == 0) {
+        SPDLOG_WARN("[{}] repeats = 0 is invalid, setting to {}", name(), kDefaultRepeats);
+        config_.repeats = kDefaultRepeats;
+    }
+
+    // warmup_iterations cannot be zero (need warmup)
+    if (config_.warmup_iterations == 0) {
+        SPDLOG_WARN("[{}] warmup_iterations = 0 is invalid, setting to {}", name(), kDefaultWarmupIterations);
+        config_.warmup_iterations = kDefaultWarmupIterations;
+    }
+
+    // iterations cannot be zero (no branches to measure)
+    if (config_.iterations == 0) {
+        SPDLOG_WARN("[{}] iterations = 0 is invalid, setting to {}", name(), kDefaultIterations);
+        config_.iterations = kDefaultIterations;
+    }
+
+    // misprediction_saturation_threshold must be in (0, 1]
+    if (config_.misprediction_saturation_threshold <= 0.0 || 
+        config_.misprediction_saturation_threshold > 1.0) {
+        SPDLOG_WARN("[{}] misprediction_saturation_threshold = {} is invalid, setting to 0.01", 
+                    name(), config_.misprediction_saturation_threshold);
+        config_.misprediction_saturation_threshold = 0.01;
+    }
+
+    // time_growth_ratio must be > 1.0 (otherwise never triggers)
+    if (config_.time_growth_ratio <= 1.0) {
+        SPDLOG_WARN("[{}] time_growth_ratio = {} is invalid, setting to 1.2", 
+                    name(), config_.time_growth_ratio);
+        config_.time_growth_ratio = 1.2;
+    }
+
+    // time_stability_points cannot be zero
+    if (config_.time_stability_points == 0) {
+        SPDLOG_WARN("[{}] time_stability_points = 0 is invalid, setting to 3", name());
+        config_.time_stability_points = 3;
+    }
+
+    // alignment must be positive
+    if (config_.alignment < 1) {
+        SPDLOG_WARN("[{}] alignment = {} is invalid, setting to {}", name(), config_.alignment, kDefaultAlignment);
+        config_.alignment = kDefaultAlignment;
+    }
+}
+
+struct CodeReleaseGuard {
+    ~CodeReleaseGuard() { platform::arch::release_branch_target_buffer_code(); }
+};
 
 void BranchTargetBufferMeasurer::measure(shared_types::CpuInfoData& data) {
     SPDLOG_INFO("[{}] starting BTB size measurement", name());
@@ -47,13 +116,17 @@ void BranchTargetBufferMeasurer::measure(shared_types::CpuInfoData& data) {
     bool saturation_detected = false;
     size_t first_bad_point   = 0;
 
+    // it is needed to release bht code that was generated in generate_branch_target_buffer_code 
+    // after exception
+    CodeReleaseGuard guard;
+
     for (size_t blocks_cnt = config_.min_blocks_cnt; blocks_cnt <= config_.max_blocks_cnt;
          blocks_cnt += config_.blocks_step) {
         BranchTargetBufferResult res = run_test(blocks_cnt, pmc.get());
         coarse_counts.push_back(blocks_cnt);
         coarse_results.push_back(res);
 
-        if (use_events && !saturation_detected) {
+        if (use_events) {
             double rate = computeMispredictionRate(res, blocks_cnt);
             if (rate > config_.misprediction_saturation_threshold) {
                 SPDLOG_DEBUG(
@@ -74,23 +147,31 @@ void BranchTargetBufferMeasurer::measure(shared_types::CpuInfoData& data) {
         SPDLOG_WARN("[{}] Saturation not reached within the range, using last points.", name());
     }
 
-    size_t approx_saturation = findApproxSaturation(coarse_counts, coarse_results, use_events);
-    if (approx_saturation == 0) {
-        platform::arch::release_branch_target_buffer_code();
-        data.btb_size = 0;
-        SPDLOG_WARN("[{}] Could not detect saturation point.", name());
+    std::optional<size_t> approx_saturation;
+    if (use_events && saturation_detected) {
+        approx_saturation = first_bad_point - config_.blocks_step;
+        if (approx_saturation < config_.min_blocks_cnt)
+            approx_saturation = config_.min_blocks_cnt;
+    } else {
+        approx_saturation = findApproxSaturation(coarse_counts, coarse_results, use_events);
+    }
+
+    if (!approx_saturation) {
         return;
     }
 
-    SPDLOG_DEBUG("[{}] Starting to refine saturation", name());
     size_t refined = 0;
     if (use_events) {
-        refined = refineSaturation(approx_saturation, first_bad_point, pmc.get());
+        refined = refineSaturation(*approx_saturation, first_bad_point, pmc.get());
     } else {
-        refined = refineSaturationTime(approx_saturation, pmc.get());
+        double baseline_time = 0.0;
+        size_t baseline_cnt = std::min<size_t>(3, coarse_results.size());
+        for (size_t i = 0; i < baseline_cnt; ++i)
+            baseline_time += coarse_results[i].avg_ticks_per_block;
+        baseline_time /= baseline_cnt;
+        refined = refineSaturationTime(*approx_saturation, baseline_time, pmc.get());
     }
 
-    platform::arch::release_branch_target_buffer_code();
     data.btb_size = refined;
     SPDLOG_INFO("[{}] Estimated BTB size: {} entries", name(), refined);
     SPDLOG_INFO("[{}] Measurement complete", name());
@@ -98,7 +179,6 @@ void BranchTargetBufferMeasurer::measure(shared_types::CpuInfoData& data) {
 
 BranchTargetBufferResult BranchTargetBufferMeasurer::run_test(size_t blocks_cnt, platform::pmc::PmcGroup* pmc) {
     std::vector<double> ticks_per_block(config_.repeats);
-    std::vector<uint64_t> raw_ticks(config_.repeats);
     std::vector<uint64_t> all_counts(config_.repeats);
 
     auto funcs = platform::arch::generate_branch_target_buffer_code(blocks_cnt, config_.iterations, config_.alignment);
@@ -130,17 +210,15 @@ BranchTargetBufferResult BranchTargetBufferMeasurer::run_test(size_t blocks_cnt,
         }
 
         uint64_t ticks = end_ticks - start_ticks;
-        raw_ticks.push_back(ticks);
-        ticks_per_block.push_back(static_cast<double>(ticks) / blocks_cnt);
+        ticks_per_block[r] = static_cast<double>(ticks) / blocks_cnt;
 
         if (pmc) {
             auto cv = pmc->read();
-            all_counts.push_back(cv.values[0]);
+            all_counts[r] = cv.values[0];
         }
     }
 
     double avg_ticks_per_block = std::accumulate(ticks_per_block.begin(), ticks_per_block.end(), 0.0) / config_.repeats;
-    double avg_raw_ticks       = std::accumulate(raw_ticks.begin(), raw_ticks.end(), 0.0) / config_.repeats;
 
     // Counting Standard Deviation Sample
     double ticks_std = 0.0;
@@ -152,12 +230,10 @@ BranchTargetBufferResult BranchTargetBufferMeasurer::run_test(size_t blocks_cnt,
 
     // Averaging
     uint64_t avg_events_counts = 0;
-    if (!all_counts.empty()) {
-        for (uint64_t cnt : all_counts) {
-            avg_events_counts += cnt;
-        }
-        avg_events_counts /= config_.repeats;
+    for (uint64_t cnt : all_counts) {
+        avg_events_counts += cnt;
     }
+    avg_events_counts /= config_.repeats;
 
     if (pmc) {
         double rate = static_cast<double>(avg_events_counts) / (blocks_cnt * config_.iterations);
@@ -179,7 +255,7 @@ BranchTargetBufferResult BranchTargetBufferMeasurer::run_test(size_t blocks_cnt,
         );
     }
 
-    return {avg_ticks_per_block, avg_raw_ticks, ticks_std, avg_events_counts};
+    return {avg_ticks_per_block, ticks_std, avg_events_counts};
 }
 
 double
@@ -190,14 +266,14 @@ BranchTargetBufferMeasurer::computeMispredictionRate(const BranchTargetBufferRes
     return static_cast<double>(res.avg_events_counts) / total_branches;
 }
 
-size_t BranchTargetBufferMeasurer::findApproxSaturation(
+std::optional<size_t> BranchTargetBufferMeasurer::findApproxSaturation(
     const std::vector<size_t>& counts,
     const std::vector<BranchTargetBufferResult>& results,
     bool use_events
 ) {
     const int Min_res_cnt = 4;
     if (counts.size() < Min_res_cnt) 
-        return 0;
+        return std::nullopt;
 
     if (use_events) {
         // Event-based: find first index where rate exceeds threshold
@@ -211,8 +287,10 @@ size_t BranchTargetBufferMeasurer::findApproxSaturation(
         // Fallback: max growth
         double max_growth = 0.0;
         size_t growth_idx = 0;
-        double prev_rate = computeMispredictionRate(results[config_.coarse_ignore_first - 1],
+        if (results.size() <= config_.coarse_ignore_first) return std::nullopt;
+        double prev_rate = computeMispredictionRate(results[config_.coarse_ignore_first - 1], 
                                                     counts [config_.coarse_ignore_first - 1]);
+
         for (size_t i = config_.coarse_ignore_first; i < results.size(); ++i) {
             double cur_rate  = computeMispredictionRate(results[i], counts[i]);
             double growth    = cur_rate - prev_rate;
@@ -227,44 +305,41 @@ size_t BranchTargetBufferMeasurer::findApproxSaturation(
             return counts[growth_idx - 1];
         }
 
-        return 0;
+        return std::nullopt;
     } else {
         // Time-based: find step with baseline comparison
-        std::vector<double> times;
-        for (size_t i = 0; i < counts.size(); ++i) {
-            times.push_back(results[i].avg_ticks_per_block);
-        }
 
         // Baseline from first 3 points
-        double baseline     = 0.0;
-        size_t baseline_cnt = std::min<size_t>(3, times.size());
+        double baseline = 0.0;
+        size_t baseline_cnt = std::min<size_t>(3, results.size());
         for (size_t i = 0; i < baseline_cnt; ++i) {
-            baseline += times[i];
+            baseline += results[i].avg_ticks_per_block;
         }
         baseline /= baseline_cnt;
 
         // Find first index where time exceeds baseline * growth ratio
         size_t jump_idx = 0;
-        for (size_t i = config_.coarse_ignore_first; i < times.size(); ++i) {
-            if (times[i] > baseline * config_.time_growth_ratio) {
+        for (size_t i = config_.coarse_ignore_first; i < results.size(); ++i) {
+            if (results[i].avg_ticks_per_block > baseline * config_.time_growth_ratio) {
                 jump_idx = i;
                 break;
             }
         }
         if (jump_idx == 0)
-            return 0;
+            return std::nullopt;
 
         // Verify stability: next points also exceed threshold
         size_t stable = 0;
-        for (size_t i = jump_idx; i < std::min(times.size(), jump_idx + config_.time_stability_points); ++i) {
-            if (times[i] > baseline * config_.time_growth_ratio) {
+        size_t end_idx = std::min(results.size(), jump_idx + config_.time_stability_points);
+        for (size_t i = jump_idx; i < end_idx; ++i) {
+            if (results[i].avg_ticks_per_block > baseline * config_.time_growth_ratio) {
                 stable++;
             }
         }
         if (stable >= config_.time_stability_points) {
             return counts[jump_idx - 1];
         }
-        return 0;
+        return std::nullopt;
     }
 }
 
@@ -288,24 +363,14 @@ size_t BranchTargetBufferMeasurer::refineSaturation(size_t good, size_t bad, pla
     return answer;
 }
 
-size_t BranchTargetBufferMeasurer::refineSaturationTime(size_t approx, platform::pmc::PmcGroup* pmc) {
-    // Compute baseline from first few block counts
-    const size_t baseline_samples = 3;
-    double baseline               = 0.0;
-    size_t baseline_cnt           = 0;
-    for (size_t i = 0; i < baseline_samples; ++i) {
-        size_t test_cnt = config_.min_blocks_cnt + i * config_.blocks_step;
-        if (test_cnt > config_.max_blocks_cnt)
-            break;
-        BranchTargetBufferResult res = run_test(test_cnt, pmc);
-        baseline += res.avg_ticks_per_block;
-        baseline_cnt++;
-    }
-    if (baseline_cnt == 0)
+size_t BranchTargetBufferMeasurer::refineSaturationTime(size_t approx, 
+                                                        double baseline, 
+                                                        platform::pmc::PmcGroup* pmc) {
+    if (baseline <= 0.0) {
+        SPDLOG_WARN("[{}] Invalid baseline value, falling back to approx", name());
         return approx;
-    baseline /= baseline_cnt;
+    }
 
-    // Determine search range around approx
     size_t left  = (approx > config_.blocks_step) ? approx - config_.blocks_step : config_.min_blocks_cnt;
     size_t right = approx + config_.blocks_step;
     left         = (left > config_.blocks_step) ? left - config_.blocks_step : config_.min_blocks_cnt;
@@ -315,7 +380,7 @@ size_t BranchTargetBufferMeasurer::refineSaturationTime(size_t approx, platform:
 
     size_t answer = left;
     while (left <= right) {
-        size_t mid                   = left + (right - left) / 2;
+        size_t mid = left + (right - left) / 2;
         BranchTargetBufferResult res = run_test(mid, pmc);
 
         if (res.avg_ticks_per_block <= baseline * config_.time_growth_ratio) {
