@@ -11,12 +11,32 @@ BranchHistoryTableMeasurer::BranchHistoryTableMeasurer()
 
 BranchHistoryTableMeasurer::BranchHistoryTableMeasurer(Config config)
     : config_(std::move(config)) {
+    validateConfig();
     SPDLOG_INFO("[{}] configured: min_period={}, max_period={}, coeff={}, iterations={}", name(),
                 config_.min_period, config_.max_period, config_.period_coeff, config_.iterations);
 }
 
 std::string_view BranchHistoryTableMeasurer::name() const noexcept {
     return "branch history table";
+}
+
+void BranchHistoryTableMeasurer::validateConfig() {
+    if (config_.min_period == 0) {
+        SPDLOG_WARN("[{}] min_period=0 is invalid, set to default {}", name(), kDefaultMinPeriod);
+        config_.min_period = kDefaultMinPeriod;
+    }
+    if (config_.max_period < config_.min_period) {
+        SPDLOG_WARN("[{}] max_period < min_period, set max_period to default {}", name(), kDefaultMaxPeriod);
+        config_.max_period = kDefaultMaxPeriod;
+    }
+    if (config_.period_coeff < 2) {
+        SPDLOG_WARN("[{}] period_coeff={} <2, set to default {}", name(), config_.period_coeff, kDefaultPeriodCoef);
+        config_.period_coeff = kDefaultPeriodCoef;
+    }
+    if (config_.iterations == 0) {
+        SPDLOG_WARN("[{}] iterations=0, set to default {}", name(), kDefaultIterations);
+        config_.iterations = kDefaultIterations;
+    }
 }
 
 void BranchHistoryTableMeasurer::measure(shared_types::CpuInfoData& data) {
@@ -192,7 +212,7 @@ int BranchHistoryTableMeasurer::detectBHTSaturation(const std::vector<BranchHist
 
     SPDLOG_INFO("[{}] BHT estimation: baseline={:.4f}, max_miss={:.4f}, threshold={:.4f}", name(), baseline, max_miss, threshold);
     if (saturation_period)
-        SPDLOG_INFO("  saturation (90% rise) period = {}", *saturation_period);
+        SPDLOG_INFO("  saturation (95% rise) period = {}", *saturation_period);
     if (derivative_period)
         SPDLOG_INFO("  derivative (rise then plateau) period = {}", *derivative_period);
     if (half_period)
