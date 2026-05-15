@@ -36,7 +36,7 @@ class CacheProfilerList {
 
     CacheProfilerList(
         size_t cache_line_size,
-        size_t count,
+        size_t max_count,
         MemoryType memory_type = MemoryType::aligned
     );
     ~CacheProfilerList();

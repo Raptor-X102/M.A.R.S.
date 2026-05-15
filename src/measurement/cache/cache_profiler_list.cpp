@@ -24,7 +24,7 @@ std::string CacheProfilerList::build_error_message(const std::string& prefix, si
 }
 
 CacheProfilerList::Element* CacheProfilerList::element_at(size_t index) const noexcept {
-    return reinterpret_cast<Element*>(memory_.get() + index * line_size_);
+    return reinterpret_cast<Element*>(static_cast<char*>(memory_.get()) + index * line_size_);
 }
 
 void CacheProfilerList::allocate(size_t count) {
