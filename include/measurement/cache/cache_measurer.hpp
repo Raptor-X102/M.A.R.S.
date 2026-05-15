@@ -31,14 +31,14 @@ class CacheMeasurer final : public core::Measurer {
    public:
     static constexpr size_t kL1MaxSize                           = 128 * 1024;
     static constexpr size_t kL2MaxSize                           = 2 * 1024 * 1024;
-    static constexpr size_t kL3MaxSize                           = 128 * 1024 * 1024;
+    static constexpr size_t kL3MaxSize                           = 64 * 1024 * 1024;
     static constexpr size_t kDefaultCacheMinLines                = 16;
     static constexpr unsigned int kDefaultSeed                   = 0xBEAF;
     static constexpr size_t kDefaultWarmupIterations             = 4;
     static constexpr size_t kDefaultPrecision                    = 64;
     static constexpr double kL1GrowthFactor                      = 1.42;
     static constexpr double kL2GrowthFactor                      = 1.8;
-    static constexpr double kL3GrowthFactor                      = 6.0;
+    static constexpr double kL3GrowthFactor                      = 3.0;
     static constexpr int kBaselineSamples                        = 3;
     static constexpr double kStabilityThreshold                  = 0.20;
     static constexpr size_t kDefaultTargetAccesses               = 2'000'000;
@@ -48,10 +48,10 @@ class CacheMeasurer final : public core::Measurer {
     static constexpr double kDefaultL2RefinementGrowthMultiplier = 1.15;
     static constexpr double kDefaultL1MissRateThreshold          = 0.01;
     static constexpr double kDefaultL2MissRateThreshold          = 0.25;
-    static constexpr double kDefaultL3MissRateThreshold          = 0.9;
+    static constexpr double kDefaultL3MissRateThreshold          = 0.25;
     static constexpr double kDefaultL1MissGrowthFactor           = 90.0;
     static constexpr double kDefaultL2MissGrowthFactor           = 2.0;
-    static constexpr double kDefaultL3MissGrowthFactor           = 3.2;
+    static constexpr double kDefaultL3MissGrowthFactor           = 50;
 
     struct Config {
         bool enabled                           = true;
@@ -60,6 +60,7 @@ class CacheMeasurer final : public core::Measurer {
         size_t l2_max                          = kL2MaxSize;
         size_t l3_max                          = kL3MaxSize;
         size_t cache_min_lines                 = kDefaultCacheMinLines;
+        bool use_huge_pages = false;
         unsigned int seed                      = kDefaultSeed;
         size_t warmup_iterations               = kDefaultWarmupIterations;
         size_t precision                       = kDefaultPrecision;
@@ -83,14 +84,7 @@ class CacheMeasurer final : public core::Measurer {
 
         platform::MeasurementEnvironmentOptions environment;
     };
-
-    CacheMeasurer();
-    explicit CacheMeasurer(Config config);
-
-    std::string_view name() const noexcept override;
-    void measure(shared_types::CpuInfoData& data) override;
-
-   private:
+    
     struct MeasurementResult {
         size_t size_bytes         = 0;
         double cycles_per_element = 0.0;
@@ -98,6 +92,14 @@ class CacheMeasurer final : public core::Measurer {
         bool has_pmc              = false;
     };
 
+    CacheMeasurer();
+    explicit CacheMeasurer(Config config);
+
+    std::string_view name() const noexcept override;
+    void validateConfig();
+    void measure(shared_types::CpuInfoData& data) override;
+
+   private:
     struct BoundaryResult {
         size_t index          = 0;
         double baseline_value = 0.0;
@@ -105,6 +107,8 @@ class CacheMeasurer final : public core::Measurer {
 
     Config config_;
     size_t cache_line_size_ = 0;
+    std::unique_ptr<CacheProfilerList> reusable_list_;
+    size_t reusable_max_size_ = 0;
 
     void measure_level(shared_types::CpuInfoData& data,
                        CacheLevel level,
@@ -116,8 +120,10 @@ class CacheMeasurer final : public core::Measurer {
     std::vector<MeasurementResult> measure_range(size_t min_size,
                                                  size_t max_size,
                                                  std::unique_ptr<platform::pmc::PmcGroup>& pmc);
-    MeasurementResult do_single_measurement_without_pmc(size_t size);
-    MeasurementResult do_single_measurement_with_pmc(size_t size, platform::pmc::PmcGroup& pmc);
+
+    MeasurementResult do_single_measurement_without_pmc(CacheProfilerList* list, size_t count);
+    MeasurementResult do_single_measurement_with_pmc(CacheProfilerList* list, size_t count, 
+                                                     platform::pmc::PmcGroup& pmc);
     BoundaryResult detect_latency_boundary(const std::vector<MeasurementResult>& results) const;
     size_t detect_miss_rate_boundary(const std::vector<MeasurementResult>& results, CacheLevel level) const;
     size_t refine_boundary_latency(const std::vector<MeasurementResult>& results, const BoundaryResult& boundary);
@@ -129,6 +135,40 @@ class CacheMeasurer final : public core::Measurer {
     double growth_factor_for(size_t size_bytes) const noexcept;
     static size_t level_index(CacheLevel level) noexcept;
     static const char* level_name(CacheLevel level) noexcept;
+
+    template <typename PreFn, typename PostFn>
+    MeasurementResult
+    measure_impl(CacheProfilerList* list, size_t count, PreFn&& pre, PostFn&& post) {
+        // Calculate iterations based on target accesses
+        size_t iterations = config_.target_accesses / count;
+        iterations = std::max(iterations, config_.min_iterations);
+        iterations = std::min(iterations, config_.max_iterations);
+        const uint64_t total_loads = static_cast<uint64_t>(count) * iterations;
+
+        // Warmup and flush cache using the provided list and count
+        flush_cache_and_warmup(*list, count);
+
+        volatile CacheProfilerList::Element* element = list->first();
+
+        pre();
+
+        const uint64_t start = platform::arch::tick();
+        for (size_t iter = 0; iter < iterations; ++iter) {
+            for (size_t idx = 0; idx < count; ++idx) {
+                element = element->next;
+            }
+        }
+        const uint64_t end = platform::arch::tick();
+
+        std::optional<double> miss_rate_opt = post(total_loads);
+
+        MeasurementResult result;
+        result.size_bytes = 0; // Will be filled by caller
+        result.cycles_per_element = static_cast<double>(end - start) / static_cast<double>(total_loads);
+        result.has_pmc = miss_rate_opt.has_value();
+        result.miss_rate = miss_rate_opt.value_or(0.0);
+        return result;
+    }
 };
 
 }  // namespace silicon_probe::cache

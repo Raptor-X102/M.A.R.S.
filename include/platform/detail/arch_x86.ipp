@@ -45,17 +45,18 @@ inline size_t asmjit_code_size(const asmjit::CodeHolder& code) {
 }
 #endif
 
-inline uint64_t tick() {
-    _mm_lfence();
-    unsigned int aux = 0;
-    uint64_t t = __rdtscp(&aux);
-    _mm_lfence();
-    return t;
-}
-
 inline void mfence() { _mm_mfence(); }
 inline void sfence() { _mm_sfence(); }
 inline void lfence() { _mm_lfence(); }
+
+inline uint64_t tick() {
+    mfence();
+    unsigned int aux = 0;
+    uint64_t t = __rdtscp(&aux);
+    mfence();
+    return t;
+}
+
 inline void pause() noexcept { _mm_pause(); }
 inline void clflush(void* ptr) { _mm_clflush(ptr); }
 inline void flush_complete() { _mm_mfence(); }

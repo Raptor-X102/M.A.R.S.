@@ -25,11 +25,12 @@ class BoundaryAnalyzer {
     explicit BoundaryAnalyzer(BoundaryAnalyzerConfig config = {});
 
     static Statistics compute_stats(const std::vector<double>& samples);
+    static double compute_median(std::vector<double> samples);
 
     template <typename MeasureFn>
     size_t
     refine_boundary(size_t left, size_t right, size_t precision, MeasureFn&& measure, double baseline_mean) const {
-        SPDLOG_DEBUG("[boundary] baseline={}, threshold={}x", baseline_mean, config_.growth_factor);
+        SPDLOG_INFO("[boundary] baseline={}, threshold={}x", baseline_mean, config_.growth_factor);
 
         size_t current_left  = left;
         size_t current_right = right;
@@ -47,7 +48,7 @@ class BoundaryAnalyzer {
             const double ratio      = baseline_mean > 0.0 ? statistics.mean / baseline_mean : 0.0;
             const bool out_of_cache = ratio > config_.growth_factor;
 
-            SPDLOG_DEBUG(
+            SPDLOG_INFO(
                 "[boundary] size={}, mean={}, ratio={}, threshold={}, decision={}",
                 midpoint,
                 statistics.mean,
@@ -64,7 +65,7 @@ class BoundaryAnalyzer {
         }
 
         const size_t boundary = (current_left + current_right) / 2;
-        SPDLOG_DEBUG("[boundary] final={} bytes", boundary);
+        SPDLOG_INFO("[boundary] final={} bytes", boundary);
         return boundary;
     }
 

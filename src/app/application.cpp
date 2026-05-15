@@ -154,7 +154,7 @@ void print_startup_banner(std::ostream& stream, const ApplicationConfig& config)
         " __  __        _        ____       ____",
         "|  \\/  |      / \\      |  _ \\     / ___|",
         "| |\\/| |     / _ \\     | |_) |    \\___ \\",
-        "| |  | |    / ___ \\    |  _ <      ___) |",
+        " | |  | |    / ___ \\    |  _ <      ___) |",
         "|_|  |_|   /_/   \\_\\   |_| \\_\\    |____/",
         "                                      ",
         "        MICROARCHITECTURE RECON SYSTEM",

@@ -37,7 +37,6 @@ class CacheProfilerList {
     CacheProfilerList(
         size_t cache_line_size,
         size_t count,
-        unsigned int seed      = 12345,
         MemoryType memory_type = MemoryType::aligned
     );
     ~CacheProfilerList();
@@ -52,18 +51,19 @@ class CacheProfilerList {
     size_t line_size() const noexcept;
     size_t total_size() const noexcept;
     void flush_from_cache() const;
+    void prepare(size_t count, unsigned int seed);
 
    private:
     size_t line_size_     = 0;
     size_t element_count_ = 0;
+    size_t allocated_count_ = 0;
     std::unique_ptr<char, MemoryDeleter> memory_;
     MemoryType memory_type_ = MemoryType::aligned;
-    Element* elements_      = nullptr;
+    Element* first_element_      = nullptr;
 
     static std::string build_error_message(const std::string& prefix, size_t value);
     Element* element_at(size_t index) const noexcept;
     void allocate(size_t count);
-    void setup_random_cycle(unsigned int seed);
     void verify_cycle() const;
 };
 

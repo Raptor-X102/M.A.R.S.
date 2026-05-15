@@ -2,6 +2,7 @@
 #include "measurement/cache/cache_measurer.hpp"
 
 #include <numeric>
+#include <iostream>
 
 namespace silicon_probe::cache {
 
@@ -9,22 +10,82 @@ CacheMeasurer::CacheMeasurer() : CacheMeasurer(Config{}) {}
 
 CacheMeasurer::CacheMeasurer(Config config)
     : config_(std::move(config)), cache_line_size_(platform::cache_line_size()) {
+    validateConfig();
     SPDLOG_DEBUG(
-        "[{}] configured with levels: L1={}, L2={}, L3={}",
+        "[{}] configured with levels: L1={}, L2={}, L3={}, huge_pages={}",
         name(),
         config_.levels.test(level_index(CacheLevel::l1d)),
         config_.levels.test(level_index(CacheLevel::l2)),
-        config_.levels.test(level_index(CacheLevel::l3))
+        config_.levels.test(level_index(CacheLevel::l3)),
+        config_.use_huge_pages
     );
 }
 
 std::string_view CacheMeasurer::name() const noexcept { return "cache"; }
+
+void CacheMeasurer::validateConfig() {
+    if (config_.l1_max == 0) config_.l1_max = kL1MaxSize;
+    if (config_.l2_max == 0) config_.l2_max = kL2MaxSize;
+    if (config_.l3_max == 0) config_.l3_max = kL3MaxSize;
+    
+    if (config_.l1_max >= config_.l2_max) {
+        SPDLOG_WARN("l1_max ({}) >= l2_max ({}), adjusting", config_.l1_max, config_.l2_max);
+        config_.l2_max = config_.l1_max * 2;
+    }
+    if (config_.l2_max >= config_.l3_max) {
+        SPDLOG_WARN("l2_max ({}) >= l3_max ({}), adjusting", config_.l2_max, config_.l3_max);
+        config_.l3_max = config_.l2_max * 2;
+    }
+    
+    size_t min_valid_size = config_.cache_min_lines * cache_line_size_;
+    if (min_valid_size == 0) {
+        config_.cache_min_lines = kDefaultCacheMinLines;
+        min_valid_size = config_.cache_min_lines * cache_line_size_;
+    }
+    if (config_.l1_max < min_valid_size) {
+        config_.l1_max = min_valid_size;
+    }
+    
+    config_.warmup_iterations = std::max<size_t>(1, config_.warmup_iterations);
+    config_.precision = std::max<size_t>(1, config_.precision);
+    config_.target_accesses = std::max<size_t>(1, config_.target_accesses);
+    config_.min_iterations = std::max<size_t>(1, config_.min_iterations);
+    config_.max_iterations = std::max(config_.max_iterations, config_.min_iterations);
+    config_.refinement_samples = std::max<size_t>(1, config_.refinement_samples);
+    
+    config_.decision_tolerance = std::clamp(config_.decision_tolerance, 0.0, 1.0);
+    config_.baseline_stability_threshold = std::clamp(config_.baseline_stability_threshold, 0.0, 1.0);
+    
+    config_.l1_growth_factor = std::max(1.01, config_.l1_growth_factor);
+    config_.l2_growth_factor = std::max(1.01, config_.l2_growth_factor);
+    config_.l3_growth_factor = std::max(1.01, config_.l3_growth_factor);
+    
+    config_.l1_miss_rate_threshold = std::clamp(config_.l1_miss_rate_threshold, 0.0, 1.0);
+    config_.l2_miss_rate_threshold = std::clamp(config_.l2_miss_rate_threshold, 0.0, 1.0);
+    config_.l3_miss_rate_threshold = std::clamp(config_.l3_miss_rate_threshold, 0.0, 1.0);
+    config_.l1_miss_growth_factor = std::max(1.01, config_.l1_miss_growth_factor);
+    config_.l2_miss_growth_factor = std::max(1.01, config_.l2_miss_growth_factor);
+    config_.l3_miss_growth_factor = std::max(1.01, config_.l3_miss_growth_factor);
+    
+    if (config_.levels.none()) {
+        config_.levels.set(level_index(CacheLevel::l1d));
+        config_.levels.set(level_index(CacheLevel::l2));
+        config_.levels.set(level_index(CacheLevel::l3));
+    }
+}
 
 void CacheMeasurer::measure(shared_types::CpuInfoData& data) {
     SPDLOG_INFO("[{}] starting cache measurement", name());
     platform::ScopedMeasurementEnvironment environment{config_.environment};
 
     data.cache_line_size = cache_line_size_;
+
+    if (config_.levels.test(level_index(CacheLevel::l3)))
+        reusable_max_size_ = config_.l3_max / cache_line_size_;
+    else if (config_.levels.test(level_index(CacheLevel::l2)))
+        reusable_max_size_ = config_.l2_max / cache_line_size_;
+    else if (config_.levels.test(level_index(CacheLevel::l1d)))
+        reusable_max_size_ = config_.l1_max / cache_line_size_;
 
     const size_t l1_min = config_.cache_min_lines * cache_line_size_;
     if (config_.levels.test(level_index(CacheLevel::l1d))) {
@@ -47,10 +108,11 @@ void CacheMeasurer::measure_level(
     size_t max_size,
     std::optional<size_t> shared_types::CpuInfoData::* target_field
 ) {
-    SPDLOG_INFO("[{}] measuring {}", name(), level_name(level));
+    const char* levelname = level_name(level);
+    SPDLOG_INFO("[{}] measuring {}", name(), levelname);
 
     if (min_size == 0 || min_size > max_size) {
-        SPDLOG_WARN("Skipping invalid range for {}: min={}, max={}", level_name(level), min_size, max_size);
+        SPDLOG_WARN("Skipping invalid range for {}: min={}, max={}", levelname, min_size, max_size);
         return;
     }
 
@@ -59,7 +121,7 @@ void CacheMeasurer::measure_level(
 
     auto results = measure_range(min_size, max_size, pmc);
     if (results.empty()) {
-        SPDLOG_WARN("No measurements collected for {}", level_name(level));
+        SPDLOG_WARN("No measurements collected for {}", levelname);
         return;
     }
 
@@ -117,9 +179,9 @@ void CacheMeasurer::measure_level(
     auto& target = data.*target_field;
     if (final_size > 0) {
         target = final_size;
-        SPDLOG_INFO("{} size detected: {} bytes", level_name(level), *target);
+        SPDLOG_INFO("{} size detected: {} bytes", levelname, *target);
     } else {
-        SPDLOG_WARN("{} size detection failed", level_name(level));
+        SPDLOG_WARN("{} size detection failed", levelname);
     }
 }
 
@@ -148,99 +210,72 @@ CacheMeasurer::open_pmc_for_level(CacheLevel level, shared_types::CpuInfoData& d
 
 std::vector<CacheMeasurer::MeasurementResult>
 CacheMeasurer::measure_range(size_t min_size, size_t max_size, std::unique_ptr<platform::pmc::PmcGroup>& pmc) {
-    std::vector<MeasurementResult> results;
-    for (size_t size = min_size; size <= max_size; size *= 2) {
-        if (pmc) {
-            results.push_back(do_single_measurement_with_pmc(size, *pmc));
-            SPDLOG_DEBUG(
-                "Size={}, cycles/elem={}, miss_rate={:.6f}",
-                results.back().size_bytes,
-                results.back().cycles_per_element,
-                results.back().miss_rate
+    if (!reusable_list_) {
+        SPDLOG_DEBUG("reusable_list_ = {}", reusable_max_size_);
+        if (config_.use_huge_pages) {
+            reusable_list_ = std::make_unique<CacheProfilerList>(
+                cache_line_size_, reusable_max_size_,
+                CacheProfilerList::MemoryType::huge_page
             );
         } else {
-            results.push_back(do_single_measurement_without_pmc(size));
-            SPDLOG_DEBUG("Size={}, cycles/elem={}", results.back().size_bytes, results.back().cycles_per_element);
+            reusable_list_ = std::make_unique<CacheProfilerList>(
+                cache_line_size_, reusable_max_size_,
+                CacheProfilerList::MemoryType::aligned 
+            );
         }
-        if (size > max_size / 2) {
-            break;
+    }
+
+    std::vector<MeasurementResult> results;
+    for (size_t size = min_size; size <= max_size; size *= 2) {
+        const size_t count = std::max<size_t>(1, size / cache_line_size_);
+
+        // Prepare the list for exactly 'count' elements with current seed
+        // Use a deterministic seed derived from config_.seed and maybe size
+        unsigned int seed = config_.seed ^ static_cast<unsigned int>(count);
+        reusable_list_->prepare(count, seed);
+
+        MeasurementResult result;
+        if (pmc) {
+            result = do_single_measurement_with_pmc(reusable_list_.get(), count, *pmc);
+        } else {
+            result = do_single_measurement_without_pmc(reusable_list_.get(), count);
         }
+        result.size_bytes = size;
+
+        SPDLOG_INFO("Size={}, cycles/elem={}, miss_rate={:.6f}",
+                     result.size_bytes, result.cycles_per_element, result.miss_rate);
+
+        results.push_back(result);
     }
     return results;
 }
 
-CacheMeasurer::MeasurementResult CacheMeasurer::do_single_measurement_without_pmc(size_t size) {
-    const size_t count = size / cache_line_size_;
-    if (count == 0) {
-        throw std::invalid_argument("Measurement size must be at least one cache line");
-    }
-
-    size_t iterations = config_.target_accesses / count;
-    iterations        = std::max(iterations, config_.min_iterations);
-    iterations        = std::min(iterations, config_.max_iterations);
-
-    CacheProfilerList list{cache_line_size_, count, config_.seed};
-    flush_cache_and_warmup(list, count);
-
-    volatile CacheProfilerList::Element* element = list.first();
-    const uint64_t start                         = platform::arch::tick();
-    for (size_t iteration = 0; iteration < iterations; ++iteration) {
-        for (size_t index = 0; index < count; ++index) {
-            element = element->next;
+CacheMeasurer::MeasurementResult
+CacheMeasurer::do_single_measurement_without_pmc(CacheProfilerList* list, size_t count) {
+    return measure_impl(list, count,
+        []() noexcept {},
+        [](uint64_t /*total_loads*/) noexcept -> std::optional<double> {
+            return std::nullopt;
         }
-    }
-    const uint64_t end = platform::arch::tick();
-
-    MeasurementResult result;
-    result.size_bytes         = size;
-    result.cycles_per_element = static_cast<double>(end - start) / static_cast<double>(count * iterations);
-    result.has_pmc            = false;
-    result.miss_rate          = 0.0;
-    return result;
+    );
 }
 
 CacheMeasurer::MeasurementResult
-CacheMeasurer::do_single_measurement_with_pmc(size_t size, platform::pmc::PmcGroup& pmc) {
-    const size_t count = size / cache_line_size_;
-    if (count == 0) {
-        throw std::invalid_argument("Measurement size must be at least one cache line");
-    }
-
-    size_t iterations    = config_.target_accesses / count;
-    iterations           = std::max(iterations, config_.min_iterations);
-    iterations           = std::min(iterations, config_.max_iterations);
-    uint64_t total_loads = count * iterations;
-
-    CacheProfilerList list{cache_line_size_, count, config_.seed};
-    flush_cache_and_warmup(list, count);
-
-    volatile CacheProfilerList::Element* element = list.first();
-
-    pmc.reset();
-    pmc.enable();
-
-    const uint64_t start = platform::arch::tick();
-    for (size_t iteration = 0; iteration < iterations; ++iteration) {
-        for (size_t index = 0; index < count; ++index) {
-            element = element->next;
+CacheMeasurer::do_single_measurement_with_pmc(CacheProfilerList* list, size_t count, platform::pmc::PmcGroup& pmc) {
+    return measure_impl(list, count,
+        [&pmc]() {
+            pmc.reset();
+            pmc.enable();
+        },
+        [&pmc](uint64_t total_loads) -> std::optional<double> {
+            pmc.disable();
+            auto values = pmc.read();
+            if (values.valid && !values.values.empty()) {
+                return static_cast<double>(values.values[0]) / static_cast<double>(total_loads);
+            }
+            return std::nullopt;
         }
-    }
-    const uint64_t end = platform::arch::tick();
-
-    pmc.disable();
-    auto values = pmc.read();
-
-    MeasurementResult result;
-    result.size_bytes         = size;
-    result.cycles_per_element = static_cast<double>(end - start) / static_cast<double>(total_loads);
-    result.has_pmc            = true;
-    if (values.valid && !values.values.empty()) {
-        result.miss_rate = static_cast<double>(values.values[0]) / static_cast<double>(total_loads);
-    } else {
-        result.miss_rate = 0.0;
-        SPDLOG_WARN("Failed to read PMC values for size {}", size);
-    }
-    return result;
+    );
 }
 
 CacheMeasurer::BoundaryResult CacheMeasurer::detect_latency_boundary(
@@ -249,15 +284,17 @@ CacheMeasurer::BoundaryResult CacheMeasurer::detect_latency_boundary(
     BoundaryResult boundary;
     boundary.index = results.size();
 
-    if (results.size() < 3) {
+    if (results.size() < config_.refinement_samples) {
         return boundary;
     }
 
-    double baseline_sum = 0.0;
-    for (size_t i = 0; i < 3; ++i) {
-        baseline_sum += results[i].cycles_per_element;
+    // Use median of first three points instead of mean
+    std::vector<double> baseline_samples;
+    baseline_samples.reserve(config_.refinement_samples);
+    for (size_t i = 0; i < config_.refinement_samples; ++i) {
+        baseline_samples.push_back(results[i].cycles_per_element);
     }
-    double baseline         = baseline_sum / 3.0;
+    double baseline = BoundaryAnalyzer::compute_median(std::move(baseline_samples));
     boundary.baseline_value = baseline;
 
     for (size_t i = 1; i < results.size(); ++i) {
@@ -271,7 +308,7 @@ CacheMeasurer::BoundaryResult CacheMeasurer::detect_latency_boundary(
 }
 
 size_t CacheMeasurer::detect_miss_rate_boundary(const std::vector<MeasurementResult>& results, CacheLevel level) const {
-    if (results.size() < 3)
+    if (results.size() < config_.refinement_samples)
         return results.size();
 
     double threshold = 0.0;
@@ -291,7 +328,13 @@ size_t CacheMeasurer::detect_miss_rate_boundary(const std::vector<MeasurementRes
             break;
     }
 
-    double baseline = (results[0].miss_rate + results[1].miss_rate + results[2].miss_rate) / 3.0;
+    // Median of first three miss rates
+    std::vector<double> baseline_samples;
+    baseline_samples.reserve(config_.refinement_samples);
+    for (size_t i = 0; i < config_.refinement_samples; ++i) {
+        baseline_samples.push_back(results[i].miss_rate);
+    }
+    double baseline = BoundaryAnalyzer::compute_median(std::move(baseline_samples));
     if (baseline < 1e-12)
         baseline = 1e-12;
 
@@ -323,8 +366,7 @@ CacheMeasurer::refine_boundary_latency(const std::vector<MeasurementResult>& res
         }
     }
 
-    double baseline = std::accumulate(baseline_samples.begin(), baseline_samples.end(), 0.0) /
-                      static_cast<double>(baseline_samples.size());
+    double baseline = BoundaryAnalyzer::compute_median(std::move(baseline_samples));
 
     double refinement_growth_factor = growth_factor_for(right);
     if (right >= config_.l1_max && right < config_.l2_max) {
@@ -336,11 +378,22 @@ CacheMeasurer::refine_boundary_latency(const std::vector<MeasurementResult>& res
     analyzer_config.test_samples  = 3;
     BoundaryAnalyzer analyzer(analyzer_config);
 
+    // Use reusable list for refinement measurements
     return analyzer.refine_boundary(
         left,
         right,
         config_.precision,
-        [this](size_t size) -> double { return do_single_measurement_without_pmc(size).cycles_per_element; },
+        [this](size_t size) -> double {
+            size_t count = size / cache_line_size_;
+            if (count == 0) count = 1;
+            unsigned int seed = config_.seed ^ static_cast<unsigned int>(count);
+            reusable_list_->prepare(count, seed);
+            auto result = measure_impl(reusable_list_.get(), count,
+                []() noexcept {},
+                [](uint64_t) noexcept -> std::optional<double> { return std::nullopt; }
+            );
+            return result.cycles_per_element;
+        },
         baseline
     );
 }
@@ -354,9 +407,22 @@ size_t CacheMeasurer::refine_boundary_misses(
     const size_t left  = results[miss_index - 1].size_bytes;
     const size_t right = results[miss_index].size_bytes;
 
-    double baseline = results[miss_index - 1].miss_rate;
-    if (baseline < 1e-12)
-        baseline = 1e-12;
+    std::vector<double> baseline_samples;
+    baseline_samples.push_back(results[miss_index - 1].miss_rate);
+    double previous = baseline_samples.back();
+
+    for (size_t offset = 2; offset <= config_.refinement_samples && offset <= miss_index; ++offset) {
+        double current = results[miss_index - offset].miss_rate;
+        if (std::abs(current - previous) / previous < config_.baseline_stability_threshold) {
+            baseline_samples.push_back(current);
+            previous = current;
+        } else {
+            break;
+        }
+    }
+
+    double baseline = BoundaryAnalyzer::compute_median(std::move(baseline_samples));
+    if (baseline < 1e-12) baseline = 1e-12;
 
     double refinement_growth_factor = 0.0;
     switch (level) {
@@ -380,7 +446,27 @@ size_t CacheMeasurer::refine_boundary_misses(
         left,
         right,
         config_.precision,
-        [this, &pmc](size_t size) -> double { return do_single_measurement_with_pmc(size, *pmc).miss_rate; },
+        [this, &pmc](size_t size) -> double {
+            size_t count = size / cache_line_size_;
+            if (count == 0) count = 1;
+            unsigned int seed = config_.seed ^ static_cast<unsigned int>(count);
+            reusable_list_->prepare(count, seed);
+            auto result = measure_impl(reusable_list_.get(), count,
+                [&pmc]() {
+                    pmc->reset();
+                    pmc->enable();
+                },
+                [&pmc](uint64_t total_loads) -> std::optional<double> {
+                    pmc->disable();
+                    auto values = pmc->read();
+                    if (values.valid && !values.values.empty()) {
+                        return static_cast<double>(values.values[0]) / static_cast<double>(total_loads);
+                    }
+                    return std::nullopt;
+                }
+            );
+            return result.miss_rate;
+        },
         baseline
     );
 }
@@ -396,11 +482,10 @@ void CacheMeasurer::flush_cache_and_warmup(CacheProfilerList& list, size_t count
     }
 
     platform::arch::mfence();
-    platform::arch::lfence();
 }
 
 double CacheMeasurer::growth_factor_for(size_t size_bytes) const noexcept {
-    if (size_bytes < config_.l1_max)
+    if (size_bytes <= config_.l1_max)
         return config_.l1_growth_factor;
     if (size_bytes < config_.l2_max)
         return config_.l2_growth_factor;

@@ -559,6 +559,14 @@ class CacheConfigParser final : public BenchmarkConfigParserBase<silicon_probe::
                 );
                 with_optional_node(
                     measurement,
+                    "use_huge_pages",
+                    measurement_path,
+                    [&](const YAML::Node& node, const std::string& node_path) {
+                        config.use_huge_pages = parse_bool_scalar(node, node_path);
+                    }
+                );
+                with_optional_node(
+                    measurement,
                     "seed",
                     measurement_path,
                     [&](const YAML::Node& node, const std::string& node_path) {

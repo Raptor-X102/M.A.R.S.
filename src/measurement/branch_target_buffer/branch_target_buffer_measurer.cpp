@@ -182,7 +182,7 @@ BranchTargetBufferResult BranchTargetBufferMeasurer::run_test(size_t blocks_cnt,
     std::vector<uint64_t> all_counts(config_.repeats);
 
     auto funcs = platform::arch::generate_branch_target_buffer_code(blocks_cnt, config_.iterations, config_.alignment);
-    if (funcs.size() < 2 || !funcs[0] || !funcs[1]) {
+    if (!funcs[0] || !funcs[1]) {
         SPDLOG_ERROR("[{}] Failed to generate functions for blocks_cnt={}", name(), blocks_cnt);
         return {};
     }
