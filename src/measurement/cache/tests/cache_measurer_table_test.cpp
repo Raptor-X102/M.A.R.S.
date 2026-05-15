@@ -91,5 +91,40 @@ TEST(CacheMeasurerTableTest, DetectsBoundariesFromTable) {
     }
 }
 
+struct BoundaryCase {
+    const char* name;
+    double growth_factor;
+    size_t left;
+    size_t right;
+    size_t precision;
+    double baseline_mean;
+    size_t switch_point;
+    size_t expected_boundary;
+};
+
+TEST(RefinementTest, RefinesBoundaryFromTable) {
+    const CacheMeasurer measurer;
+    const std::vector<BoundaryCase> cases{
+        {"sharp_jump", 1.5, 64, 256, 1, 10.0, 160, 159},
+        {"later_jump", 2.0, 128, 512, 2, 5.0, 300, 299},
+    };
+
+    for (const auto& test_case : cases) {
+        SCOPED_TRACE(test_case.name);
+        const size_t boundary = measurer.refine_boundary(
+            test_case.left,
+            test_case.right,
+            test_case.precision,
+            test_case.growth_factor,
+            [&test_case](size_t size) {
+                return size < test_case.switch_point ? test_case.baseline_mean : test_case.baseline_mean * 3.0;
+            },
+            test_case.baseline_mean
+        );
+
+        EXPECT_EQ(boundary, test_case.expected_boundary);
+    }
+};
+
 }  // namespace
 }  // namespace silicon_probe::cache

@@ -1099,6 +1099,126 @@ class ExecPortsConfigParser final
                 );
                 with_optional_node(
                     measurement,
+                    "strong_independence_overlap",
+                    measurement_path,
+                    [&](const YAML::Node& node, const std::string& node_path) {
+                        config.strong_independence_overlap = parse_double_scalar(node, node_path);
+                    }
+                );
+                with_optional_node(
+                    measurement,
+                    "strong_dependence_overlap",
+                    measurement_path,
+                    [&](const YAML::Node& node, const std::string& node_path) {
+                        config.strong_dependence_overlap = parse_double_scalar(node, node_path);
+                    }
+                );
+                with_optional_node(
+                    measurement,
+                    "weak_independence_overlap",
+                    measurement_path,
+                    [&](const YAML::Node& node, const std::string& node_path) {
+                        config.weak_independence_overlap = parse_double_scalar(node, node_path);
+                    }
+                );
+                with_optional_node(
+                    measurement,
+                    "weak_dependence_overlap",
+                    measurement_path,
+                    [&](const YAML::Node& node, const std::string& node_path) {
+                        config.weak_dependence_overlap = parse_double_scalar(node, node_path);
+                    }
+                );
+                with_optional_node(
+                    measurement,
+                    "strong_independence_time",
+                    measurement_path,
+                    [&](const YAML::Node& node, const std::string& node_path) {
+                        config.strong_independence_time = parse_double_scalar(node, node_path);
+                    }
+                );
+                with_optional_node(
+                    measurement,
+                    "strong_dependence_time",
+                    measurement_path,
+                    [&](const YAML::Node& node, const std::string& node_path) {
+                        config.strong_dependence_time = parse_double_scalar(node, node_path);
+                    }
+                );
+                with_optional_node(
+                    measurement,
+                    "weak_independence_time",
+                    measurement_path,
+                    [&](const YAML::Node& node, const std::string& node_path) {
+                        config.weak_independence_time = parse_double_scalar(node, node_path);
+                    }
+                );
+                with_optional_node(
+                    measurement,
+                    "weak_dependence_time",
+                    measurement_path,
+                    [&](const YAML::Node& node, const std::string& node_path) {
+                        config.weak_dependence_time = parse_double_scalar(node, node_path);
+                    }
+                );
+                with_optional_node(
+                    measurement,
+                    "time_weight",
+                    measurement_path,
+                    [&](const YAML::Node& node, const std::string& node_path) {
+                        config.time_weight = parse_double_scalar(node, node_path);
+                    }
+                );
+                with_optional_node(
+                    measurement,
+                    "pmc_weight",
+                    measurement_path,
+                    [&](const YAML::Node& node, const std::string& node_path) {
+                        config.pmc_weight = parse_double_scalar(node, node_path);
+                    }
+                );
+                with_optional_node(
+                    measurement,
+                    "k_strong_independence",
+                    measurement_path,
+                    [&](const YAML::Node& node, const std::string& node_path) {
+                        config.k_strong_independence = parse_double_scalar(node, node_path);
+                    }
+                );
+                with_optional_node(
+                    measurement,
+                    "k_strong_dependence",
+                    measurement_path,
+                    [&](const YAML::Node& node, const std::string& node_path) {
+                        config.k_strong_dependence = parse_double_scalar(node, node_path);
+                    }
+                );
+                with_optional_node(
+                    measurement,
+                    "overlap_disagreement_high",
+                    measurement_path,
+                    [&](const YAML::Node& node, const std::string& node_path) {
+                        config.overlap_disagreement_high = parse_double_scalar(node, node_path);
+                    }
+                );
+                with_optional_node(
+                    measurement,
+                    "overlap_disagreement_low",
+                    measurement_path,
+                    [&](const YAML::Node& node, const std::string& node_path) {
+                        config.overlap_disagreement_low = parse_double_scalar(node, node_path);
+                    }
+                );
+                with_optional_node(
+                    measurement,
+                    "active_port_threshold_ratio",
+                    measurement_path,
+                    [&](const YAML::Node& node, const std::string& node_path) {
+                        config.active_port_threshold_ratio = parse_double_scalar(node, node_path);
+                    }
+                );
+                with_optional_node(
+                    measurement,
                     "warmup_iterations",
                     measurement_path,
                     [&](const YAML::Node& node, const std::string& node_path) {

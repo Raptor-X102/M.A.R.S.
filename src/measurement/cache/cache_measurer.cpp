@@ -294,7 +294,7 @@ CacheMeasurer::BoundaryResult CacheMeasurer::detect_latency_boundary(
     for (size_t i = 0; i < config_.refinement_samples; ++i) {
         baseline_samples.push_back(results[i].cycles_per_element);
     }
-    double baseline = BoundaryAnalyzer::compute_median(std::move(baseline_samples));
+    double baseline = statistics::compute_median(std::move(baseline_samples));
     boundary.baseline_value = baseline;
 
     for (size_t i = 1; i < results.size(); ++i) {
@@ -334,7 +334,7 @@ size_t CacheMeasurer::detect_miss_rate_boundary(const std::vector<MeasurementRes
     for (size_t i = 0; i < config_.refinement_samples; ++i) {
         baseline_samples.push_back(results[i].miss_rate);
     }
-    double baseline = BoundaryAnalyzer::compute_median(std::move(baseline_samples));
+    double baseline = statistics::compute_median(std::move(baseline_samples));
     if (baseline < 1e-12)
         baseline = 1e-12;
 
@@ -366,23 +366,18 @@ CacheMeasurer::refine_boundary_latency(const std::vector<MeasurementResult>& res
         }
     }
 
-    double baseline = BoundaryAnalyzer::compute_median(std::move(baseline_samples));
+    double baseline = statistics::compute_median(std::move(baseline_samples));
 
     double refinement_growth_factor = growth_factor_for(right);
     if (right >= config_.l1_max && right < config_.l2_max) {
         refinement_growth_factor *= config_.l2_refinement_growth_multiplier;
     }
 
-    BoundaryAnalyzerConfig analyzer_config;
-    analyzer_config.growth_factor = refinement_growth_factor;
-    analyzer_config.test_samples  = 3;
-    BoundaryAnalyzer analyzer(analyzer_config);
-
-    // Use reusable list for refinement measurements
-    return analyzer.refine_boundary(
+    return refine_boundary(
         left,
         right,
         config_.precision,
+        refinement_growth_factor,
         [this](size_t size) -> double {
             size_t count = size / cache_line_size_;
             if (count == 0) count = 1;
@@ -421,7 +416,7 @@ size_t CacheMeasurer::refine_boundary_misses(
         }
     }
 
-    double baseline = BoundaryAnalyzer::compute_median(std::move(baseline_samples));
+    double baseline = statistics::compute_median(std::move(baseline_samples));
     if (baseline < 1e-12) baseline = 1e-12;
 
     double refinement_growth_factor = 0.0;
@@ -437,15 +432,11 @@ size_t CacheMeasurer::refine_boundary_misses(
             break;
     }
 
-    BoundaryAnalyzerConfig analyzer_config;
-    analyzer_config.growth_factor = refinement_growth_factor;
-    analyzer_config.test_samples  = 3;
-    BoundaryAnalyzer analyzer(analyzer_config);
-
-    return analyzer.refine_boundary(
+    return refine_boundary(
         left,
         right,
         config_.precision,
+        refinement_growth_factor,
         [this, &pmc](size_t size) -> double {
             size_t count = size / cache_line_size_;
             if (count == 0) count = 1;

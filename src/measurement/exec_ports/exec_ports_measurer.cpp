@@ -1,5 +1,6 @@
 // measurement/exec_ports/exec_ports_measurer.cpp
 #include "measurement/exec_ports/exec_ports_measurer.hpp"
+#include "measurement/common/statistics.hpp"
 
 #include <algorithm>
 #include <numeric>
@@ -7,9 +8,12 @@
 
 namespace silicon_probe::exec_ports {
 
+namespace statistics = silicon_probe::common::statistics;
+
 ExecPortsMeasurer::ExecPortsMeasurer() : ExecPortsMeasurer(Config{}) {}
 
 ExecPortsMeasurer::ExecPortsMeasurer(Config config) : config_(std::move(config)) {
+    validateConfig();
     SPDLOG_DEBUG(
         "[{}] configured: instr_cnt={}, iterations={}, repeats={}, instr1 = [{}, {}], instr2 = [{}, {}]",
         name(),
@@ -25,6 +29,55 @@ ExecPortsMeasurer::ExecPortsMeasurer(Config config) : config_(std::move(config))
 
 std::string_view ExecPortsMeasurer::name() const noexcept { return "execution ports"; }
 
+void ExecPortsMeasurer::validateConfig() {
+    if (config_.instr_cnt == 0) {
+        SPDLOG_WARN("[{}] instr_cnt is 0, resetting to default {}", name(), kDefaultInstrCnt);
+        config_.instr_cnt = kDefaultInstrCnt;
+    }
+    if (config_.iterations == 0) {
+        SPDLOG_WARN("[{}] iterations is 0, resetting to default {}", name(), kDefaultIterations);
+        config_.iterations = kDefaultIterations;
+    }
+    if (config_.repeats == 0) {
+        SPDLOG_WARN("[{}] repeats is 0, resetting to default {}", name(), kDefaultRepeats);
+        config_.repeats = kDefaultRepeats;
+    }
+    if (config_.warmup_iterations == 0) {
+        SPDLOG_DEBUG("[{}] warmup_iterations is 0, no warm-up will be performed", name());
+    }
+    if (config_.instr1.instr_name.empty()) {
+        SPDLOG_WARN("[{}] instr1 name is empty, resetting to 'add reg'", name());
+        config_.instr1.instr_name = "add reg";
+        config_.instr1.instr_type = InstrType::ADD_REG;
+    }
+    if (config_.instr2.instr_name.empty()) {
+        SPDLOG_WARN("[{}] instr2 name is empty, resetting to 'mul float'", name());
+        config_.instr2.instr_name = "mul float";
+        config_.instr2.instr_type = InstrType::MUL_FLOAT;
+    }
+    if (config_.instr1.instr_type == config_.instr2.instr_type &&
+        config_.instr1.instr_name == config_.instr2.instr_name) {
+        SPDLOG_WARN("[{}] instr1 and instr2 are identical, measurement will show full dependence", name());
+    }
+    auto clamp01 = [&](double& val, double default_val, const char* val_name) {
+        if (val < 0.0 || val > 1.0) {
+            SPDLOG_WARN("[{}] {} is {:.3f}, resetting to default {:.3f}", name(), val_name, val, default_val);
+            val = default_val;
+        }
+    };
+    clamp01(config_.strong_independence_time, kDefaultStrongIndependenceTime, "strong_independence_time");
+    clamp01(config_.strong_dependence_time, kDefaultStrongDependenceTime, "strong_dependence_time");
+    clamp01(config_.weak_independence_time, kDefaultWeakIndependenceTime, "weak_independence_time");
+    clamp01(config_.weak_dependence_time, kDefaultWeakDependenceTime, "weak_dependence_time");
+    clamp01(config_.time_weight, kDefaultTimeWeight, "time_weight");
+    clamp01(config_.pmc_weight, kDefaultPmcWeight, "pmc_weight");
+    clamp01(config_.k_strong_independence, kDefaultKStrongIndependence, "k_strong_independence");
+    clamp01(config_.k_strong_dependence, kDefaultKStrongDependence, "k_strong_dependence");
+    clamp01(config_.overlap_disagreement_high, kDefaultOverlapDisagreementHigh, "overlap_disagreement_high");
+    clamp01(config_.overlap_disagreement_low, kDefaultOverlapDisagreementLow, "overlap_disagreement_low");
+    clamp01(config_.active_port_threshold_ratio, kDefaultActivePortThresholdRatio, "active_port_threshold_ratio");
+}
+
 void ExecPortsMeasurer::measure(shared_types::CpuInfoData& data) {
     SPDLOG_INFO("[{}] starting execution ports contention measurement", name());
 
@@ -36,6 +89,7 @@ void ExecPortsMeasurer::measure(shared_types::CpuInfoData& data) {
     // Discover port events
     auto port_events = platform::discover_port_events(data);
     bool has_ports   = false;
+    size_t num_events = port_events.size();
     if (port_events.empty()) {
         SPDLOG_WARN(
             "[{}] No port events found. Check libpfm4, CPU vendor, and kernel support. "
@@ -43,7 +97,7 @@ void ExecPortsMeasurer::measure(shared_types::CpuInfoData& data) {
             name()
         );
     } else {
-        SPDLOG_DEBUG("[{}] Found {} port events", name(), port_events.size());
+        SPDLOG_DEBUG("[{}] Found {} port events", name(), num_events);
         has_ports = true;
     }
 
@@ -79,7 +133,7 @@ void ExecPortsMeasurer::measure(shared_types::CpuInfoData& data) {
         for (size_t i = 0; i < config_.warmup_iterations; ++i)
             f();
 
-        std::vector<uint64_t> ticks_samples;
+        std::vector<double> ticks_samples;
         std::vector<std::vector<uint64_t>> all_counts;
 
         for (size_t r = 0; r < config_.repeats; ++r) {
@@ -98,7 +152,7 @@ void ExecPortsMeasurer::measure(shared_types::CpuInfoData& data) {
             if (pmc)
                 pmc->disable();
 
-            uint64_t ticks = end_ticks - start_ticks;
+            double ticks = static_cast<double>(end_ticks - start_ticks);
             ticks_samples.push_back(ticks);
 
             if (pmc) {
@@ -108,31 +162,25 @@ void ExecPortsMeasurer::measure(shared_types::CpuInfoData& data) {
         }
 
         // Average ticks
-        double avg_ticks = std::accumulate(ticks_samples.begin(), ticks_samples.end(), 0.0) / config_.repeats;
-        double ticks_std = 0.0;
-        for (uint64_t t : ticks_samples) {
-            double diff = static_cast<double>(t) - avg_ticks;
-            ticks_std += diff * diff;
-        }
-        ticks_std = std::sqrt(ticks_std / config_.repeats);
+        auto stats = statistics::compute_stats(ticks_samples);
+        double avg_ticks = stats.mean;
+        double ticks_std = stats.stddev;
 
         // Average port counts
-        std::vector<uint64_t> avg_counts;
+        std::vector<double> avg_counts;
         if (!all_counts.empty()) {
-            avg_counts.resize(all_counts[0].size(), 0);
+            avg_counts.resize(all_counts[0].size(), 0.0);
             for (const auto& counts : all_counts) {
                 for (size_t i = 0; i < counts.size(); ++i) {
-                    avg_counts[i] += counts[i];
+                    avg_counts[i] += static_cast<double>(counts[i]);
                 }
             }
-            for (size_t i = 0; i < avg_counts.size(); ++i) {
-                avg_counts[i] /= config_.repeats;
-            }
+            for (double& v : avg_counts) v /= config_.repeats;
         }
 
         SPDLOG_DEBUG("[{}] {}: avg_ticks = {:.4g} (std={:.4g})", name(), test_name, avg_ticks, ticks_std);
         if (!avg_counts.empty()) {
-            for (size_t i = 0; i < port_events.size(); ++i) {
+            for (size_t i = 0; i < num_events; ++i) {
                 SPDLOG_DEBUG("  {} avg = {:.4g}", port_events[i], static_cast<double>(avg_counts[i]));
             }
         }
@@ -195,13 +243,13 @@ PortContentionDecision ExecPortsMeasurer::detectPortContention(
     double time_conf_dep   = k;
 
     std::string time_summary;
-    if (k <= 0.1) {
-        time_summary = "STRONG INDEPENDENCE (k <= 0.1)";
-    } else if (k >= 0.9) {
-        time_summary = "STRONG DEPENDENCE (k >= 0.9)";
-    } else if (k <= 0.4) {
+    if (k <= config_.strong_independence_time) {
+        time_summary = "STRONG INDEPENDENCE";
+    } else if (k >= config_.strong_dependence_time) {
+        time_summary = "STRONG DEPENDENCE";
+    } else if (k <= config_.weak_independence_time) {
         time_summary = "WEAK INDEPENDENCE";
-    } else if (k >= 0.6) {
+    } else if (k >= config_.weak_dependence_time) {
         time_summary = "WEAK DEPENDENCE";
     } else {
         time_summary = "AMBIGUOUS";
@@ -215,15 +263,13 @@ PortContentionDecision ExecPortsMeasurer::detectPortContention(
     double overlap = 0.5;
 
     if (!port_events.empty() && !r1.avg_port_counts.empty() && !r2.avg_port_counts.empty()) {
-        auto active_ports = [&](const std::vector<uint64_t>& counts) -> std::vector<size_t> {
-            if (counts.empty())
-                return {};
-            uint64_t max_val = *std::max_element(counts.begin(), counts.end());
-            if (max_val == 0)
-                return {};
+        auto active_ports = [&](const std::vector<double>& counts) -> std::vector<size_t> {
+            if (counts.empty()) return {};
+            double max_val = *std::max_element(counts.begin(), counts.end());
+            if (max_val == 0.0) return {};
             std::vector<size_t> ports;
             for (size_t i = 0; i < counts.size(); ++i) {
-                if (counts[i] >= max_val / 10)
+                if (counts[i] >= max_val * config_.active_port_threshold_ratio)
                     ports.push_back(i);
             }
             return ports;
@@ -265,13 +311,13 @@ PortContentionDecision ExecPortsMeasurer::detectPortContention(
             pmc_conf_indep  = 1.0 - overlap;
             pmc_conf_dep    = overlap;
 
-            if (overlap == 0.0) {
+            if (overlap <= config_.strong_independence_overlap + 1e-12) {
                 pmc_summary = "STRONG INDEPENDENCE (no shared ports)";
-            } else if (overlap >= 0.8) {
+            } else if (overlap >= config_.strong_dependence_overlap) {
                 pmc_summary = "STRONG DEPENDENCE (most ports shared)";
-            } else if (overlap <= 0.3) {
+            } else if (overlap <= config_.weak_independence_overlap) {
                 pmc_summary = "WEAK INDEPENDENCE (few shared ports)";
-            } else if (overlap >= 0.5) {
+            } else if (overlap >= config_.weak_dependence_overlap) {
                 pmc_summary = "WEAK DEPENDENCE (significant overlap)";
             } else {
                 pmc_summary = "AMBIGUOUS";
@@ -288,29 +334,44 @@ PortContentionDecision ExecPortsMeasurer::detectPortContention(
     double final_conf;
     std::string reasoning;
 
-    if (k <= 0.1) {
+    if (k <= config_.k_strong_independence) {
         final_diff = true;
         final_conf = 1.0 - k;
         reasoning  = "TIME: " + time_summary + " (k=" + std::to_string(k) + ") - independent";
-        if (overlap > 0.5) {
+        if (overlap > config_.overlap_disagreement_high) {
             reasoning += " [PMC disagrees but time is definitive]";
         }
-    } else if (k >= 0.9) {
+    } else if (k >= config_.k_strong_dependence) {
         final_diff = false;
         final_conf = k;
         reasoning  = "TIME: " + time_summary + " (k=" + std::to_string(k) + ") - dependent";
-        if (overlap < 0.3) {
+        if (overlap < config_.overlap_disagreement_low) {
             reasoning += " [PMC disagrees but time is definitive]";
         }
     } else {
-        // Weighted average (time 60%, PMC 40%)
-        double comb_indep = time_conf_indep * 0.6 + pmc_conf_indep * 0.4;
-        double comb_dep   = time_conf_dep * 0.6 + pmc_conf_dep * 0.4;
-        final_diff        = (comb_indep > comb_dep);
-        final_conf        = std::max(comb_indep, comb_dep);
-        reasoning         = "Combined (time 60%, PMC 40%): independent=" + std::to_string(comb_indep) +
-                            ", dependent=" + std::to_string(comb_dep) + " -> " +
-                            std::string(final_diff ? "independent" : "dependent");
+        // Normalize weights to sum to 1
+        double total_weight = config_.time_weight + config_.pmc_weight;
+        double norm_time, norm_pmc;
+        if (total_weight > 0.0) {
+            norm_time = config_.time_weight / total_weight;
+            norm_pmc  = config_.pmc_weight / total_weight;
+        } else {
+            // Fallback: equal weights if both are zero
+            norm_time = 0.5;
+            norm_pmc  = 0.5;
+        }
+        
+        double comb_indep = time_conf_indep * norm_time + pmc_conf_indep * norm_pmc;
+        double comb_dep   = time_conf_dep * norm_time + pmc_conf_dep * norm_pmc;
+        
+        final_diff = (comb_indep > comb_dep);
+        final_conf = std::max(comb_indep, comb_dep);
+        reasoning  = "Combined (time " + std::to_string(config_.time_weight) + "%, PMC " + 
+                     std::to_string(config_.pmc_weight) + "%, normalized to " +
+                     std::to_string(norm_time) + "/" + std::to_string(norm_pmc) + 
+                     "): independent=" + std::to_string(comb_indep) +
+                     ", dependent=" + std::to_string(comb_dep) + " -> " +
+                     std::string(final_diff ? "independent" : "dependent");
     }
 
     // ===== BUILD DETAILED OUTPUT =====

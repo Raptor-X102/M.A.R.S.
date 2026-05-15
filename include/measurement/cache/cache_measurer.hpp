@@ -15,8 +15,8 @@
 
 #include "core/measurer.hpp"
 #include "infra/logging.hpp"
-#include "measurement/cache/boundary_analyzer.hpp"
 #include "measurement/cache/cache_profiler_list.hpp"
+#include "measurement/common/statistics.hpp"
 #include "platform/arch.hpp"
 #include "platform/events_discovery.hpp"
 #include "platform/os.hpp"
@@ -26,6 +26,7 @@
 namespace silicon_probe::cache {
 
 using CacheLevel = silicon_probe::shared_types::CacheLevel;
+namespace statistics = silicon_probe::common::statistics;
 
 class CacheMeasurer final : public core::Measurer {
    public:
@@ -96,7 +97,6 @@ class CacheMeasurer final : public core::Measurer {
     explicit CacheMeasurer(Config config);
 
     std::string_view name() const noexcept override;
-    void validateConfig();
     void measure(shared_types::CpuInfoData& data) override;
 
    private:
@@ -110,6 +110,7 @@ class CacheMeasurer final : public core::Measurer {
     std::unique_ptr<CacheProfilerList> reusable_list_;
     size_t reusable_max_size_ = 0;
 
+    void validateConfig();
     void measure_level(shared_types::CpuInfoData& data,
                        CacheLevel level,
                        size_t min_size,
@@ -168,6 +169,48 @@ class CacheMeasurer final : public core::Measurer {
         result.has_pmc = miss_rate_opt.has_value();
         result.miss_rate = miss_rate_opt.value_or(0.0);
         return result;
+    }
+
+    template <typename MeasureFn>
+    size_t
+    refine_boundary(size_t left, size_t right, size_t precision, double growth_factor, MeasureFn&& measure, double baseline_mean) const {
+        SPDLOG_INFO("[boundary] baseline={}, threshold={}x", baseline_mean, growth_factor);
+
+        size_t current_left  = left;
+        size_t current_right = right;
+
+        while (current_right - current_left > precision) {
+            const size_t midpoint = current_left + (current_right - current_left) / 2;
+
+            std::vector<double> samples;
+            samples.reserve(std::max<size_t>(1, config_.refinement_samples));
+            for (size_t index = 0; index < config_.refinement_samples; ++index) {
+                samples.push_back(measure(midpoint));
+            }
+
+            const auto statistics   = statistics::compute_stats(samples);
+            const double ratio      = baseline_mean > 0.0 ? statistics.mean / baseline_mean : 0.0;
+            const bool out_of_cache = ratio > growth_factor;
+
+            SPDLOG_INFO(
+                "[boundary] size={}, mean={}, ratio={}, threshold={}, decision={}",
+                midpoint,
+                statistics.mean,
+                ratio,
+                growth_factor,
+                out_of_cache ? "out" : "in"
+            );
+
+            if (out_of_cache) {
+                current_right = midpoint;
+            } else {
+                current_left = midpoint;
+            }
+        }
+
+        const size_t boundary = (current_left + current_right) / 2;
+        SPDLOG_INFO("[boundary] final={} bytes", boundary);
+        return boundary;
     }
 };
 

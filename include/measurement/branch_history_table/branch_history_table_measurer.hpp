@@ -45,10 +45,10 @@ class BranchHistoryTableMeasurer final : public core::Measurer {
     explicit BranchHistoryTableMeasurer(Config config);
 
     std::string_view name() const noexcept override;
-    void validateConfig();
     void measure(shared_types::CpuInfoData& data) override;
 
    private:
+    void validateConfig();
     int detectBHTSaturation(const std::vector<BranchHistoryTableResult>& results) const;
 };
 
