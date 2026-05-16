@@ -56,6 +56,7 @@ class StoreToLoadForwardingMeasurer final : public core::Measurer {
    private:
     Config config_;
 
+    void validateConfig();
     template <size_t N>
     StoreToLoadForwardingResult
     run_test(size_t offset, platform::pmc::PmcGroup* pmc, const std::vector<std::string>& ev_names);

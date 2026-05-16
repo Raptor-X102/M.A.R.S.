@@ -1,13 +1,17 @@
 // measurement/return_address_stack/return_address_stack_measurer.cpp
 #include "measurement/return_address_stack/return_address_stack_measurer.hpp"
+#include "measurement/common/statistics.hpp"
 
-#include <numeric>
+#include <algorithm>
 
 namespace silicon_probe::return_address_stack {
+
+namespace statistics = silicon_probe::common::statistics;
 
 ReturnAddressStackMeasurer::ReturnAddressStackMeasurer() : ReturnAddressStackMeasurer(Config{}) {}
 
 ReturnAddressStackMeasurer::ReturnAddressStackMeasurer(Config config) : config_(std::move(config)) {
+    validateConfig();
     SPDLOG_DEBUG(
         "[{}] configured: min_recursion_depth={}, max_recursion_depth={}, recursion_depth_step={}, iterations={}",
         name(),
@@ -20,7 +24,49 @@ ReturnAddressStackMeasurer::ReturnAddressStackMeasurer(Config config) : config_(
 
 std::string_view ReturnAddressStackMeasurer::name() const noexcept { return "return address stack"; }
 
-__attribute__((noinline, noclone)) void ReturnAddressStackMeasurer::recursive_func(size_t depth, size_t iteration) {
+void ReturnAddressStackMeasurer::validateConfig() {
+    if (config_.min_recursion_depth == 0)
+        config_.min_recursion_depth = kDefaultMinRecursion;
+    if (config_.max_recursion_depth < config_.min_recursion_depth)
+        config_.max_recursion_depth = config_.min_recursion_depth;
+    if (config_.max_recursion_depth > kMaxSafeRecursionDepth) {
+        SPDLOG_WARN("[{}] max_recursion_depth {} exceeds safe limit {}, clamping",
+                    name(), config_.max_recursion_depth, kMaxSafeRecursionDepth);
+        config_.max_recursion_depth = kMaxSafeRecursionDepth;
+    }
+    if (config_.recursion_depth_step == 0)
+        config_.recursion_depth_step = kDefaultRecursionStep;
+    constexpr size_t kMaxIter = 1'000'000;
+    if (config_.iterations == 0)
+        config_.iterations = kDefaultIterations;
+    if (config_.iterations > kMaxIter) {
+        SPDLOG_WARN("[{}] iterations {} too high, reducing to {}",
+                    name(), config_.iterations, kMaxIter);
+        config_.iterations = kMaxIter;
+    }
+    if (config_.trim_ratio < 0.0)
+        config_.trim_ratio = 0.0;
+    if (config_.trim_ratio >= 0.5) {
+        SPDLOG_WARN("[{}] trim_ratio {} >= 0.5, setting to 0.49", name(), config_.trim_ratio);
+        config_.trim_ratio = 0.49;
+    }
+    if (config_.smoothing_window == 0)
+        config_.smoothing_window = 3;
+    if (config_.smoothing_window % 2 == 0)
+        config_.smoothing_window++;
+    if (config_.noise_estimation_ratio <= 0.0 || config_.noise_estimation_ratio > 1.0)
+        config_.noise_estimation_ratio = 0.5;
+    if (config_.threshold_multiplier <= 0.0)
+        config_.threshold_multiplier = 5.0;
+    if (config_.sustained_window == 0)
+        config_.sustained_window = 3;
+    if (config_.sustained_ratio <= 1.0) {
+        SPDLOG_WARN("[{}] sustained_ratio {} <= 1, forcing to 1.15", name(), config_.sustained_ratio);
+        config_.sustained_ratio = 1.15;
+    }
+}
+
+__attribute__((noinline, noclone, noipa)) void ReturnAddressStackMeasurer::recursive_func(size_t depth, size_t iteration) {
     if (iteration >= depth)
         return;
     recursive_func(depth, iteration + 1);
@@ -48,19 +94,24 @@ void ReturnAddressStackMeasurer::measure(shared_types::CpuInfoData& data) {
         // Sort to filter outliers
         std::sort(raw_exec_times.begin(), raw_exec_times.end());
 
-        // Trim 2% from each end (keep 96% of samples)
+        // Trim outliers from both ends
         size_t trim_count = static_cast<size_t>(config_.iterations * config_.trim_ratio);
         if (trim_count * 2 < raw_exec_times.size()) {
             raw_exec_times.erase(raw_exec_times.begin(), raw_exec_times.begin() + trim_count);
             raw_exec_times.erase(raw_exec_times.end() - trim_count, raw_exec_times.end());
         }
 
+        // Ensure we have at least one sample after trimming
+        if (raw_exec_times.empty()) {
+            SPDLOG_WARN("[{}] No samples left after trimming for depth={}", name(), depth);
+            continue;
+        }
+
         uint64_t min_time = raw_exec_times.front();
         uint64_t max_time = raw_exec_times.back();
-        uint64_t sum_time = std::accumulate(raw_exec_times.begin(), raw_exec_times.end(), 0ULL);
-        double avg_time   = static_cast<double>(sum_time) / raw_exec_times.size();
+        double avg_time = statistics::mean(raw_exec_times);
 
-        results.push_back({depth, min_time, avg_time, max_time});
+        results.push_back({depth, avg_time});
 
         SPDLOG_DEBUG(
             "[{}] depth={:3d}  min={:3d}  avg={:6.2f}  max={:3d}",
@@ -94,78 +145,60 @@ void ReturnAddressStackMeasurer::measure(shared_types::CpuInfoData& data) {
 }
 
 int ReturnAddressStackMeasurer::detectRASSaturation(const std::vector<Result>& results) const {
-    // Need enough points for meaningful detection
-    if (results.size() < config_.sustained_window + 2)
+    auto results_size = results.size();
+    if (results_size < 2)  // достаточно двух точек для поиска скачка
         return -1;
 
     // ----- 1. Median smoothing -----
     size_t win = config_.smoothing_window;
-    if (win % 2 == 0)
-        ++win;  // ensure odd
+    if (win % 2 == 0) ++win;
     int half = static_cast<int>(win / 2);
-    std::vector<double> raw(results.size());
-    for (size_t i = 0; i < results.size(); ++i)
+    std::vector<double> raw(results_size);
+    for (size_t i = 0; i < results_size; ++i)
         raw[i] = results[i].avg_exec_time;
 
     std::vector<double> smoothed(raw.size());
     for (size_t i = 0; i < raw.size(); ++i) {
         int left  = static_cast<int>(i) - half;
         int right = static_cast<int>(i) + half;
-        if (left < 0)
-            left = 0;
-        if (right >= static_cast<int>(raw.size()))
-            right = static_cast<int>(raw.size()) - 1;
+        if (left < 0) left = 0;
+        if (right >= static_cast<int>(raw.size())) right = static_cast<int>(raw.size()) - 1;
         std::vector<double> window;
-        for (int j = left; j <= right; ++j)
-            window.push_back(raw[j]);
-        std::sort(window.begin(), window.end());
-        smoothed[i] = window[window.size() / 2];
+        for (int j = left; j <= right; ++j) window.push_back(raw[j]);
+        smoothed[i] = statistics::compute_median(std::move(window));
     }
 
-    // ----- 2. Deltas -----
-    std::vector<double> deltas;
-    deltas.reserve(smoothed.size() - 1);
-    for (size_t i = 1; i < smoothed.size(); ++i)
-        deltas.push_back(smoothed[i] - smoothed[i - 1]);
+    // ----- 2. Find depth where average time after is significantly higher than before -----
+    const size_t n = smoothed.size();
+    if (n < 2) return -1;
 
-    if (deltas.size() < config_.sustained_window + 2)
-        return -1;
+    int best_idx = -1;
+    double best_ratio = 1.0;
 
-    // ----- 3. Noise estimation on first 'ratio' fraction of deltas -----
-    size_t noise_len = static_cast<size_t>(deltas.size() * config_.noise_estimation_ratio);
-    if (noise_len < 2)
-        noise_len = deltas.size();
-    std::vector<double> noise(deltas.begin(), deltas.begin() + noise_len);
-    std::sort(noise.begin(), noise.end());
-    double median = noise[noise.size() / 2];
-    std::vector<double> abs_dev;
-    abs_dev.reserve(noise.size());
-    for (double d : noise)
-        abs_dev.push_back(std::abs(d - median));
-    std::sort(abs_dev.begin(), abs_dev.end());
-    double mad       = abs_dev[abs_dev.size() / 2];
-    double threshold = median + config_.threshold_multiplier * mad;
+    for (size_t i = 0; i < n - 1; ++i) {
+        double sum_before = 0.0;
+        for (size_t j = 0; j <= i; ++j)
+            sum_before += smoothed[j];
+        double avg_before = sum_before / (i + 1);
 
-    // ----- 4. Find first jump where average level after stays significantly higher -----
-    const size_t W = config_.sustained_window;
-    for (size_t i = 0; i + W < deltas.size(); ++i) {
-        if (deltas[i] > threshold) {
-            // Average of W points after the jump (starting from depth i+1)
-            double after_sum = 0.0;
-            for (size_t j = 1; j <= W; ++j)
-                after_sum += smoothed[i + j];
-            double after_avg = after_sum / W;
-            // Average of W points before the jump (ending at depth i)
-            double before_sum = 0.0;
-            for (size_t j = 0; j < W; ++j)
-                before_sum += smoothed[i - j];
-            double before_avg = before_sum / W;
-            if (after_avg >= before_avg * config_.sustained_ratio) {
-                // results[i].depth is the depth before the jump (correct RAS size)
-                return static_cast<int>(results[i].depth);
+        double sum_after = 0.0;
+        for (size_t j = i + 1; j < n; ++j)
+            sum_after += smoothed[j];
+        double avg_after = sum_after / (n - i - 1);
+
+        if (avg_before > 0) {
+            double ratio = avg_after / avg_before;
+            if (ratio > best_ratio) {
+                best_ratio = ratio;
+                best_idx = static_cast<int>(i);
             }
         }
     }
+
+    if (best_idx >= 0 && best_ratio >= config_.sustained_ratio) {
+        return static_cast<int>(results[best_idx].depth);
+    }
+
     return -1;
 }
 

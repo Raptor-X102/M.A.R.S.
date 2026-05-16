@@ -1,4 +1,3 @@
-// measurement/rob/rob_measurer.hpp
 #pragma once
 
 #include <algorithm>
@@ -28,6 +27,7 @@ class RobMeasurer final : public core::Measurer {
     static constexpr size_t kDefaultOuterIterations  = 64;
     static constexpr size_t kDefaultUnroll           = 17;
     static constexpr int kDefaultInstrType           = 4;
+    static constexpr int kMinResultsCnt              = 8;
 
     struct Config {
         bool enabled = true;
@@ -43,7 +43,10 @@ class RobMeasurer final : public core::Measurer {
         size_t baseline_min_samples        = 5;
         size_t required_consecutive_points = 3;
         double saturation_threshold_ratio  = 1.15;
-        double fallback_jump_ratio         = 0.5;
+        double fallback_jump_ratio         = 0.15;
+        double sustain_threshold = 0.9;
+        size_t unroll                      = kDefaultUnroll;  
+        int min_res_cnt                    = kMinResultsCnt;  
     };
 
     RobMeasurer();
@@ -51,6 +54,8 @@ class RobMeasurer final : public core::Measurer {
 
     std::string_view name() const noexcept override;
     void measure(shared_types::CpuInfoData& data) override;
+
+    void validateConfig();
 
    private:
     Config config_;

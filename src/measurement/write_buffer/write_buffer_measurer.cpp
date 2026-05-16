@@ -10,6 +10,7 @@ namespace silicon_probe::write_buffer {
 WriteBufferMeasurer::WriteBufferMeasurer() : WriteBufferMeasurer(Config{}) {}
 
 WriteBufferMeasurer::WriteBufferMeasurer(Config config) : config_(std::move(config)) {
+    validateConfig();
     SPDLOG_DEBUG(
         "[{}] cfg: min_writes={} max_writes={} step={} samples_per_repeat={} repeats={}",
         name(),
@@ -22,6 +23,39 @@ WriteBufferMeasurer::WriteBufferMeasurer(Config config) : config_(std::move(conf
 }
 
 std::string_view WriteBufferMeasurer::name() const noexcept { return "write_buffer"; }
+
+void WriteBufferMeasurer::validateConfig() {
+    if (config_.min_writes == 0) config_.min_writes = kDefaultMinWrites;
+    if (config_.max_writes == 0) config_.max_writes = kDefaultMaxWrites;
+    if (config_.min_writes > config_.max_writes) {
+        std::swap(config_.min_writes, config_.max_writes);
+    }
+    if (config_.writes_step == 0) config_.writes_step = kDefaultWritesStep;
+    if (config_.iterations == 0) config_.iterations = kDefaultIterations;
+    if (config_.repeats == 0) config_.repeats = kDefaultRepeats;
+    if (config_.warmup_iterations == 0) config_.warmup_iterations = kDefaultWarmupIterations;
+
+    if (config_.latency_spike_ratio < 1.1) config_.latency_spike_ratio = 2.0;
+    if (config_.latency_hold_ratio < 1.0) config_.latency_hold_ratio = 1.5;
+    if (config_.stall_fallback_ratio < 0.0 || config_.stall_fallback_ratio > 1.0)
+        config_.stall_fallback_ratio = 0.9;
+    if (config_.baseline_window < 1) config_.baseline_window = 3;
+    if (config_.stall_baseline_ratio < 1.0) config_.stall_baseline_ratio = 10.0;
+    if (config_.stall_absolute_min < 0.0) config_.stall_absolute_min = 100.0;
+    if (config_.stall_gradient_ratio < 1.0) config_.stall_gradient_ratio = 2.0;
+    if (config_.stall_median_window < 1) config_.stall_median_window = 3;
+
+    const size_t buffer_bytes = kBufferSizeMB * 1024 * 1024;
+    const size_t num_elements = buffer_bytes / kBytesPerEntry;
+    const size_t region_size = ((config_.max_writes * kCacheLineSize) + kCacheLineSize - 1) & ~(kCacheLineSize - 1);
+    if ((config_.max_writes + 1) * region_size > num_elements * kBytesPerEntry) {
+        SPDLOG_WARN("[{}] Buffer too small for max_writes={}, reducing", name(), config_.max_writes);
+        config_.max_writes = (num_elements * kBytesPerEntry) / region_size - 1;
+        if (config_.max_writes < config_.min_writes) {
+            config_.min_writes = config_.max_writes;
+        }
+    }
+}
 
 void WriteBufferMeasurer::measure(shared_types::CpuInfoData& data) {
     SPDLOG_INFO("[{}] starting write buffer measurement", name());
@@ -96,7 +130,7 @@ void WriteBufferMeasurer::measure(shared_types::CpuInfoData& data) {
     }
 
     if (results.size() >= 2) {
-        size_t capacity = analyze_buffer_capacity(results, writes_list, has_pmc, sb_idx, bound_idx);
+        size_t capacity = analyze_buffer_capacity(results, writes_list, sb_idx, bound_idx);
         SPDLOG_INFO("[{}] Estimated write buffer capacity: {} entries (each 4 bytes)", name(), capacity);
         data.write_buffer_size = capacity;
     }
@@ -111,12 +145,10 @@ WriteBufferResult WriteBufferMeasurer::measure_for_writes(
     volatile int& dummy,
     platform::pmc::PmcGroup* pmc
 ) {
-    const size_t stride = kCacheLineSize / kBytesPerEntry;
-
     // warmup
     for (size_t w = 0; w < config_.warmup_iterations; ++w) {
         for (size_t i = 0; i < num_writes; ++i) {
-            fill_base[i * stride] = static_cast<int>(i);
+            fill_base[i * kStride] = static_cast<int>(i);
         }
         dummy = *extra_addr;
         platform::arch::lfence();
@@ -138,23 +170,24 @@ WriteBufferResult WriteBufferMeasurer::measure_for_writes(
         for (size_t iter = 0; iter < config_.iterations; ++iter) {
             // flush all write lines
             for (size_t i = 0; i < num_writes; ++i) {
-                platform::arch::clflush(&fill_base[i * stride]);
+                platform::arch::clflush(&fill_base[i * kStride]);
             }
-            platform::arch::clflush(const_cast<int*>(extra_addr));
+            platform::arch::clflush(const_cast<void*>(reinterpret_cast<const volatile void*>(extra_addr)));
             platform::arch::flush_complete();
 
             // fill store buffer
             for (size_t i = 0; i < num_writes; ++i) {
-                fill_base[i * stride] = static_cast<int>(iter + i);
+                fill_base[i * kStride] = static_cast<int>(iter + i);
             }
 
             // measure critical store+load pair
+            platform::arch::lfence();
             uint64_t start                  = platform::arch::tick();
             const_cast<int*>(extra_addr)[0] = 0xdeadbeef;
             dummy                           = *extra_addr;
+            platform::arch::lfence();
             uint64_t end                    = platform::arch::tick();
             total_ticks += (end - start);
-            platform::arch::lfence();
         }
 
         if (pmc) {
@@ -203,10 +236,9 @@ WriteBufferResult WriteBufferMeasurer::measure_for_writes(
 size_t WriteBufferMeasurer::analyze_buffer_capacity(
     const std::vector<WriteBufferResult>& results,
     const std::vector<size_t>& writes_list,
-    bool /*has_pmc*/,
     size_t sb_idx,
     size_t bound_idx
-) {
+) const {
     if (results.size() < config_.baseline_window + 2)
         return writes_list.back();
 
@@ -218,42 +250,67 @@ size_t WriteBufferMeasurer::analyze_buffer_capacity(
     double baseline = base_samples[base_samples.size() / 2];
 
     double spike_threshold = baseline * config_.latency_spike_ratio;
-    double hold_threshold  = baseline * 1.5;  // fixed relative threshold for follow-up check
+    double hold_threshold  = baseline * config_.latency_hold_ratio;
 
     size_t capacity = writes_list.back();
+
+    // 1) Try to detect by latency spike
     for (size_t i = 1; i < results.size(); ++i) {
         if (results[i].avg_latency_ticks > spike_threshold) {
-            // Verify that the next point(s) also exceed hold_threshold
             size_t next_idx = i + 1;
             if (next_idx < results.size() && results[next_idx].avg_latency_ticks > hold_threshold) {
                 capacity = writes_list[i];
-                break;
+                return capacity;
             }
-            // If only one point spikes but next falls, continue searching
         }
     }
 
-    // Fallback: if no stable spike, use stall events with a high relative threshold
-    if (capacity == writes_list.back()) {
-        double max_stalls = 0.0;
-        for (size_t i = 0; i < results.size(); ++i) {
-            double stalls = 0.0;
-            if (sb_idx != std::string::npos && sb_idx < results[i].avg_events.size())
-                stalls = double(results[i].avg_events[sb_idx]) / config_.iterations;
-            else if (bound_idx != std::string::npos && bound_idx < results[i].avg_events.size())
-                stalls = double(results[i].avg_events[bound_idx]) / config_.iterations;
-            if (stalls > max_stalls)
-                max_stalls = stalls;
+    // Helper to get stall count per iteration
+    auto getStalls = [&](const WriteBufferResult& res) -> double {
+        if (sb_idx != std::string::npos && sb_idx < res.avg_events.size())
+            return double(res.avg_events[sb_idx]) / config_.iterations;
+        if (bound_idx != std::string::npos && bound_idx < res.avg_events.size())
+            return double(res.avg_events[bound_idx]) / config_.iterations;
+        return 0.0;
+    };
+
+    // 2) Fallback: detect by stall events using baseline and gradient
+
+    // Baseline stalls from first baseline_window points
+    double baseline_stalls = 0.0;
+    size_t stall_window = std::min(config_.baseline_window, results.size());
+    for (size_t i = 0; i < stall_window; ++i) {
+        baseline_stalls += getStalls(results[i]);
+    }
+    baseline_stalls /= static_cast<double>(stall_window);
+
+    // Absolute threshold to avoid noise when baseline_stalls is near zero
+    double threshold_absolute = config_.stall_absolute_min;
+    double threshold_relative = baseline_stalls * config_.stall_baseline_ratio;
+    double stall_threshold = std::max(threshold_relative, threshold_absolute);
+
+    // Find first point where stalls exceed threshold
+    for (size_t i = 0; i < results.size(); ++i) {
+        double stalls = getStalls(results[i]);
+        if (stalls > stall_threshold) {
+            capacity = writes_list[i];
+            return capacity;
         }
-        for (size_t i = 0; i < results.size(); ++i) {
-            double stalls = 0.0;
-            if (sb_idx != std::string::npos && sb_idx < results[i].avg_events.size())
-                stalls = double(results[i].avg_events[sb_idx]) / config_.iterations;
-            else if (bound_idx != std::string::npos && bound_idx < results[i].avg_events.size())
-                stalls = double(results[i].avg_events[bound_idx]) / config_.iterations;
-            if (stalls > max_stalls * config_.stall_fallback_ratio) {
+    }
+
+    // 3) Compare with median of recent points (relative threshold)
+    const size_t window = config_.stall_median_window;
+    if (results.size() > window) {
+        for (size_t i = window; i < results.size(); ++i) {
+            std::vector<double> recent;
+            for (size_t j = i - window; j < i; ++j)
+                recent.push_back(getStalls(results[j]));
+            std::sort(recent.begin(), recent.end());
+            double median = recent[recent.size() / 2];
+            double cur = getStalls(results[i]);
+            if (median > 0.0 && cur / median > config_.stall_gradient_ratio) {
                 capacity = writes_list[i];
-                break;
+                return capacity;
             }
         }
     }

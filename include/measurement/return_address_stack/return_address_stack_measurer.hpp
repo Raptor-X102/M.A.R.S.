@@ -1,9 +1,6 @@
 // measurement/return_address_stack/return_address_stack_measurer.hpp
 #pragma once
 
-#include <algorithm>
-#include <cmath>
-#include <random>
 #include <vector>
 
 #include "core/measurer.hpp"
@@ -18,7 +15,8 @@ class ReturnAddressStackMeasurer final : public core::Measurer {
     static constexpr size_t kDefaultMinRecursion  = 1;
     static constexpr size_t kDefaultMaxRecursion  = 32;
     static constexpr size_t kDefaultRecursionStep = 1;
-    static constexpr size_t kDefaultIterations    = 100'000'000;
+    static constexpr size_t kDefaultIterations    = 10'000;
+    static constexpr size_t kMaxSafeRecursionDepth = 64;
 
     struct Config {
         bool enabled = true;
@@ -48,12 +46,11 @@ class ReturnAddressStackMeasurer final : public core::Measurer {
 
     struct Result {
         size_t depth;
-        size_t min_exec_time;
         double avg_exec_time;
-        size_t max_exec_time;
     };
 
-    __attribute__((noinline, noclone)) static void recursive_func(size_t depth, size_t iteration);
+    void validateConfig();
+    __attribute__((noinline, noclone, noipa)) static void recursive_func(size_t depth, size_t iteration);
     int detectRASSaturation(const std::vector<Result>& results) const;
 };
 

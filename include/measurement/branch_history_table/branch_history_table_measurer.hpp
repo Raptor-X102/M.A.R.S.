@@ -48,12 +48,7 @@ class BranchHistoryTableMeasurer final : public core::Measurer {
     void measure(shared_types::CpuInfoData& data) override;
 
    private:
-    struct BHTEstimates {
-        int baseline_offset  = -1;
-        int max_delta        = -1;
-        int inflection_point = -1;
-    };
-
+    void validateConfig();
     int detectBHTSaturation(const std::vector<BranchHistoryTableResult>& results) const;
 };
 

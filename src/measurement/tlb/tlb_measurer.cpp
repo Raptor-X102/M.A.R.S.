@@ -224,6 +224,7 @@ TlbMeasurer::Mapping TlbMeasurer::allocate_mapping(size_t size_bytes) const {
     Mapping mapping;
 
     mapping.size_bytes = size_bytes;
+    SPDLOG_DEBUG("TLB size_bytes = {}", size_bytes);
     mapping.huge       = config_.use_huge_pages;
 
     if (config_.use_huge_pages) {

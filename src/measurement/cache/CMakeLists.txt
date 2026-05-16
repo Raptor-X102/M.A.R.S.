@@ -1,6 +1,5 @@
 add_library(mars_cache STATIC
     cache_measurer.cpp
-    boundary_analyzer.cpp
     cache_profiler_list.cpp
 )
 add_library(mars::cache ALIAS mars_cache)

@@ -45,17 +45,18 @@ inline size_t asmjit_code_size(const asmjit::CodeHolder& code) {
 }
 #endif
 
-inline uint64_t tick() {
-    _mm_lfence();
-    unsigned int aux = 0;
-    uint64_t t = __rdtscp(&aux);
-    _mm_lfence();
-    return t;
-}
-
 inline void mfence() { _mm_mfence(); }
 inline void sfence() { _mm_sfence(); }
 inline void lfence() { _mm_lfence(); }
+
+inline uint64_t tick() {
+    mfence();
+    unsigned int aux = 0;
+    uint64_t t = __rdtscp(&aux);
+    mfence();
+    return t;
+}
+
 inline void pause() noexcept { _mm_pause(); }
 inline void clflush(void* ptr) { _mm_clflush(ptr); }
 inline void flush_complete() { _mm_mfence(); }
@@ -101,10 +102,11 @@ inline CpuVendor detect_vendor() noexcept {
 
 namespace x86_rob_detail {
 
-// Predefined filler patterns matching Wong's add_filler()
-static const bool is_xmm[128] = {
-    0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0
-};
+// Helper to test if instruction type uses XMM/YMM registers
+static bool is_xmm_instruction(int instr_type) {
+    return (instr_type >= 8 && instr_type <= 14) ||
+           (instr_type >= 18 && instr_type <= 19);
+}
 
 class RobCodeGenerator {
 public:
@@ -126,14 +128,13 @@ public:
         code.init(runtime_.environment());
         asmjit::x86::Assembler a(&code);
 
-        // ----- Prologue: align and save callee-saved registers -----
-        for (int i = 0; i < 16; ++i) a.nop();     // room for misaligned entry
+        // Prologue: save callee-saved registers
         a.push(asmjit::x86::rbx);
         a.push(asmjit::x86::rbp);
         a.push(asmjit::x86::rsi);
         a.push(asmjit::x86::rdi);
 
-        // Load buffer pointers (R8 and R9 as temporaries, then move to RCX/RDX)
+        // Load buffer pointers (using RCX, RDX)
         uint64_t dbuf1_addr = reinterpret_cast<uint64_t>(dbuf1_);
         uint64_t dbuf2_addr = reinterpret_cast<uint64_t>(dbuf2_);
         a.mov(asmjit::x86::rcx, asmjit::imm(dbuf1_addr));
@@ -142,7 +143,7 @@ public:
         // Loop counter
         a.mov(asmjit::x86::rax, asmjit::imm(iterations_));
 
-        // Initialize filler registers (RBX, RBP, RSI, RDI) with non‑zero values
+        // Initialize filler registers with arbitrary values (original method)
         a.sub(asmjit::x86::rbx, asmjit::imm(1));
         a.sub(asmjit::x86::rbp, asmjit::imm(2));
         a.sub(asmjit::x86::rsi, asmjit::imm(3));
@@ -153,33 +154,34 @@ public:
         asmjit::Label loop_start = asmjit_new_label(a);
         a.bind(loop_start);
 
-        int filler_idx = 0;
-        const int icount = filler_cnt + 1;   // Wong's 'icount' = fillers between loads + 1
+        // Filler sequence counter (replaces static icount)
+        size_t filler_seq = 0;
+        int filler_global = 0;
+
+        const int icount = filler_cnt + 1;   // Wong's 'icount'
 
         for (int u = kUnroll - 1; u >= 0; --u) {
-            // First block: 16 fillers (using j + icount - 1 - 16 index)
+            // 1) 16 fillers before first load
             for (int j = 0; j < 16; ++j) {
-                emit_filler(a, instr_type, j + icount - 1 - 16, filler_idx);
+                emit_filler(a, instr_type, filler_seq, filler_global, j + icount - 1 - 16);
             }
-
             // Load from RCX (first dependency)
             a.mov(asmjit::x86::rcx, asmjit::x86::ptr(asmjit::x86::rcx));
 
-            // Second block: (icount - 1) fillers
+            // 2) (icount - 1) fillers
             for (int j = 0; j < icount - 1; ++j) {
-                emit_filler(a, instr_type, j, filler_idx);
+                emit_filler(a, instr_type, filler_seq, filler_global, j);
             }
-
             // Load from RDX (second dependency)
             a.mov(asmjit::x86::rdx, asmjit::x86::ptr(asmjit::x86::rdx));
 
-            // Third block: (icount - 1 - 16) fillers, subtract 1 on last unroll if not XMM
+            // 3) Remaining fillers (icount - 1 - 16)
             int rem = icount - 1 - 16;
-            if (u == 0 && !is_xmm[instr_type]) {
+            if (u == 0 && !is_xmm_instruction(instr_type)) {
                 rem -= 1;
             }
             for (int j = 0; j < rem; ++j) {
-                emit_filler(a, instr_type, j, filler_idx);
+                emit_filler(a, instr_type, filler_seq, filler_global, j);
             }
         }
 
@@ -187,14 +189,16 @@ public:
         a.sub(asmjit::x86::rax, asmjit::imm(1));
         a.jnz(loop_start);
 
-        // ----- Epilogue -----
+        // Epilogue
         a.pop(asmjit::x86::rdi);
         a.pop(asmjit::x86::rsi);
         a.pop(asmjit::x86::rbp);
         a.pop(asmjit::x86::rbx);
         a.ret();
 
-        if (runtime_.add(&current_fn_, &code) != asmjit::kErrorOk) {
+        asmjit::Error err = runtime_.add(&current_fn_, &code);
+        if (err != asmjit::kErrorOk) {
+            // Optionally log error; here we simply set to nullptr
             current_fn_ = nullptr;
         }
 
@@ -261,110 +265,108 @@ private:
         dbuf2_ = static_cast<char*>(dbuf2_orig_) + offset;
     }
 
-    static void emit_filler(asmjit::x86::Assembler& a, int instr_type, int /*idx*/, int& global_idx) {
-        static int icount = 0;
-        const int i = icount;
-        const int reg[4] = {3, 5, 6, 7};  // EBX=3, EBP=5, ESI=6, EDI=7
-        
-        int i2 = (global_idx >> 2) & 1;
-        
+    static void emit_filler(asmjit::x86::Assembler& a, int instr_type,
+                            size_t& seq_counter, int& global_idx, int /*idx_hint*/) {
+        const size_t i = seq_counter;
+        const int reg_ids[4] = {3, 5, 6, 7};   // rbx, rbp, rsi, rdi
+        asmjit::x86::Gp reg = asmjit::x86::gpb(reg_ids[i & 3]);
+
         switch (instr_type) {
-            case 0: // add (ebx, ebp, esi, edi), (ebx, ebp, esi, edi)
-                a.add(asmjit::x86::gpb(reg[i&3]), asmjit::x86::gpb(reg[i&3]));
+            case 0: // add reg, reg
+                a.add(reg, reg);
                 break;
             case 1: // nop
                 a.nop();
                 break;
-            case 2: // mov (ebx, ebp, esi, edi), (ebx, ebp, esi, edi)
-                a.mov(asmjit::x86::gpb(reg[i&3]), asmjit::x86::gpb(reg[i&3]));
+            case 2: // mov reg, reg
+                a.mov(reg, reg);
                 break;
-            case 3: // cmp (ebx, ebp, esi, edi), (ebx, ebp, esi, edi)
-                a.cmp(asmjit::x86::gpb(reg[i&3]), asmjit::x86::gpb(reg[i&3]));
+            case 3: // cmp reg, reg
+                a.cmp(reg, reg);
                 break;
-            case 4: // two-byte nop 66 90
+            case 4: // two-byte nop (66 90)
                 a.emit(0x66);
                 a.nop();
                 break;
-            case 5: // xor (ebx, ebp, esi, edi), (ebx, ebp, esi, edi)
-                a.xor_(asmjit::x86::gpb(reg[i&3]), asmjit::x86::gpb(reg[i&3]));
+            case 5: // xor reg, reg
+                a.xor_(reg, reg);
                 break;
-            case 6: // xor (ebx, ebp, esi, edi), (edi, ebx, ebp, esi)
-                a.xor_(asmjit::x86::gpb(reg[i&3]), asmjit::x86::gpb(reg[(i+1)&3]));
+            case 6: // xor reg, reg+1
+                a.xor_(reg, asmjit::x86::gpb(reg_ids[(i+1) & 3]));
                 break;
-            case 7: // mov (ebx, ebp, esi, edi), (edi, ebx, ebp, esi)
-                a.mov(asmjit::x86::gpb(reg[i&3]), asmjit::x86::gpb(reg[(i+1)&3]));
+            case 7: // mov reg, reg+1
+                a.mov(reg, asmjit::x86::gpb(reg_ids[(i+1) & 3]));
                 break;
             case 8: // movaps xmm, xmm
-                a.movaps(asmjit::x86::xmm(i&7), asmjit::x86::xmm((i+1)&7));
+                a.movaps(asmjit::x86::xmm(i & 7), asmjit::x86::xmm((i+1) & 7));
                 break;
-            case 9: // movdqa xmm, xmm SSE2
+            case 9: // movdqa xmm, xmm (SSE2)
             case 12:
-                a.movdqa(asmjit::x86::xmm(i&7), asmjit::x86::xmm((i+1)&7));
+                a.movdqa(asmjit::x86::xmm(i & 7), asmjit::x86::xmm((i+1) & 7));
                 break;
             case 10: // xorps xmm, xmm
-                a.xorps(asmjit::x86::xmm(i&7), asmjit::x86::xmm(i&7));
+                a.xorps(asmjit::x86::xmm(i & 7), asmjit::x86::xmm(i & 7));
                 break;
             case 11: // xorps xmm, xmm+1
-                a.xorps(asmjit::x86::xmm(i&7), asmjit::x86::xmm((i+1)&7));
+                a.xorps(asmjit::x86::xmm(i & 7), asmjit::x86::xmm((i+1) & 7));
                 break;
-            case 13: // movdqa xmm, xmm AVX
-                a.vmovdqa(asmjit::x86::xmm(i&7), asmjit::x86::xmm((i+1)&7));
+            case 13: // vmovdqa xmm, xmm (AVX)
+                a.vmovdqa(asmjit::x86::xmm(i & 7), asmjit::x86::xmm((i+1) & 7));
                 break;
-            case 14: // movdqa ymm, ymm AVX
-                a.vmovdqa(asmjit::x86::ymm(i&7), asmjit::x86::ymm((i+1)&7));
+            case 14: // vmovdqa ymm, ymm (AVX)
+                a.vmovdqa(asmjit::x86::ymm(i & 7), asmjit::x86::ymm((i+1) & 7));
                 break;
-            case 15: // movdqa xmm, xmm+1 SSE2
+            case 15: // movdqa xmm, xmm+1 (SSE2, low 4)
                 a.movdqa(asmjit::x86::xmm(((i&3)+0)), asmjit::x86::xmm(((i+1)&3)+0));
                 break;
-            case 16: // movdqa xmm, xmm+1 AVX
+            case 16: // vmovdqa xmm, xmm+1 (AVX, low 4)
                 a.vmovdqa(asmjit::x86::xmm(((i&3)+0)), asmjit::x86::xmm(((i+1)&3)+0));
                 break;
-            case 17: // movdqa ymm, ymm+1 AVX
+            case 17: // vmovdqa ymm, ymm+1 (AVX, low 4)
                 a.vmovdqa(asmjit::x86::ymm(((i&3)+0)), asmjit::x86::ymm(((i+1)&3)+0));
                 break;
-            case 18: // vxorps ymm, ymm, ymm AVX
-                a.vxorps(asmjit::x86::ymm(i&7), asmjit::x86::ymm(i&7), asmjit::x86::ymm(i&7));
+            case 18: // vxorps ymm, ymm, ymm
+                a.vxorps(asmjit::x86::ymm(i & 7), asmjit::x86::ymm(i & 7), asmjit::x86::ymm(i & 7));
                 break;
-            case 19: // vxorps ymm, ymm, ymm+1 AVX
-                a.vxorps(asmjit::x86::ymm(i&7), asmjit::x86::ymm(i&7), asmjit::x86::ymm((i+1)&7));
+            case 19: // vxorps ymm, ymm, ymm+1
+                a.vxorps(asmjit::x86::ymm(i & 7), asmjit::x86::ymm(i & 7), asmjit::x86::ymm((i+1) & 7));
                 break;
-            case 20:
-                if (icount & 1) {
-                    a.xorps(asmjit::x86::xmm(i&7), asmjit::x86::xmm((i+1)&7));
+            case 20: // conditional: xorps or add
+                if (seq_counter & 1) {
+                    a.xorps(asmjit::x86::xmm(i & 7), asmjit::x86::xmm((i+1) & 7));
                 } else {
                     if (sizeof(void*) == 4) {
-                        a.add(asmjit::x86::gpb(reg[i&3]), asmjit::x86::gpb(reg[i&3]));
+                        a.add(asmjit::x86::gpb(reg_ids[i & 3]), asmjit::x86::gpb(reg_ids[i & 3]));
                     } else {
                         a.add(asmjit::x86::rbx, asmjit::x86::rbx);
                     }
                 }
                 break;
-            case 21:
-                if (i2 & 1) {
-                    a.vxorps(asmjit::x86::ymm(i&7), asmjit::x86::ymm(i&7), asmjit::x86::ymm((i+1)&7));
+            case 21: // conditional: vxorps or add
+                if ((global_idx >> 2) & 1) {
+                    a.vxorps(asmjit::x86::ymm(i & 7), asmjit::x86::ymm(i & 7), asmjit::x86::ymm((i+1) & 7));
                 } else {
                     a.add(asmjit::x86::rbx, asmjit::x86::rbx);
                 }
                 break;
-            case 22:
-                a.xor_(asmjit::x86::gpb(reg[i&3]), asmjit::x86::gpb(reg[(i+1)&3]));
+            case 22: // xor reg, reg+1 (same as case 6)
+                a.xor_(reg, asmjit::x86::gpb(reg_ids[(i+1) & 3]));
                 break;
-            case 23: // sub reg, val
-                a.sub(asmjit::x86::gpb(reg[i&3]), asmjit::imm(i));
+            case 23: // sub reg, imm(i)
+                a.sub(reg, asmjit::imm(i));
                 break;
-            case 24: // add64
+            case 24: // add rbx, rbx
                 a.add(asmjit::x86::rbx, asmjit::x86::rbx);
                 break;
-            case 25: // mov64
+            case 25: // mov rbx, rcx
                 a.mov(asmjit::x86::rbx, asmjit::x86::rcx);
                 break;
             default:
                 a.nop();
                 break;
         }
-        
-        icount++;
-        global_idx++;
+        ++seq_counter;
+        ++global_idx;
     }
 
     asmjit::JitRuntime runtime_;
@@ -378,7 +380,8 @@ private:
 
 } // namespace x86_rob_detail
 
-inline void* generate_rob_code(int filler_cnt, int instr_type = 4) {
+// Wrapper functions for external use
+inline void* generate_rob_code(int filler_cnt, int instr_type) {
     return x86_rob_detail::RobCodeGenerator::instance().generate(filler_cnt, instr_type);
 }
 
@@ -645,35 +648,39 @@ public:
         return gen;
     }
 
-    UopsCacheCodeGenerator(const UopsCacheCodeGenerator&) = delete;
-    UopsCacheCodeGenerator& operator=(const UopsCacheCodeGenerator&) = delete;
+    static void enable_logging(const char* filename) {
+        instance().enable_logging_impl(filename);
+    }
+
+    static void disable_logging() {
+        instance().disable_logging_impl();
+    }
 
     void* generate(size_t instr_cnt, size_t iterations, const std::vector<InstrType>& types) {
-        release_current();
+        std::lock_guard<std::mutex> lock(mutex_);
+        release_current_impl();
 
         if (types.empty() || instr_cnt == 0) return nullptr;
 
-        std::vector<EmitterFunc> emitters;
-        emitters.reserve(types.size());
-        for (InstrType t : types) {
-            emitters.push_back(get_emitter(t));
-        }
-
         asmjit::CodeHolder code;
         code.init(runtime_.environment());
-        asmjit::x86::Assembler a(&code);
+
         std::unique_ptr<asmjit::FileLogger> logger;
         if (log_file_) {
             ++gen_call_count_;
             fprintf(log_file_, "\n\n;;; ========================================\n");
-            fprintf(log_file_, ";;; Generated function #%d (instr_cnt=%zu, types: ", gen_call_count_, instr_cnt);
-            for (auto t : types) fprintf(log_file_, "%d ", (int)t);
+            fprintf(log_file_, ";;; Generated function #%d (instr_cnt=%zu, iterations=%zu, types: ",
+                    gen_call_count_, instr_cnt, iterations);
+            for (auto t : types) fprintf(log_file_, "%d ", static_cast<int>(t));
             fprintf(log_file_, ")\n;;; ========================================\n");
             fflush(log_file_);
             logger = std::make_unique<asmjit::FileLogger>(log_file_);
             asmjit_set_logger(code, logger.get());
         }
 
+        asmjit::x86::Assembler a(&code);
+
+        // Save non-volatile registers (per System V AMD64 ABI)
         a.push(asmjit::x86::rbx);
         a.push(asmjit::x86::rbp);
         a.push(asmjit::x86::rsi);
@@ -682,18 +689,22 @@ public:
         a.push(asmjit::x86::r13);
         a.push(asmjit::x86::r14);
         a.push(asmjit::x86::r15);
+
         a.mov(asmjit::x86::rcx, asmjit::imm(iterations));
         a.align(asmjit::AlignMode::kCode, 16);
         asmjit::Label loop_start = asmjit_new_label(a);
         a.bind(loop_start);
 
-        size_t num_types = emitters.size();
+        // Generate the sequence of instructions
         for (size_t i = 0; i < instr_cnt; ++i) {
-            emitters[i % num_types](a, i);
+            InstrType type = types[i % types.size()];
+            emit_instruction(a, i, type);
         }
 
         a.dec(asmjit::x86::rcx);
         a.jnz(loop_start);
+
+        // Restore registers
         a.pop(asmjit::x86::r15);
         a.pop(asmjit::x86::r14);
         a.pop(asmjit::x86::r13);
@@ -707,92 +718,123 @@ public:
         void* fn = nullptr;
         if (runtime_.add(&fn, &code) == asmjit::kErrorOk) {
             current_function_ = fn;
-            __builtin___clear_cache(reinterpret_cast<char*>(fn),
-                                    reinterpret_cast<char*>(fn) + asmjit_code_size(code));
+            // Clear instruction cache (required for JIT on some architectures)
+            clear_cache(fn, asmjit_code_size(code));
         }
         return fn;
     }
 
     void release_current() {
+        std::lock_guard<std::mutex> lock(mutex_);
+        release_current_impl();
+    }
+
+private:
+    UopsCacheCodeGenerator()
+        : log_file_(nullptr)
+        , gen_call_count_(0)
+        , current_function_(nullptr) {
+    }
+
+    ~UopsCacheCodeGenerator() {
+        release_current_impl();
+        if (log_file_) fclose(log_file_);
+    }
+
+    void enable_logging_impl(const char* filename) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (log_file_) fclose(log_file_);
+        log_file_ = fopen(filename, "w");
+        if (!log_file_) {
+            SPDLOG_WARN("UopsCacheCodeGenerator: failed to open log file '{}'", filename);
+        }
+    }
+
+    void disable_logging_impl() {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (log_file_) {
+            fclose(log_file_);
+            log_file_ = nullptr;
+        }
+    }
+
+    void release_current_impl() {
         if (current_function_) {
             runtime_.release(current_function_);
             current_function_ = nullptr;
         }
     }
 
-private:
-    FILE* log_file_ = nullptr;
-    int gen_call_count_ = 0;
-    void* current_function_ = nullptr;  
-    asmjit::JitRuntime runtime_;
+    void clear_cache(void* addr, size_t size) {
+#if defined(__GNUC__) || defined(__clang__)
+        __builtin___clear_cache(reinterpret_cast<char*>(addr),
+                                reinterpret_cast<char*>(addr) + size);
+#elif defined(_MSC_VER)
+        FlushInstructionCache(GetCurrentProcess(), addr, size);
+#else
+        // Fallback: do nothing
+#endif
+    }
 
-    UopsCacheCodeGenerator() {
-        log_file_ = fopen("uops_cache_code_dump.txt", "w");
-        if (!log_file_) {
-            SPDLOG_WARN("failed to open logging file");
+    static void emit_instruction(asmjit::x86::Assembler& a, size_t idx, InstrType type) {
+        // Choose destination register based on idx to break dependencies
+        asmjit::x86::Gp dst = dst_reg(idx);
+
+        switch (type) {
+            case InstrType::NOP:
+                a.nop();
+                break;
+            case InstrType::ADD_IMM1:
+                a.add(dst, asmjit::imm(1));
+                break;
+            case InstrType::ADD_REG:
+                // Use different source register to avoid self-dependency
+                a.add(dst, dst_reg(idx + 1));
+                break;
+            default:
+                // Unknown instruction type – emit nop
+                a.nop();
+                break;
         }
     }
 
-    ~UopsCacheCodeGenerator() {
-        release_current();
-        if (log_file_) fclose(log_file_);
+    static asmjit::x86::Gp dst_reg(size_t idx) {
+        static constexpr asmjit::x86::Gp kAllRegs[] = {
+            asmjit::x86::rax, asmjit::x86::rbx,
+            asmjit::x86::rbp, asmjit::x86::rsi, asmjit::x86::rdi,
+            asmjit::x86::r8,  asmjit::x86::r9,  asmjit::x86::r10, asmjit::x86::r11,
+            asmjit::x86::r12, asmjit::x86::r13, asmjit::x86::r14, asmjit::x86::r15
+        };
+        constexpr size_t kNumRegs = sizeof(kAllRegs) / sizeof(kAllRegs[0]);
+        return kAllRegs[idx % kNumRegs];
     }
 
-    using EmitterFunc = void(*)(asmjit::x86::Assembler&, size_t idx);
-
-    static constexpr asmjit::x86::Gp kAllRegs[] = {
-        asmjit::x86::rax, asmjit::x86::rbx,
-        asmjit::x86::rbp, asmjit::x86::rsi, asmjit::x86::rdi,
-        asmjit::x86::r8,  asmjit::x86::r9,  asmjit::x86::r10, asmjit::x86::r11,
-        asmjit::x86::r12, asmjit::x86::r13, asmjit::x86::r14, asmjit::x86::r15
-    };
-    static constexpr size_t kNumRegs = sizeof(kAllRegs) / sizeof(kAllRegs[0]);
-
-    static auto dst_reg(size_t idx) { return kAllRegs[idx % kNumRegs]; }
-
-    static void emit_add_reg(asmjit::x86::Assembler& a, size_t /*idx*/) { a.add(dst_reg(0), dst_reg(0)); }
-    static void emit_add_imm1(asmjit::x86::Assembler& a, size_t idx) { a.add(dst_reg(idx), asmjit::imm(1)); }
-    static void emit_nop(asmjit::x86::Assembler& a, size_t) { a.nop(); }
-
-    // TODO: either change logic, or add more emitters
-    static EmitterFunc get_emitter(InstrType type) {
-        static constexpr std::array<EmitterFunc, 21> table{{
-            emit_nop,           // NOP
-            emit_add_imm1,      // ADD_IMM1
-            emit_nop,           // NOP
-            emit_nop,           // NOP
-            emit_add_reg,       // ADD_REG
-            emit_nop,           // NOP
-            emit_nop,           // NOP
-            emit_nop,           // NOP
-            emit_nop,           // NOP
-            emit_nop,           // NOP
-            emit_nop,           // NOP
-            emit_nop,           // NOP
-            emit_nop,           // NOP
-            emit_nop,           // NOP
-            emit_nop,           // NOP
-            emit_nop,           // NOP
-            emit_nop,           // NOP
-            emit_nop,           // NOP
-            emit_nop,           // NOP
-            emit_nop,           // NOP
-            emit_nop,           // NOP
-        }};
-        return table.at(static_cast<size_t>(type));
-    }
+private:
+    FILE* log_file_;
+    int gen_call_count_;
+    void* current_function_;
+    asmjit::JitRuntime runtime_;
+    std::mutex mutex_;
 };
 
 } // namespace x86_uops_cache_detail
 
-inline void* generate_uops_cache_code(size_t instr_cnt, 
-                                              size_t iterations, 
-                                              const std::vector<InstrType>& types) {
-    return x86_uops_cache_detail::UopsCacheCodeGenerator::instance().generate(instr_cnt,iterations, types);
+inline void* generate_uops_cache_code(size_t instr_cnt,
+                                      size_t iterations,
+                                      const std::vector<InstrType>& types) {
+    return x86_uops_cache_detail::UopsCacheCodeGenerator::instance().generate(instr_cnt, iterations, types);
 }
 
 inline void release_uops_cache_code() {
     x86_uops_cache_detail::UopsCacheCodeGenerator::instance().release_current();
+}
+
+inline void enable_uops_cache_code_logging(const char* filename) {
+    x86_uops_cache_detail::UopsCacheCodeGenerator::enable_logging(filename);
+}
+
+inline void disable_uops_cache_code_logging() {
+    x86_uops_cache_detail::UopsCacheCodeGenerator::disable_logging();
 }
 
 namespace x86_branch_target_buffer_detail {
