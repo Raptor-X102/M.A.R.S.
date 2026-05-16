@@ -776,7 +776,7 @@ private:
 #endif
     }
 
-    void emit_instruction(asmjit::x86::Assembler& a, size_t idx, InstrType type) {
+    static void emit_instruction(asmjit::x86::Assembler& a, size_t idx, InstrType type) {
         // Choose destination register based on idx to break dependencies
         asmjit::x86::Gp dst = dst_reg(idx);
 

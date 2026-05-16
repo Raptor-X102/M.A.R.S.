@@ -70,7 +70,7 @@ private:
     Config config_;
 
     void validateConfig();
-    uint8_t get_instr_uops_size(InstrType type);
+    static uint8_t get_instr_uops_size(InstrType type);
     UopsCacheResult run_test(size_t instr_cnt,
                              platform::pmc::PmcGroup* pmc,
                              const std::vector<std::string>& uops_events);

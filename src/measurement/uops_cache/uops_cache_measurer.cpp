@@ -6,7 +6,7 @@ namespace silicon_probe::uops_cache {
 
 UopsCacheMeasurer::UopsCacheMeasurer() : UopsCacheMeasurer(Config{}) {}
 
-UopsCacheMeasurer::UopsCacheMeasurer(Config config_) : config_(std::move(config_)) {
+UopsCacheMeasurer::UopsCacheMeasurer(Config config) : config_(std::move(config)) {
     validateConfig();
     SPDLOG_DEBUG(
         "[{}] configured: min_instr_cnt = {}, max_instr_cnt = {}, instr_step = {}, iterations={}, "
