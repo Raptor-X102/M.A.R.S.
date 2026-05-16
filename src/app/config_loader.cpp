@@ -789,6 +789,14 @@ class RobConfigParser final : public BenchmarkConfigParserBase<silicon_probe::ro
             [&](const YAML::Node& measurement, const std::string& measurement_path) {
                 with_optional_node(
                     measurement,
+                    "enabled",
+                    measurement_path,
+                    [&](const YAML::Node& node, const std::string& node_path) {
+                        config.enabled = parse_bool_scalar(node, node_path);
+                    }
+                );
+                with_optional_node(
+                    measurement,
                     "min_instr_cnt",
                     measurement_path,
                     [&](const YAML::Node& node, const std::string& node_path) {
@@ -841,6 +849,14 @@ class RobConfigParser final : public BenchmarkConfigParserBase<silicon_probe::ro
                     measurement_path,
                     [&](const YAML::Node& node, const std::string& node_path) {
                         config.instr_type = static_cast<int>(parse_instruction_type(node, node_path));
+                    }
+                );
+                with_optional_node(
+                    measurement,
+                    "unroll",
+                    measurement_path,
+                    [&](const YAML::Node& node, const std::string& node_path) {
+                        config.unroll = parse_size_scalar(node, node_path);
                     }
                 );
             }

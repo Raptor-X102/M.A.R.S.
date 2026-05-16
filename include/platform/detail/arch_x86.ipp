@@ -102,10 +102,11 @@ inline CpuVendor detect_vendor() noexcept {
 
 namespace x86_rob_detail {
 
-// Predefined filler patterns matching Wong's add_filler()
-static const bool is_xmm[128] = {
-    0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0
-};
+// Helper to test if instruction type uses XMM/YMM registers
+static bool is_xmm_instruction(int instr_type) {
+    return (instr_type >= 8 && instr_type <= 14) ||
+           (instr_type >= 18 && instr_type <= 19);
+}
 
 class RobCodeGenerator {
 public:
@@ -127,14 +128,13 @@ public:
         code.init(runtime_.environment());
         asmjit::x86::Assembler a(&code);
 
-        // ----- Prologue: align and save callee-saved registers -----
-        for (int i = 0; i < 16; ++i) a.nop();     // room for misaligned entry
+        // Prologue: save callee-saved registers
         a.push(asmjit::x86::rbx);
         a.push(asmjit::x86::rbp);
         a.push(asmjit::x86::rsi);
         a.push(asmjit::x86::rdi);
 
-        // Load buffer pointers (R8 and R9 as temporaries, then move to RCX/RDX)
+        // Load buffer pointers (using RCX, RDX)
         uint64_t dbuf1_addr = reinterpret_cast<uint64_t>(dbuf1_);
         uint64_t dbuf2_addr = reinterpret_cast<uint64_t>(dbuf2_);
         a.mov(asmjit::x86::rcx, asmjit::imm(dbuf1_addr));
@@ -143,7 +143,7 @@ public:
         // Loop counter
         a.mov(asmjit::x86::rax, asmjit::imm(iterations_));
 
-        // Initialize filler registers (RBX, RBP, RSI, RDI) with non‑zero values
+        // Initialize filler registers with arbitrary values (original method)
         a.sub(asmjit::x86::rbx, asmjit::imm(1));
         a.sub(asmjit::x86::rbp, asmjit::imm(2));
         a.sub(asmjit::x86::rsi, asmjit::imm(3));
@@ -151,36 +151,37 @@ public:
 
         // Align loop start to 16 bytes
         a.align(asmjit::AlignMode::kCode, 16);
-        asmjit::Label loop_start = asmjit_new_label(a);
+        asmjit::Label loop_start = a.new_label();
         a.bind(loop_start);
 
-        int filler_idx = 0;
-        const int icount = filler_cnt + 1;   // Wong's 'icount' = fillers between loads + 1
+        // Filler sequence counter (replaces static icount)
+        size_t filler_seq = 0;
+        int filler_global = 0;
+
+        const int icount = filler_cnt + 1;   // Wong's 'icount'
 
         for (int u = kUnroll - 1; u >= 0; --u) {
-            // First block: 16 fillers (using j + icount - 1 - 16 index)
+            // 1) 16 fillers before first load
             for (int j = 0; j < 16; ++j) {
-                emit_filler(a, instr_type, j + icount - 1 - 16, filler_idx);
+                emit_filler(a, instr_type, filler_seq, filler_global, j + icount - 1 - 16);
             }
-
             // Load from RCX (first dependency)
             a.mov(asmjit::x86::rcx, asmjit::x86::ptr(asmjit::x86::rcx));
 
-            // Second block: (icount - 1) fillers
+            // 2) (icount - 1) fillers
             for (int j = 0; j < icount - 1; ++j) {
-                emit_filler(a, instr_type, j, filler_idx);
+                emit_filler(a, instr_type, filler_seq, filler_global, j);
             }
-
             // Load from RDX (second dependency)
             a.mov(asmjit::x86::rdx, asmjit::x86::ptr(asmjit::x86::rdx));
 
-            // Third block: (icount - 1 - 16) fillers, subtract 1 on last unroll if not XMM
+            // 3) Remaining fillers (icount - 1 - 16)
             int rem = icount - 1 - 16;
-            if (u == 0 && !is_xmm[instr_type]) {
+            if (u == 0 && !is_xmm_instruction(instr_type)) {
                 rem -= 1;
             }
             for (int j = 0; j < rem; ++j) {
-                emit_filler(a, instr_type, j, filler_idx);
+                emit_filler(a, instr_type, filler_seq, filler_global, j);
             }
         }
 
@@ -188,14 +189,16 @@ public:
         a.sub(asmjit::x86::rax, asmjit::imm(1));
         a.jnz(loop_start);
 
-        // ----- Epilogue -----
+        // Epilogue
         a.pop(asmjit::x86::rdi);
         a.pop(asmjit::x86::rsi);
         a.pop(asmjit::x86::rbp);
         a.pop(asmjit::x86::rbx);
         a.ret();
 
-        if (runtime_.add(&current_fn_, &code) != asmjit::kErrorOk) {
+        asmjit::Error err = runtime_.add(&current_fn_, &code);
+        if (err != asmjit::kErrorOk) {
+            // Optionally log error; here we simply set to nullptr
             current_fn_ = nullptr;
         }
 
@@ -262,110 +265,108 @@ private:
         dbuf2_ = static_cast<char*>(dbuf2_orig_) + offset;
     }
 
-    static void emit_filler(asmjit::x86::Assembler& a, int instr_type, int /*idx*/, int& global_idx) {
-        static int icount = 0;
-        const int i = icount;
-        const int reg[4] = {3, 5, 6, 7};  // EBX=3, EBP=5, ESI=6, EDI=7
-        
-        int i2 = (global_idx >> 2) & 1;
-        
+    static void emit_filler(asmjit::x86::Assembler& a, int instr_type,
+                            size_t& seq_counter, int& global_idx, int /*idx_hint*/) {
+        const size_t i = seq_counter;
+        const int reg_ids[4] = {3, 5, 6, 7};   // rbx, rbp, rsi, rdi
+        asmjit::x86::Gp reg = asmjit::x86::gpb(reg_ids[i & 3]);
+
         switch (instr_type) {
-            case 0: // add (ebx, ebp, esi, edi), (ebx, ebp, esi, edi)
-                a.add(asmjit::x86::gpb(reg[i&3]), asmjit::x86::gpb(reg[i&3]));
+            case 0: // add reg, reg
+                a.add(reg, reg);
                 break;
             case 1: // nop
                 a.nop();
                 break;
-            case 2: // mov (ebx, ebp, esi, edi), (ebx, ebp, esi, edi)
-                a.mov(asmjit::x86::gpb(reg[i&3]), asmjit::x86::gpb(reg[i&3]));
+            case 2: // mov reg, reg
+                a.mov(reg, reg);
                 break;
-            case 3: // cmp (ebx, ebp, esi, edi), (ebx, ebp, esi, edi)
-                a.cmp(asmjit::x86::gpb(reg[i&3]), asmjit::x86::gpb(reg[i&3]));
+            case 3: // cmp reg, reg
+                a.cmp(reg, reg);
                 break;
-            case 4: // two-byte nop 66 90
+            case 4: // two-byte nop (66 90)
                 a.emit(0x66);
                 a.nop();
                 break;
-            case 5: // xor (ebx, ebp, esi, edi), (ebx, ebp, esi, edi)
-                a.xor_(asmjit::x86::gpb(reg[i&3]), asmjit::x86::gpb(reg[i&3]));
+            case 5: // xor reg, reg
+                a.xor_(reg, reg);
                 break;
-            case 6: // xor (ebx, ebp, esi, edi), (edi, ebx, ebp, esi)
-                a.xor_(asmjit::x86::gpb(reg[i&3]), asmjit::x86::gpb(reg[(i+1)&3]));
+            case 6: // xor reg, reg+1
+                a.xor_(reg, asmjit::x86::gpb(reg_ids[(i+1) & 3]));
                 break;
-            case 7: // mov (ebx, ebp, esi, edi), (edi, ebx, ebp, esi)
-                a.mov(asmjit::x86::gpb(reg[i&3]), asmjit::x86::gpb(reg[(i+1)&3]));
+            case 7: // mov reg, reg+1
+                a.mov(reg, asmjit::x86::gpb(reg_ids[(i+1) & 3]));
                 break;
             case 8: // movaps xmm, xmm
-                a.movaps(asmjit::x86::xmm(i&7), asmjit::x86::xmm((i+1)&7));
+                a.movaps(asmjit::x86::xmm(i & 7), asmjit::x86::xmm((i+1) & 7));
                 break;
-            case 9: // movdqa xmm, xmm SSE2
+            case 9: // movdqa xmm, xmm (SSE2)
             case 12:
-                a.movdqa(asmjit::x86::xmm(i&7), asmjit::x86::xmm((i+1)&7));
+                a.movdqa(asmjit::x86::xmm(i & 7), asmjit::x86::xmm((i+1) & 7));
                 break;
             case 10: // xorps xmm, xmm
-                a.xorps(asmjit::x86::xmm(i&7), asmjit::x86::xmm(i&7));
+                a.xorps(asmjit::x86::xmm(i & 7), asmjit::x86::xmm(i & 7));
                 break;
             case 11: // xorps xmm, xmm+1
-                a.xorps(asmjit::x86::xmm(i&7), asmjit::x86::xmm((i+1)&7));
+                a.xorps(asmjit::x86::xmm(i & 7), asmjit::x86::xmm((i+1) & 7));
                 break;
-            case 13: // movdqa xmm, xmm AVX
-                a.vmovdqa(asmjit::x86::xmm(i&7), asmjit::x86::xmm((i+1)&7));
+            case 13: // vmovdqa xmm, xmm (AVX)
+                a.vmovdqa(asmjit::x86::xmm(i & 7), asmjit::x86::xmm((i+1) & 7));
                 break;
-            case 14: // movdqa ymm, ymm AVX
-                a.vmovdqa(asmjit::x86::ymm(i&7), asmjit::x86::ymm((i+1)&7));
+            case 14: // vmovdqa ymm, ymm (AVX)
+                a.vmovdqa(asmjit::x86::ymm(i & 7), asmjit::x86::ymm((i+1) & 7));
                 break;
-            case 15: // movdqa xmm, xmm+1 SSE2
+            case 15: // movdqa xmm, xmm+1 (SSE2, low 4)
                 a.movdqa(asmjit::x86::xmm(((i&3)+0)), asmjit::x86::xmm(((i+1)&3)+0));
                 break;
-            case 16: // movdqa xmm, xmm+1 AVX
+            case 16: // vmovdqa xmm, xmm+1 (AVX, low 4)
                 a.vmovdqa(asmjit::x86::xmm(((i&3)+0)), asmjit::x86::xmm(((i+1)&3)+0));
                 break;
-            case 17: // movdqa ymm, ymm+1 AVX
+            case 17: // vmovdqa ymm, ymm+1 (AVX, low 4)
                 a.vmovdqa(asmjit::x86::ymm(((i&3)+0)), asmjit::x86::ymm(((i+1)&3)+0));
                 break;
-            case 18: // vxorps ymm, ymm, ymm AVX
-                a.vxorps(asmjit::x86::ymm(i&7), asmjit::x86::ymm(i&7), asmjit::x86::ymm(i&7));
+            case 18: // vxorps ymm, ymm, ymm
+                a.vxorps(asmjit::x86::ymm(i & 7), asmjit::x86::ymm(i & 7), asmjit::x86::ymm(i & 7));
                 break;
-            case 19: // vxorps ymm, ymm, ymm+1 AVX
-                a.vxorps(asmjit::x86::ymm(i&7), asmjit::x86::ymm(i&7), asmjit::x86::ymm((i+1)&7));
+            case 19: // vxorps ymm, ymm, ymm+1
+                a.vxorps(asmjit::x86::ymm(i & 7), asmjit::x86::ymm(i & 7), asmjit::x86::ymm((i+1) & 7));
                 break;
-            case 20:
-                if (icount & 1) {
-                    a.xorps(asmjit::x86::xmm(i&7), asmjit::x86::xmm((i+1)&7));
+            case 20: // conditional: xorps or add
+                if (seq_counter & 1) {
+                    a.xorps(asmjit::x86::xmm(i & 7), asmjit::x86::xmm((i+1) & 7));
                 } else {
                     if (sizeof(void*) == 4) {
-                        a.add(asmjit::x86::gpb(reg[i&3]), asmjit::x86::gpb(reg[i&3]));
+                        a.add(asmjit::x86::gpb(reg_ids[i & 3]), asmjit::x86::gpb(reg_ids[i & 3]));
                     } else {
                         a.add(asmjit::x86::rbx, asmjit::x86::rbx);
                     }
                 }
                 break;
-            case 21:
-                if (i2 & 1) {
-                    a.vxorps(asmjit::x86::ymm(i&7), asmjit::x86::ymm(i&7), asmjit::x86::ymm((i+1)&7));
+            case 21: // conditional: vxorps or add
+                if ((global_idx >> 2) & 1) {
+                    a.vxorps(asmjit::x86::ymm(i & 7), asmjit::x86::ymm(i & 7), asmjit::x86::ymm((i+1) & 7));
                 } else {
                     a.add(asmjit::x86::rbx, asmjit::x86::rbx);
                 }
                 break;
-            case 22:
-                a.xor_(asmjit::x86::gpb(reg[i&3]), asmjit::x86::gpb(reg[(i+1)&3]));
+            case 22: // xor reg, reg+1 (same as case 6)
+                a.xor_(reg, asmjit::x86::gpb(reg_ids[(i+1) & 3]));
                 break;
-            case 23: // sub reg, val
-                a.sub(asmjit::x86::gpb(reg[i&3]), asmjit::imm(i));
+            case 23: // sub reg, imm(i)
+                a.sub(reg, asmjit::imm(i));
                 break;
-            case 24: // add64
+            case 24: // add rbx, rbx
                 a.add(asmjit::x86::rbx, asmjit::x86::rbx);
                 break;
-            case 25: // mov64
+            case 25: // mov rbx, rcx
                 a.mov(asmjit::x86::rbx, asmjit::x86::rcx);
                 break;
             default:
                 a.nop();
                 break;
         }
-        
-        icount++;
-        global_idx++;
+        ++seq_counter;
+        ++global_idx;
     }
 
     asmjit::JitRuntime runtime_;
@@ -379,7 +380,8 @@ private:
 
 } // namespace x86_rob_detail
 
-inline void* generate_rob_code(int filler_cnt, int instr_type = 4) {
+// Wrapper functions for external use
+inline void* generate_rob_code(int filler_cnt, int instr_type) {
     return x86_rob_detail::RobCodeGenerator::instance().generate(filler_cnt, instr_type);
 }
 

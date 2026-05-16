@@ -1,4 +1,3 @@
-// measurement/rob/rob_measurer.hpp
 #pragma once
 
 #include <algorithm>
@@ -44,6 +43,7 @@ class RobMeasurer final : public core::Measurer {
         size_t required_consecutive_points = 3;
         double saturation_threshold_ratio  = 1.15;
         double fallback_jump_ratio         = 0.5;
+        size_t unroll                      = kDefaultUnroll;  
     };
 
     RobMeasurer();
@@ -51,6 +51,8 @@ class RobMeasurer final : public core::Measurer {
 
     std::string_view name() const noexcept override;
     void measure(shared_types::CpuInfoData& data) override;
+
+    void validateConfig();
 
    private:
     Config config_;
