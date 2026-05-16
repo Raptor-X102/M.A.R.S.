@@ -648,35 +648,39 @@ public:
         return gen;
     }
 
-    UopsCacheCodeGenerator(const UopsCacheCodeGenerator&) = delete;
-    UopsCacheCodeGenerator& operator=(const UopsCacheCodeGenerator&) = delete;
+    static void enable_logging(const char* filename) {
+        instance().enable_logging_impl(filename);
+    }
+
+    static void disable_logging() {
+        instance().disable_logging_impl();
+    }
 
     void* generate(size_t instr_cnt, size_t iterations, const std::vector<InstrType>& types) {
-        release_current();
+        std::lock_guard<std::mutex> lock(mutex_);
+        release_current_impl();
 
         if (types.empty() || instr_cnt == 0) return nullptr;
 
-        std::vector<EmitterFunc> emitters;
-        emitters.reserve(types.size());
-        for (InstrType t : types) {
-            emitters.push_back(get_emitter(t));
-        }
-
         asmjit::CodeHolder code;
         code.init(runtime_.environment());
-        asmjit::x86::Assembler a(&code);
+
         std::unique_ptr<asmjit::FileLogger> logger;
         if (log_file_) {
             ++gen_call_count_;
             fprintf(log_file_, "\n\n;;; ========================================\n");
-            fprintf(log_file_, ";;; Generated function #%d (instr_cnt=%zu, types: ", gen_call_count_, instr_cnt);
-            for (auto t : types) fprintf(log_file_, "%d ", (int)t);
+            fprintf(log_file_, ";;; Generated function #%d (instr_cnt=%zu, iterations=%zu, types: ",
+                    gen_call_count_, instr_cnt, iterations);
+            for (auto t : types) fprintf(log_file_, "%d ", static_cast<int>(t));
             fprintf(log_file_, ")\n;;; ========================================\n");
             fflush(log_file_);
             logger = std::make_unique<asmjit::FileLogger>(log_file_);
             asmjit_set_logger(code, logger.get());
         }
 
+        asmjit::x86::Assembler a(&code);
+
+        // Save non-volatile registers (per System V AMD64 ABI)
         a.push(asmjit::x86::rbx);
         a.push(asmjit::x86::rbp);
         a.push(asmjit::x86::rsi);
@@ -685,18 +689,22 @@ public:
         a.push(asmjit::x86::r13);
         a.push(asmjit::x86::r14);
         a.push(asmjit::x86::r15);
+
         a.mov(asmjit::x86::rcx, asmjit::imm(iterations));
         a.align(asmjit::AlignMode::kCode, 16);
         asmjit::Label loop_start = asmjit_new_label(a);
         a.bind(loop_start);
 
-        size_t num_types = emitters.size();
+        // Generate the sequence of instructions
         for (size_t i = 0; i < instr_cnt; ++i) {
-            emitters[i % num_types](a, i);
+            InstrType type = types[i % types.size()];
+            emit_instruction(a, i, type);
         }
 
         a.dec(asmjit::x86::rcx);
         a.jnz(loop_start);
+
+        // Restore registers
         a.pop(asmjit::x86::r15);
         a.pop(asmjit::x86::r14);
         a.pop(asmjit::x86::r13);
@@ -710,92 +718,123 @@ public:
         void* fn = nullptr;
         if (runtime_.add(&fn, &code) == asmjit::kErrorOk) {
             current_function_ = fn;
-            __builtin___clear_cache(reinterpret_cast<char*>(fn),
-                                    reinterpret_cast<char*>(fn) + asmjit_code_size(code));
+            // Clear instruction cache (required for JIT on some architectures)
+            clear_cache(fn, asmjit_code_size(code));
         }
         return fn;
     }
 
     void release_current() {
+        std::lock_guard<std::mutex> lock(mutex_);
+        release_current_impl();
+    }
+
+private:
+    UopsCacheCodeGenerator()
+        : log_file_(nullptr)
+        , gen_call_count_(0)
+        , current_function_(nullptr) {
+    }
+
+    ~UopsCacheCodeGenerator() {
+        release_current_impl();
+        if (log_file_) fclose(log_file_);
+    }
+
+    void enable_logging_impl(const char* filename) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (log_file_) fclose(log_file_);
+        log_file_ = fopen(filename, "w");
+        if (!log_file_) {
+            SPDLOG_WARN("UopsCacheCodeGenerator: failed to open log file '{}'", filename);
+        }
+    }
+
+    void disable_logging_impl() {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (log_file_) {
+            fclose(log_file_);
+            log_file_ = nullptr;
+        }
+    }
+
+    void release_current_impl() {
         if (current_function_) {
             runtime_.release(current_function_);
             current_function_ = nullptr;
         }
     }
 
-private:
-    FILE* log_file_ = nullptr;
-    int gen_call_count_ = 0;
-    void* current_function_ = nullptr;  
-    asmjit::JitRuntime runtime_;
+    void clear_cache(void* addr, size_t size) {
+#if defined(__GNUC__) || defined(__clang__)
+        __builtin___clear_cache(reinterpret_cast<char*>(addr),
+                                reinterpret_cast<char*>(addr) + size);
+#elif defined(_MSC_VER)
+        FlushInstructionCache(GetCurrentProcess(), addr, size);
+#else
+        // Fallback: do nothing
+#endif
+    }
 
-    UopsCacheCodeGenerator() {
-        log_file_ = fopen("uops_cache_code_dump.txt", "w");
-        if (!log_file_) {
-            SPDLOG_WARN("failed to open logging file");
+    void emit_instruction(asmjit::x86::Assembler& a, size_t idx, InstrType type) {
+        // Choose destination register based on idx to break dependencies
+        asmjit::x86::Gp dst = dst_reg(idx);
+
+        switch (type) {
+            case InstrType::NOP:
+                a.nop();
+                break;
+            case InstrType::ADD_IMM1:
+                a.add(dst, asmjit::imm(1));
+                break;
+            case InstrType::ADD_REG:
+                // Use different source register to avoid self-dependency
+                a.add(dst, dst_reg(idx + 1));
+                break;
+            default:
+                // Unknown instruction type – emit nop
+                a.nop();
+                break;
         }
     }
 
-    ~UopsCacheCodeGenerator() {
-        release_current();
-        if (log_file_) fclose(log_file_);
+    static asmjit::x86::Gp dst_reg(size_t idx) {
+        static constexpr asmjit::x86::Gp kAllRegs[] = {
+            asmjit::x86::rax, asmjit::x86::rbx,
+            asmjit::x86::rbp, asmjit::x86::rsi, asmjit::x86::rdi,
+            asmjit::x86::r8,  asmjit::x86::r9,  asmjit::x86::r10, asmjit::x86::r11,
+            asmjit::x86::r12, asmjit::x86::r13, asmjit::x86::r14, asmjit::x86::r15
+        };
+        constexpr size_t kNumRegs = sizeof(kAllRegs) / sizeof(kAllRegs[0]);
+        return kAllRegs[idx % kNumRegs];
     }
 
-    using EmitterFunc = void(*)(asmjit::x86::Assembler&, size_t idx);
-
-    static constexpr asmjit::x86::Gp kAllRegs[] = {
-        asmjit::x86::rax, asmjit::x86::rbx,
-        asmjit::x86::rbp, asmjit::x86::rsi, asmjit::x86::rdi,
-        asmjit::x86::r8,  asmjit::x86::r9,  asmjit::x86::r10, asmjit::x86::r11,
-        asmjit::x86::r12, asmjit::x86::r13, asmjit::x86::r14, asmjit::x86::r15
-    };
-    static constexpr size_t kNumRegs = sizeof(kAllRegs) / sizeof(kAllRegs[0]);
-
-    static auto dst_reg(size_t idx) { return kAllRegs[idx % kNumRegs]; }
-
-    static void emit_add_reg(asmjit::x86::Assembler& a, size_t /*idx*/) { a.add(dst_reg(0), dst_reg(0)); }
-    static void emit_add_imm1(asmjit::x86::Assembler& a, size_t idx) { a.add(dst_reg(idx), asmjit::imm(1)); }
-    static void emit_nop(asmjit::x86::Assembler& a, size_t) { a.nop(); }
-
-    // TODO: either change logic, or add more emitters
-    static EmitterFunc get_emitter(InstrType type) {
-        static constexpr std::array<EmitterFunc, 21> table{{
-            emit_nop,           // NOP
-            emit_add_imm1,      // ADD_IMM1
-            emit_nop,           // NOP
-            emit_nop,           // NOP
-            emit_add_reg,       // ADD_REG
-            emit_nop,           // NOP
-            emit_nop,           // NOP
-            emit_nop,           // NOP
-            emit_nop,           // NOP
-            emit_nop,           // NOP
-            emit_nop,           // NOP
-            emit_nop,           // NOP
-            emit_nop,           // NOP
-            emit_nop,           // NOP
-            emit_nop,           // NOP
-            emit_nop,           // NOP
-            emit_nop,           // NOP
-            emit_nop,           // NOP
-            emit_nop,           // NOP
-            emit_nop,           // NOP
-            emit_nop,           // NOP
-        }};
-        return table.at(static_cast<size_t>(type));
-    }
+private:
+    FILE* log_file_;
+    int gen_call_count_;
+    void* current_function_;
+    asmjit::JitRuntime runtime_;
+    std::mutex mutex_;
 };
 
 } // namespace x86_uops_cache_detail
 
-inline void* generate_uops_cache_code(size_t instr_cnt, 
-                                              size_t iterations, 
-                                              const std::vector<InstrType>& types) {
-    return x86_uops_cache_detail::UopsCacheCodeGenerator::instance().generate(instr_cnt,iterations, types);
+inline void* generate_uops_cache_code(size_t instr_cnt,
+                                      size_t iterations,
+                                      const std::vector<InstrType>& types) {
+    return x86_uops_cache_detail::UopsCacheCodeGenerator::instance().generate(instr_cnt, iterations, types);
 }
 
 inline void release_uops_cache_code() {
     x86_uops_cache_detail::UopsCacheCodeGenerator::instance().release_current();
+}
+
+inline void enable_uops_cache_code_logging(const char* filename) {
+    x86_uops_cache_detail::UopsCacheCodeGenerator::enable_logging(filename);
+}
+
+inline void disable_uops_cache_code_logging() {
+    x86_uops_cache_detail::UopsCacheCodeGenerator::disable_logging();
 }
 
 namespace x86_branch_target_buffer_detail {

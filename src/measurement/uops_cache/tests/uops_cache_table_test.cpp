@@ -18,7 +18,6 @@ struct UopsCase {
     const char* name;
     std::vector<size_t> counts;
     std::vector<UopsCacheResult> results;
-    std::vector<std::string> events;
     size_t expected_approx_saturation;
 };
 
@@ -28,25 +27,23 @@ TEST(UopsCacheTableTest, FindsApproximateSaturationFromTable) {
             "largest_dsb_drop",
             {1200, 1300, 1400, 1500, 1600},
             {
-                {1.0, 1000.0, 0.1, {10, 90}},
-                {1.0, 1000.0, 0.1, {12, 88}},
-                {1.0, 1000.0, 0.1, {15, 85}},
-                {1.0, 1000.0, 0.1, {60, 40}},
-                {1.0, 1000.0, 0.1, {65, 35}},
+                {1.0, 0.1, {10, 90}},   // mite=10, dsb=90 → share=0.9
+                {1.0, 0.1, {12, 88}},   // share=0.88
+                {1.0, 0.1, {15, 85}},   // share=0.85
+                {1.0, 0.1, {60, 40}},   // share=0.4  (drop 0.45)
+                {1.0, 0.1, {65, 35}},   // share=0.35
             },
-            {"mite_uops", "dsb_uops"},
-            1400,
+            1400,  // index of the point before the largest drop
         },
         {
-            "missing_required_events",
+            "no_significant_drop",
             {1200, 1300, 1400},
             {
-                {1.0, 1000.0, 0.1, {10, 90}},
-                {1.0, 1000.0, 0.1, {20, 80}},
-                {1.0, 1000.0, 0.1, {30, 70}},
+                {1.0, 0.1, {10, 90}},   // 0.9
+                {1.0, 0.1, {20, 80}},   // 0.8 (drop 0.1)
+                {1.0, 0.1, {30, 70}},   // 0.7 (drop 0.1)
             },
-            {"other_event", "another_event"},
-            0,
+            0,  // max drop 0.1 < config_.dsb_drop_significant (0.2)
         },
     };
 
@@ -54,7 +51,7 @@ TEST(UopsCacheTableTest, FindsApproximateSaturationFromTable) {
         SCOPED_TRACE(test_case.name);
         UopsCacheMeasurer measurer;
         EXPECT_EQ(
-            measurer.findApproxSaturation(test_case.counts, test_case.results, test_case.events),
+            measurer.findApproxSaturation(test_case.counts, test_case.results),
             test_case.expected_approx_saturation
         );
     }

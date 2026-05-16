@@ -1,8 +1,8 @@
-// measurement/uops_cache/uops_cache_measurer.hpp
 #pragma once
 
 #include <algorithm>
 #include <cmath>
+#include <memory>
 #include <numeric>
 #include <string>
 #include <vector>
@@ -16,14 +16,13 @@
 
 namespace silicon_probe::uops_cache {
 
-struct IstructionData {
+struct InstructionData {  
     platform::arch::InstrType instr_type;
     std::string instr_name;
 };
 
 struct UopsCacheResult {
     double avg_ticks_per_instr;
-    double avg_ticks_per_iter;
     double ticks_std;
     std::vector<uint64_t> avg_events_counts;
 };
@@ -35,7 +34,7 @@ struct UopsCacheSaturationPoint {
 };
 
 class UopsCacheMeasurer final : public core::Measurer {
-   public:
+public:
     using InstrType = platform::arch::InstrType;
 
     static constexpr size_t kDefaultMinInstrCnt      = 1200;
@@ -54,7 +53,7 @@ class UopsCacheMeasurer final : public core::Measurer {
         size_t iterations           = kDefaultIterations;
         size_t repeats              = kDefaultRepeats;
         size_t warmup_iterations    = kDefaultWarmupIterations;
-        IstructionData instr        = {InstrType::ADD_REG, "add reg"};
+        InstructionData instr       = {InstrType::ADD_REG, "add reg"};
         double dsb_share_stop       = 0.3;
         double dsb_share_refine     = 0.8;
         double dsb_drop_significant = 0.2;
@@ -67,17 +66,19 @@ class UopsCacheMeasurer final : public core::Measurer {
     std::string_view name() const noexcept override;
     void measure(shared_types::CpuInfoData& data) override;
 
-   private:
+private:
     Config config_;
 
-    UopsCacheResult
-    run_test(size_t instr_cnt, platform::pmc::PmcGroup* pmc, const std::vector<std::string>& uops_events);
-    size_t findApproxSaturation(
-        const std::vector<size_t>& counts,
-        const std::vector<UopsCacheResult>& results,
-        const std::vector<std::string>& uops_events
-    );
-    size_t refineSaturation(size_t approx, platform::pmc::PmcGroup* pmc, const std::vector<std::string>& uops_events);
+    void validateConfig();
+    uint8_t get_instr_uops_size(InstrType type);
+    UopsCacheResult run_test(size_t instr_cnt,
+                             platform::pmc::PmcGroup* pmc,
+                             const std::vector<std::string>& uops_events);
+    size_t findApproxSaturation(const std::vector<size_t>& counts,
+                                const std::vector<UopsCacheResult>& results);
+    size_t refineSaturation(size_t approx,
+                            platform::pmc::PmcGroup* pmc,
+                            const std::vector<std::string>& uops_events);
 };
 
 }  // namespace silicon_probe::uops_cache
