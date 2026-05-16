@@ -8,6 +8,7 @@ namespace silicon_probe::store_to_load_forwarding {
 StoreToLoadForwardingMeasurer::StoreToLoadForwardingMeasurer() : StoreToLoadForwardingMeasurer(Config{}) {}
 
 StoreToLoadForwardingMeasurer::StoreToLoadForwardingMeasurer(Config config) : config_(std::move(config)) {
+    validateConfig();
     SPDLOG_DEBUG(
         "[{}] cfg: offsets={}..{} step={} iter={} repeats={} growth={}",
         name(),
@@ -21,6 +22,50 @@ StoreToLoadForwardingMeasurer::StoreToLoadForwardingMeasurer(Config config) : co
 }
 
 std::string_view StoreToLoadForwardingMeasurer::name() const noexcept { return "store-to-load forwarding"; }
+
+void StoreToLoadForwardingMeasurer::validateConfig() {
+    // min_offset и max_offset
+    if (config_.min_offset > config_.max_offset) {
+        std::swap(config_.min_offset, config_.max_offset);
+    }
+    if (config_.min_offset != 0) {
+        SPDLOG_WARN("[{}] min_offset must be 0 for STLF measurement, forcing to 0", name());
+        config_.min_offset = 0;
+    }
+    if (config_.max_offset >= kDefaultBufferSize) {
+        config_.max_offset = kDefaultBufferSize - 1;
+    }
+
+    // offset_step
+    if (config_.offset_step == 0) {
+        config_.offset_step = kDefaultOffsetStep;
+    }
+
+    // iterations
+    if (config_.iterations == 0) {
+        config_.iterations = kDefaultIterations;
+    }
+
+    // repeats
+    if (config_.repeats == 0) {
+        config_.repeats = kDefaultRepeats;
+    }
+
+    // warmup_iterations
+    if (config_.warmup_iterations == 0) {
+        config_.warmup_iterations = kDefaultWarmupIterations;
+    }
+
+    // time_growth_ratio
+    if (config_.time_growth_ratio < 1.0) {
+        config_.time_growth_ratio = 1.5;   // или другое разумное значение
+    }
+
+    // pmc_saturation_ratio
+    if (config_.pmc_saturation_ratio < 0.0 || config_.pmc_saturation_ratio > 1.0) {
+        config_.pmc_saturation_ratio = 0.01;
+    }
+}
 
 void StoreToLoadForwardingMeasurer::measure(shared_types::CpuInfoData& data) {
     SPDLOG_INFO("[{}] starting store-to-load forwarding measurement", name());
@@ -43,8 +88,8 @@ void StoreToLoadForwardingMeasurer::measure(shared_types::CpuInfoData& data) {
         }
     }
 
-    size_t best_size   = 0;
-    size_t best_offset = 0;
+    std::optional<size_t> best_size;
+    std::optional<size_t> best_offset;
 
     // Try sizes 8,4,2,1
     for (size_t size : {8, 4, 2, 1}) {
@@ -88,8 +133,11 @@ void StoreToLoadForwardingMeasurer::measure(shared_types::CpuInfoData& data) {
             if (ratio < config_.pmc_saturation_ratio)
                 zero_works = true;
         } else {
-            if (max_off > 0 && results[0].avg_ticks < results.back().avg_ticks * config_.time_growth_ratio)
+            if (max_off == 0) {
                 zero_works = true;
+            } else if (results[0].avg_ticks < results.back().avg_ticks * config_.time_growth_ratio) {
+                zero_works = true;
+            }
         }
 
         if (!zero_works) {
@@ -118,13 +166,17 @@ void StoreToLoadForwardingMeasurer::measure(shared_types::CpuInfoData& data) {
                 break;
         }
 
-        SPDLOG_DEBUG("[{}] size {} works, max offset = {}", name(), best_size, best_offset);
+        SPDLOG_DEBUG("[{}] size {} works, max offset = {}", name(), *best_size, *best_offset);
         break;  // largest working size found
     }
 
     data.s2l_fwd_max_size   = best_size;
     data.s2l_fwd_max_offset = best_offset;
-    SPDLOG_INFO("[{}] result: size={} bytes, max_offset={}", name(), best_size, best_offset);
+
+    if (best_size) // best_offset is set automatically if size is set
+        SPDLOG_INFO("[{}] result: size={} bytes, max_offset={}", name(), *best_size, *best_offset);
+    else
+        SPDLOG_INFO("[{}] Store-to-load-forwarding is not supported");
 }
 
 template <size_t N>
