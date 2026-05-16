@@ -163,84 +163,49 @@ void RobMeasurer::measure(shared_types::CpuInfoData& data) {
 
 int RobMeasurer::detectRobSaturation(const std::vector<Result>& results) {
     if (results.size() < kMinResultsCnt) return -1;
-
-    std::vector<double> values;
-    values.reserve(results.size());
-    for (const auto& r : results) values.push_back(r.avg_cycles_per_iter);
-
-    // ---- Step 1: find maximum relative jump ----
-    size_t max_jump_idx = 0;
-    double max_rel_jump = 0.0;
-    for (size_t i = 1; i < results.size(); ++i) {
-        double prev = values[i-1];
-        double curr = values[i];
-        if (prev == 0.0) continue;
-        double rel_jump = (curr - prev) / prev;
-        if (rel_jump > max_rel_jump) {
-            max_rel_jump = rel_jump;
-            max_jump_idx = i;
-        }
+    
+    size_t res_cnt = results.size();
+    std::vector<std::pair<size_t, double>> deltas(res_cnt - 1);
+    auto curr_val = results[0].avg_cycles_per_iter;
+    for (size_t idx = 1; idx < res_cnt; ++idx) {
+        auto next_val = results[idx].avg_cycles_per_iter;
+        deltas[idx - 1] = {idx, (next_val - curr_val) / curr_val };
+        curr_val = next_val;
     }
 
-    SPDLOG_DEBUG("[{}] max_rel_jump={:.3f} at filler={}", 
-                 name(), max_rel_jump, results[max_jump_idx].filler);
+    std::make_heap(deltas.begin(), deltas.end(),
+        [](const auto& a, const auto& b) { return a.second < b.second; });
 
-    if (max_rel_jump > config_.fallback_jump_ratio) {
+    auto first_max_jump = deltas.front();
+
+    while (!deltas.empty()) {
+        std::pop_heap(deltas.begin(), deltas.end(),
+            [](const auto& a, const auto& b) { return a.second < b.second; });
+        auto& [max_jump_idx, _] = deltas.back();
+        
         bool sustained = true;
-        size_t verify_cnt = std::min<size_t>(config_.required_consecutive_points, 
+        size_t verify_cnt = std::min<size_t>(config_.required_consecutive_points,
                                              results.size() - max_jump_idx);
+        size_t verify_idx = max_jump_idx + verify_cnt;
         if (verify_cnt > 0) {
-            double first_after = values[max_jump_idx];
-            double drop_tolerance = config_.sustain_threshold;   // вместо 0.9
-            for (size_t k = 1; k < verify_cnt; ++k) {
-                if (values[max_jump_idx + k] < first_after * drop_tolerance) {
+            double after_jump = results[max_jump_idx].avg_cycles_per_iter;
+            double drop_tolerance = config_.sustain_threshold;
+            for (size_t k = max_jump_idx + 1; k < verify_idx; ++k) {
+                if (results[k].avg_cycles_per_iter < after_jump * drop_tolerance) {
                     sustained = false;
-                    SPDLOG_DEBUG("[{}] jump not sustained: value at filler={} dropped below {:.2f}",
-                                 name(), results[max_jump_idx + k].filler, first_after * drop_tolerance);
                     break;
                 }
             }
         }
         if (sustained) {
-            int rob = static_cast<int>(results[max_jump_idx].filler) + 1;
-            SPDLOG_DEBUG("[{}] using jump method, ROB={}", name(), rob);
-            return rob;
-        } else {
-            SPDLOG_DEBUG("[{}] jump discarded, falling back to threshold method", name());
+            return static_cast<int>(results[max_jump_idx].filler);
         }
+
+        deltas.pop_back();
     }
 
-    // ---- Step 2: fallback to threshold-based consecutive detection ----
-    size_t baseline_cnt = std::max<size_t>(
-        config_.baseline_min_samples,
-        static_cast<size_t>(std::ceil(static_cast<double>(results.size()) * config_.baseline_fraction))
-    );
-    baseline_cnt = std::min(baseline_cnt, results.size());
-
-    std::vector<double> baseline_vals(values.begin(), values.begin() + baseline_cnt);
-    double baseline = silicon_probe::common::statistics::compute_median(baseline_vals);
-    double threshold = baseline * config_.saturation_threshold_ratio;
-
-    size_t consecutive = 0;
-    size_t jump_idx = results.size();
-
-    for (size_t i = baseline_cnt; i < results.size(); ++i) {
-        if (values[i] > threshold) {
-            ++consecutive;
-            if (consecutive >= config_.required_consecutive_points) {
-                jump_idx = i - config_.required_consecutive_points + 1;
-                break;
-            }
-        } else {
-            consecutive = 0;
-        }
-    }
-
-    if (jump_idx < results.size()) {
-        return static_cast<int>(results[jump_idx].filler) + 1;
-    }
-
-    return -1;
+    // fallback: the largest jump 
+    return static_cast<int>(results[first_max_jump.first].filler);
 }
 
 }  // namespace silicon_probe::rob

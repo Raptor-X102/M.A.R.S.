@@ -38,7 +38,7 @@ TEST(RobTableTest, DetectsRobSaturationFromTable) {
                 {130, 1.0, 1.28, 1.3},
                 {140, 1.0, 1.30, 1.3},
             },
-            101,
+            100,
         },
         {
             "fallback_to_max_diff",
@@ -54,7 +54,7 @@ TEST(RobTableTest, DetectsRobSaturationFromTable) {
                 {130, 1.0, 1.12, 1.3},
                 {140, 1.0, 1.08, 1.3},
             },
-            111,
+            100,
         },
         {
             "insufficient_points",
