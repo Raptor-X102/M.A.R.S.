@@ -42,7 +42,8 @@ class RobMeasurer final : public core::Measurer {
         size_t baseline_min_samples        = 5;
         size_t required_consecutive_points = 3;
         double saturation_threshold_ratio  = 1.15;
-        double fallback_jump_ratio         = 0.5;
+        double fallback_jump_ratio         = 0.15;
+        double sustain_threshold = 0.9;
         size_t unroll                      = kDefaultUnroll;  
     };
 

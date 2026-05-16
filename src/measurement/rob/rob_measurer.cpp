@@ -166,11 +166,51 @@ int RobMeasurer::detectRobSaturation(const std::vector<Result>& results) {
 
     std::vector<double> values;
     values.reserve(results.size());
-    for (const auto& r : results) {
-        values.push_back(r.avg_cycles_per_iter);
+    for (const auto& r : results) values.push_back(r.avg_cycles_per_iter);
+
+    // ---- Step 1: find maximum relative jump ----
+    size_t max_jump_idx = 0;
+    double max_rel_jump = 0.0;
+    for (size_t i = 1; i < results.size(); ++i) {
+        double prev = values[i-1];
+        double curr = values[i];
+        if (prev == 0.0) continue;
+        double rel_jump = (curr - prev) / prev;
+        if (rel_jump > max_rel_jump) {
+            max_rel_jump = rel_jump;
+            max_jump_idx = i;
+        }
     }
 
-    // Compute baseline median from first baseline_fraction points
+    SPDLOG_DEBUG("[{}] max_rel_jump={:.3f} at filler={}", 
+                 name(), max_rel_jump, results[max_jump_idx].filler);
+
+    if (max_rel_jump > config_.fallback_jump_ratio) {
+        bool sustained = true;
+        size_t verify_cnt = std::min<size_t>(config_.required_consecutive_points, 
+                                             results.size() - max_jump_idx);
+        if (verify_cnt > 0) {
+            double first_after = values[max_jump_idx];
+            double drop_tolerance = config_.sustain_threshold;   // вместо 0.9
+            for (size_t k = 1; k < verify_cnt; ++k) {
+                if (values[max_jump_idx + k] < first_after * drop_tolerance) {
+                    sustained = false;
+                    SPDLOG_DEBUG("[{}] jump not sustained: value at filler={} dropped below {:.2f}",
+                                 name(), results[max_jump_idx + k].filler, first_after * drop_tolerance);
+                    break;
+                }
+            }
+        }
+        if (sustained) {
+            int rob = static_cast<int>(results[max_jump_idx].filler) + 1;
+            SPDLOG_DEBUG("[{}] using jump method, ROB={}", name(), rob);
+            return rob;
+        } else {
+            SPDLOG_DEBUG("[{}] jump discarded, falling back to threshold method", name());
+        }
+    }
+
+    // ---- Step 2: fallback to threshold-based consecutive detection ----
     size_t baseline_cnt = std::max<size_t>(
         config_.baseline_min_samples,
         static_cast<size_t>(std::ceil(static_cast<double>(results.size()) * config_.baseline_fraction))
@@ -178,13 +218,12 @@ int RobMeasurer::detectRobSaturation(const std::vector<Result>& results) {
     baseline_cnt = std::min(baseline_cnt, results.size());
 
     std::vector<double> baseline_vals(values.begin(), values.begin() + baseline_cnt);
-    double baseline = statistics::compute_median(baseline_vals);
-
+    double baseline = silicon_probe::common::statistics::compute_median(baseline_vals);
     double threshold = baseline * config_.saturation_threshold_ratio;
+
     size_t consecutive = 0;
     size_t jump_idx = results.size();
 
-    // Linear scan for required_consecutive_points consecutive values above threshold
     for (size_t i = baseline_cnt; i < results.size(); ++i) {
         if (values[i] > threshold) {
             ++consecutive;
@@ -198,22 +237,7 @@ int RobMeasurer::detectRobSaturation(const std::vector<Result>& results) {
     }
 
     if (jump_idx < results.size()) {
-        // ROB size = filler value at jump point + 1
         return static_cast<int>(results[jump_idx].filler) + 1;
-    }
-
-    // Fallback: detect maximum consecutive difference (for clear jumps)
-    double max_diff = 0.0;
-    size_t max_diff_idx = 0;
-    for (size_t i = baseline_cnt; i < results.size() - 1; ++i) {
-        double diff = values[i + 1] - values[i];
-        if (diff > max_diff) {
-            max_diff = diff;
-            max_diff_idx = i;
-        }
-    }
-    if (max_diff > baseline * config_.fallback_jump_ratio) {
-        return static_cast<int>(results[max_diff_idx + 1].filler) + 1;
     }
 
     return -1;

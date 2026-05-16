@@ -151,7 +151,7 @@ public:
 
         // Align loop start to 16 bytes
         a.align(asmjit::AlignMode::kCode, 16);
-        asmjit::Label loop_start = a.new_label();
+        asmjit::Label loop_start = asmjit_new_label(a);
         a.bind(loop_start);
 
         // Filler sequence counter (replaces static icount)

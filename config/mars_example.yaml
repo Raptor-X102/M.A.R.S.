@@ -6,7 +6,7 @@ common:
 
 benchmarks:
   cache:
-    enabled: true
+    enabled: false
     levels: [l1, l2, l3]
     limits:
         l1_max: 128KiB
@@ -49,12 +49,12 @@ benchmarks:
       huge_pages: false
 
   rob:
-    enabled: false
+    enabled: true
 
     measurement:
-      min_instr_cnt: 50
-      max_instr_cnt: 300
-      instr_cnt_step: 10
+      min_instr_cnt: 200
+      max_instr_cnt: 260
+      instr_cnt_step: 2
       warmup_iterations: 2
       inner_iterations: 8192
       outer_iterations: 64
@@ -65,7 +65,7 @@ benchmarks:
       baseline_min_samples: 5
       required_consecutive_points: 3
       saturation_threshold_ratio: 1.15
-      fallback_jump_ratio: 0.50
+      fallback_jump_ratio: 0.15
 
   branch_history_table:
     enabled: false
@@ -83,7 +83,7 @@ benchmarks:
       min_recursion_depth: 1
       max_recursion_depth: 48
       recursion_depth_step: 1
-      iterations: 5000000
+      iterations: 10000
     
     detection:
       trim_ratio: 0.05              # trim 5% outliers from each end

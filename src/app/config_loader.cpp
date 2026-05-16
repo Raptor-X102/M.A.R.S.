@@ -903,6 +903,14 @@ class RobConfigParser final : public BenchmarkConfigParserBase<silicon_probe::ro
                     config.fallback_jump_ratio = parse_double_scalar(node, node_path);
                 }
             );
+            with_optional_node(
+                detection,
+                "sustain_threshold",
+                detection_path,
+                [&](const YAML::Node& node, const std::string& node_path) {
+                    config.sustain_threshold = parse_double_scalar(node, node_path);
+                }
+            );
         });
     }
 };
