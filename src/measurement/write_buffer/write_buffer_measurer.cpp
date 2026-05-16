@@ -172,7 +172,7 @@ WriteBufferResult WriteBufferMeasurer::measure_for_writes(
             for (size_t i = 0; i < num_writes; ++i) {
                 platform::arch::clflush(&fill_base[i * kStride]);
             }
-            platform::arch::clflush((void*)(extra_addr));
+            platform::arch::clflush(const_cast<void*>(reinterpret_cast<const volatile void*>(extra_addr)));
             platform::arch::flush_complete();
 
             // fill store buffer
