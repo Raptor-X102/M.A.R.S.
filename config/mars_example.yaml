@@ -49,7 +49,7 @@ benchmarks:
       huge_pages: false
 
   rob:
-    enabled: true
+    enabled: false
 
     measurement:
       min_instr_cnt: 200
@@ -157,18 +157,12 @@ benchmarks:
       #alignment: 16
 
   write_buffer:
-    enabled: false
+    enabled: true
 
     measurement:
-      max_writes: 64
-      min_writes: 1
+      max_writes: 80
+      min_writes: 40
       writes_step: 1
       iterations: 5000
       repeats: 30
       warmup_iterations: 5
-    detection:
-      latency_spike_ratio: 2.0     
-      latency_jump_ratio: 0.5     
-      stall_confirm_ratio: 0.8   
-      stall_fallback_ratio: 0.9 
-      baseline_window: 3       

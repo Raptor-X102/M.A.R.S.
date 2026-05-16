@@ -1676,18 +1676,10 @@ class WriteBufferConfigParser final
             );
             with_optional_node(
                 detection,
-                "latency_jump_ratio",
+                "latency_hold_ratio",
                 detection_path,
                 [&](const YAML::Node& node, const std::string& node_path) {
-                    config.latency_jump_ratio = parse_double_scalar(node, node_path);
-                }
-            );
-            with_optional_node(
-                detection,
-                "stall_confirm_ratio",
-                detection_path,
-                [&](const YAML::Node& node, const std::string& node_path) {
-                    config.stall_confirm_ratio = parse_double_scalar(node, node_path);
+                    config.latency_hold_ratio = parse_double_scalar(node, node_path);
                 }
             );
             with_optional_node(
@@ -1704,6 +1696,38 @@ class WriteBufferConfigParser final
                 detection_path,
                 [&](const YAML::Node& node, const std::string& node_path) {
                     config.baseline_window = parse_size_scalar(node, node_path);
+                }
+            );
+            with_optional_node(
+                detection,
+                "stall_baseline_ratio",
+                detection_path,
+                [&](const YAML::Node& node, const std::string& node_path) {
+                    config.stall_baseline_ratio = parse_double_scalar(node, node_path);
+                }
+            );
+            with_optional_node(
+                detection,
+                "stall_absolute_min",
+                detection_path,
+                [&](const YAML::Node& node, const std::string& node_path) {
+                    config.stall_absolute_min = parse_double_scalar(node, node_path);
+                }
+            );
+            with_optional_node(
+                detection,
+                "stall_gradient_ratio",
+                detection_path,
+                [&](const YAML::Node& node, const std::string& node_path) {
+                    config.stall_gradient_ratio = parse_double_scalar(node, node_path);
+                }
+            );
+            with_optional_node(
+                detection,
+                "stall_median_window",
+                detection_path,
+                [&](const YAML::Node& node, const std::string& node_path) {
+                    config.stall_median_window = parse_size_scalar(node, node_path);
                 }
             );
         });

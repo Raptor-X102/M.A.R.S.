@@ -32,6 +32,7 @@ class WriteBufferMeasurer final : public core::Measurer {
     static constexpr size_t kBufferSizeMB            = 16;
     static constexpr size_t kBytesPerEntry           = 4;
     static constexpr size_t kCacheLineSize           = 64;
+    static constexpr size_t kStride = kCacheLineSize / kBytesPerEntry;   // = 16
 
     struct Config {
         bool enabled = true;
@@ -43,11 +44,14 @@ class WriteBufferMeasurer final : public core::Measurer {
         size_t repeats           = kDefaultRepeats;
         size_t warmup_iterations = kDefaultWarmupIterations;
 
-        double latency_spike_ratio  = 2.0;  // latency > baseline * this → overflow
-        double latency_jump_ratio   = 0.5;  // (lat[i] - lat[i-1]) / lat[i-1] > this → overflow
-        double stall_confirm_ratio  = 0.8;  // if latency spike found, require stalls > max_stalls * this
-        double stall_fallback_ratio = 0.9;  // if no latency spike, first point where stalls > max_stalls * this
-        size_t baseline_window      = 3;    // number of initial points for baseline latency
+        double latency_spike_ratio  = 2.0;   // latency > baseline * this → overflow
+        double latency_hold_ratio   = 1.5;   // for follow-up check after spike
+        double stall_fallback_ratio = 0.9;   // if no latency spike, use stalls > max_stalls * this
+        size_t baseline_window      = 3;     // number of initial points for baseline latency
+        double stall_baseline_ratio = 10.0;    // stalls > baseline_stalls * this -> overflow
+        double stall_absolute_min = 100.0;     // absolute minimum stalls threshold
+        double stall_gradient_ratio = 10.0;     // (stalls[i] - stalls[i-1]) / stalls[i-1] > this -> overflow
+        size_t stall_median_window = 3;
     };
 
     WriteBufferMeasurer();
@@ -59,6 +63,7 @@ class WriteBufferMeasurer final : public core::Measurer {
    private:
     Config config_;
 
+    void validateConfig();
     WriteBufferResult measure_for_writes(
         size_t num_writes,
         int* fill_base,
@@ -69,10 +74,9 @@ class WriteBufferMeasurer final : public core::Measurer {
     size_t analyze_buffer_capacity(
         const std::vector<WriteBufferResult>& results,
         const std::vector<size_t>& writes_list,
-        bool has_pmc,
         size_t sb_idx,
         size_t bound_idx
-    );
+    ) const;
 };
 
 }  // namespace silicon_probe::write_buffer
