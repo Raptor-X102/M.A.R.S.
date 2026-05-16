@@ -27,6 +27,7 @@ class RobMeasurer final : public core::Measurer {
     static constexpr size_t kDefaultOuterIterations  = 64;
     static constexpr size_t kDefaultUnroll           = 17;
     static constexpr int kDefaultInstrType           = 4;
+    static constexpr int kMinResultsCnt              = 8;
 
     struct Config {
         bool enabled = true;
@@ -45,6 +46,7 @@ class RobMeasurer final : public core::Measurer {
         double fallback_jump_ratio         = 0.15;
         double sustain_threshold = 0.9;
         size_t unroll                      = kDefaultUnroll;  
+        int min_res_cnt                    = kMinResultsCnt;  
     };
 
     RobMeasurer();

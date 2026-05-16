@@ -162,7 +162,7 @@ void RobMeasurer::measure(shared_types::CpuInfoData& data) {
 }
 
 int RobMeasurer::detectRobSaturation(const std::vector<Result>& results) {
-    if (results.size() < 10) return -1;
+    if (results.size() < kMinResultsCnt) return -1;
 
     std::vector<double> values;
     values.reserve(results.size());
