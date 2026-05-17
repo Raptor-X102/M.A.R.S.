@@ -68,12 +68,12 @@ benchmarks:
       fallback_jump_ratio: 0.15
 
   branch_history_table:
-    enabled: false
+    enabled: true
 
     measurement:
       min_period: 16
       max_period: 32768
-      period_coeff: 2
+      period_coeff: 2.0
       iterations: 100000000
 
   return_address_stack:

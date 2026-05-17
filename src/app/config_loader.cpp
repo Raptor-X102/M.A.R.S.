@@ -925,15 +925,23 @@ class RobConfigParser final : public BenchmarkConfigParserBase<silicon_probe::ro
 
 class BhtConfigParser final
     : public BenchmarkConfigParserBase<silicon_probe::branch_history_table::BranchHistoryTableMeasurer::Config> {
-   public:
+public:
     BhtConfigParser() : BenchmarkConfigParserBase("branch_history_table") {}
 
-   private:
+private:
     void parse_specific(
         const YAML::Node& section,
         const std::string& path,
         silicon_probe::branch_history_table::BranchHistoryTableMeasurer::Config& config
     ) const override {
+        with_optional_node(
+            section,
+            "enabled",
+            path,
+            [&](const YAML::Node& node, const std::string& node_path) {
+                config.enabled = parse_bool_scalar(node, node_path);
+            }
+        );
         with_mapping(
             section,
             "measurement",
@@ -960,7 +968,7 @@ class BhtConfigParser final
                     "period_coeff",
                     measurement_path,
                     [&](const YAML::Node& node, const std::string& node_path) {
-                        config.period_coeff = parse_size_scalar(node, node_path);
+                        config.period_coeff = parse_double_scalar(node, node_path);
                     }
                 );
                 with_optional_node(
@@ -969,6 +977,14 @@ class BhtConfigParser final
                     measurement_path,
                     [&](const YAML::Node& node, const std::string& node_path) {
                         config.iterations = parse_size_scalar(node, node_path);
+                    }
+                );
+                with_optional_node(
+                    measurement,
+                    "abs_threshold",
+                    measurement_path,
+                    [&](const YAML::Node& node, const std::string& node_path) {
+                        config.abs_threshold = parse_double_scalar(node, node_path);
                     }
                 );
             }

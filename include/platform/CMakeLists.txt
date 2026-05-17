@@ -6,6 +6,7 @@ if(UNIX AND NOT APPLE)
         ${CMAKE_SOURCE_DIR}/src/platform/linux/os_linux.cpp
         ${CMAKE_SOURCE_DIR}/src/platform/linux/pmc_linux.cpp
         ${CMAKE_SOURCE_DIR}/src/platform/linux/events_discovery_linux.cpp
+        ${CMAKE_SOURCE_DIR}/src/platform/detail/arch_x86.cpp
     )
 else()
     message(FATAL_ERROR "Unsupported platform: MARS currently supports Linux only")
