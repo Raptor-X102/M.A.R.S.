@@ -33,7 +33,7 @@ inline void release_branch_target_buffer_code();
 }  // namespace silicon_probe::platform::arch
 
 #if defined(__x86_64__) || defined(_M_X64)
-#include "platform/detail/arch_x86.ipp"
+#include "platform/detail/arch_x86.hpp"
 #else
 #error "Unsupported architecture"
 #endif

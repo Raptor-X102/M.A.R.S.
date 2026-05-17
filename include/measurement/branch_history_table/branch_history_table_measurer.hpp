@@ -1,38 +1,33 @@
 #pragma once
 
-#include <algorithm>
-#include <cmath>
+#include <optional>
 #include <random>
 #include <vector>
-#include "platform/os.hpp"
 #include "core/measurer.hpp"
+#include "platform/os.hpp"
 
 namespace silicon_probe::branch_history_table {
 
 class BranchHistoryTableMeasurer final : public core::Measurer {
-   public:
-    static constexpr size_t kDefaultMinPeriod   = 16;
-    static constexpr size_t kDefaultMaxPeriod   = 32 * 1024;
-    static constexpr size_t kDefaultPeriodCoef  = 2;
-    static constexpr size_t kDefaultIterations  = 100'000'000;
-    static constexpr unsigned int kPatternSeed  = 123;
-    static constexpr double kThreshold035       = 0.35;
-    static constexpr double kThreshold040       = 0.40;
-    static constexpr double kBaselineFraction   = 1.0 / 3.0;
-    static constexpr size_t kBaselineMaxSamples = 4;
-    static constexpr double kBaselineOffset     = 0.15;
-    static constexpr double kMinDelta           = 0.05;
+public:
+    static constexpr size_t      kDefaultMinPeriod   = 16;
+    static constexpr size_t      kDefaultMaxPeriod   = 32 * 1024;
+    static constexpr double      kDefaultPeriodCoef  = 2.0;
+    static constexpr size_t      kDefaultIterations  = 100'000'000;
+    static constexpr unsigned int kPatternSeed       = 123;
 
     struct Config {
         bool enabled = true;
         platform::MeasurementEnvironmentOptions environment;
-        size_t min_period   = kDefaultMinPeriod;
-        size_t max_period   = kDefaultMaxPeriod;
-        size_t period_coeff = kDefaultPeriodCoef;
-        size_t iterations   = kDefaultIterations;
+        size_t   min_period   = kDefaultMinPeriod;
+        size_t   max_period   = kDefaultMaxPeriod;
+        double   period_coeff = kDefaultPeriodCoef;
+        size_t   iterations   = kDefaultIterations;
+        double   abs_threshold = 0.2;       // absolute miss rate threshold for fallback
+        double   max_delta_mult = 0.0;      // unused, kept for future; use 0 for automatic
     };
 
-   private:
+private:
     struct BranchHistoryTableResult {
         size_t period;
         double miss_per_iter;
@@ -40,16 +35,16 @@ class BranchHistoryTableMeasurer final : public core::Measurer {
 
     Config config_;
 
-   public:
+public:
     BranchHistoryTableMeasurer();
     explicit BranchHistoryTableMeasurer(Config config);
 
     std::string_view name() const noexcept override;
     void measure(shared_types::CpuInfoData& data) override;
 
-   private:
+private:
     void validateConfig();
-    int detectBHTSaturation(const std::vector<BranchHistoryTableResult>& results) const;
+    std::optional<int> detectBHTSaturation(const std::vector<BranchHistoryTableResult>& results) const;
 };
 
-}  // namespace silicon_probe::branch_history_table
+} // namespace silicon_probe::branch_history_table
