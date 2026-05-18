@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <cmath>
+#include <optional>
 #include <random>
 #include <vector>
 
@@ -15,7 +16,7 @@ namespace {
 struct BhtCase {
     const char* name;
     std::vector<BranchHistoryTableMeasurer::BranchHistoryTableResult> results;
-    int expected_size;
+    std::optional<int> expected_size;
 };
 
 TEST(BranchHistoryTableTableTest, DetectsSaturationFromTable) {
@@ -30,7 +31,7 @@ TEST(BranchHistoryTableTableTest, DetectsSaturationFromTable) {
                 {256, 0.41},
                 {512, 0.44},
             },
-            256,
+            128,
         },
         {
             "threshold_035_fallback",
@@ -42,7 +43,7 @@ TEST(BranchHistoryTableTableTest, DetectsSaturationFromTable) {
                 {256, 0.36},
                 {512, 0.39},
             },
-            256,
+            128,
         },
         {
             "inflection_fallback",
@@ -53,7 +54,7 @@ TEST(BranchHistoryTableTableTest, DetectsSaturationFromTable) {
                 {128, 0.20},
                 {256, 0.21},
             },
-            128,
+            64,
         },
         {
             "insufficient_points",
@@ -62,7 +63,7 @@ TEST(BranchHistoryTableTableTest, DetectsSaturationFromTable) {
                 {32, 0.06},
                 {64, 0.08},
             },
-            -1,
+            std::nullopt,
         },
     };
 

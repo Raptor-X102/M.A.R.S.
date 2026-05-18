@@ -1,12 +1,12 @@
 common:
   environment:
     bind_cpu: 0
-    realtime_priority: true
-    lock_frequency: true
+    realtime_priority: false
+    lock_frequency: false
 
 benchmarks:
   cache:
-    enabled: false
+    enabled: true
     levels: [l1, l2, l3]
     limits:
         l1_max: 128KiB
@@ -41,7 +41,7 @@ benchmarks:
         l3_miss_rate_threshold: 0.25
 
   tlb:
-    enabled: false 
+    enabled: true 
 
     measurement:
       max_pages: 4096
@@ -68,7 +68,7 @@ benchmarks:
       fallback_jump_ratio: 0.15
 
   branch_history_table:
-    enabled: true
+    enabled: false
 
     measurement:
       min_period: 16
@@ -157,7 +157,7 @@ benchmarks:
       #alignment: 16
 
   write_buffer:
-    enabled: true
+    enabled: false
 
     measurement:
       max_writes: 80
