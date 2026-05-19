@@ -12,22 +12,22 @@ CacheMeasurer::CacheMeasurer(Config config)
     : config_(std::move(config)), cache_line_size_(platform::cache_line_size()) {
     validateConfig();
     SPDLOG_DEBUG(
-        "[{}] configured with levels: L1={}, L2={}, L3={}, huge_pages={}",
-        name(),
-        config_.levels.test(level_index(CacheLevel::l1d)),
-        config_.levels.test(level_index(CacheLevel::l2)),
-        config_.levels.test(level_index(CacheLevel::l3)),
-        config_.use_huge_pages
+        "[{}] configured with levels: L1={}, L2={}, L3={}, huge_pages={}", name(),
+        config_.levels.test(level_index(CacheLevel::l1d)), config_.levels.test(level_index(CacheLevel::l2)),
+        config_.levels.test(level_index(CacheLevel::l3)), config_.use_huge_pages
     );
 }
 
 std::string_view CacheMeasurer::name() const noexcept { return "cache"; }
 
 void CacheMeasurer::validateConfig() {
-    if (config_.l1_max == 0) config_.l1_max = kL1MaxSize;
-    if (config_.l2_max == 0) config_.l2_max = kL2MaxSize;
-    if (config_.l3_max == 0) config_.l3_max = kL3MaxSize;
-    
+    if (config_.l1_max == 0)
+        config_.l1_max = kL1MaxSize;
+    if (config_.l2_max == 0)
+        config_.l2_max = kL2MaxSize;
+    if (config_.l3_max == 0)
+        config_.l3_max = kL3MaxSize;
+
     if (config_.l1_max >= config_.l2_max) {
         SPDLOG_WARN("l1_max ({}) >= l2_max ({}), adjusting", config_.l1_max, config_.l2_max);
         config_.l2_max = config_.l1_max * 2;
@@ -36,37 +36,37 @@ void CacheMeasurer::validateConfig() {
         SPDLOG_WARN("l2_max ({}) >= l3_max ({}), adjusting", config_.l2_max, config_.l3_max);
         config_.l3_max = config_.l2_max * 2;
     }
-    
+
     size_t min_valid_size = config_.cache_min_lines * cache_line_size_;
     if (min_valid_size == 0) {
         config_.cache_min_lines = kDefaultCacheMinLines;
-        min_valid_size = config_.cache_min_lines * cache_line_size_;
+        min_valid_size          = config_.cache_min_lines * cache_line_size_;
     }
     if (config_.l1_max < min_valid_size) {
         config_.l1_max = min_valid_size;
     }
-    
-    config_.warmup_iterations = std::max<size_t>(1, config_.warmup_iterations);
-    config_.precision = std::max<size_t>(1, config_.precision);
-    config_.target_accesses = std::max<size_t>(1, config_.target_accesses);
-    config_.min_iterations = std::max<size_t>(1, config_.min_iterations);
-    config_.max_iterations = std::max(config_.max_iterations, config_.min_iterations);
+
+    config_.warmup_iterations  = std::max<size_t>(1, config_.warmup_iterations);
+    config_.precision          = std::max<size_t>(1, config_.precision);
+    config_.target_accesses    = std::max<size_t>(1, config_.target_accesses);
+    config_.min_iterations     = std::max<size_t>(1, config_.min_iterations);
+    config_.max_iterations     = std::max(config_.max_iterations, config_.min_iterations);
     config_.refinement_samples = std::max<size_t>(1, config_.refinement_samples);
-    
-    config_.decision_tolerance = std::clamp(config_.decision_tolerance, 0.0, 1.0);
+
+    config_.decision_tolerance           = std::clamp(config_.decision_tolerance, 0.0, 1.0);
     config_.baseline_stability_threshold = std::clamp(config_.baseline_stability_threshold, 0.0, 1.0);
-    
+
     config_.l1_growth_factor = std::max(1.01, config_.l1_growth_factor);
     config_.l2_growth_factor = std::max(1.01, config_.l2_growth_factor);
     config_.l3_growth_factor = std::max(1.01, config_.l3_growth_factor);
-    
+
     config_.l1_miss_rate_threshold = std::clamp(config_.l1_miss_rate_threshold, 0.0, 1.0);
     config_.l2_miss_rate_threshold = std::clamp(config_.l2_miss_rate_threshold, 0.0, 1.0);
     config_.l3_miss_rate_threshold = std::clamp(config_.l3_miss_rate_threshold, 0.0, 1.0);
-    config_.l1_miss_growth_factor = std::max(1.01, config_.l1_miss_growth_factor);
-    config_.l2_miss_growth_factor = std::max(1.01, config_.l2_miss_growth_factor);
-    config_.l3_miss_growth_factor = std::max(1.01, config_.l3_miss_growth_factor);
-    
+    config_.l1_miss_growth_factor  = std::max(1.01, config_.l1_miss_growth_factor);
+    config_.l2_miss_growth_factor  = std::max(1.01, config_.l2_miss_growth_factor);
+    config_.l3_miss_growth_factor  = std::max(1.01, config_.l3_miss_growth_factor);
+
     if (config_.levels.none()) {
         config_.levels.set(level_index(CacheLevel::l1d));
         config_.levels.set(level_index(CacheLevel::l2));
@@ -102,10 +102,7 @@ void CacheMeasurer::measure(shared_types::CpuInfoData& data) {
 }
 
 void CacheMeasurer::measure_level(
-    shared_types::CpuInfoData& data,
-    CacheLevel level,
-    size_t min_size,
-    size_t max_size,
+    shared_types::CpuInfoData& data, CacheLevel level, size_t min_size, size_t max_size,
     std::optional<size_t> shared_types::CpuInfoData::* target_field
 ) {
     const char* levelname = level_name(level);
@@ -150,18 +147,13 @@ void CacheMeasurer::measure_level(
             if (diff / avg <= config_.decision_tolerance) {
                 final_size = static_cast<size_t>(std::round(avg));
                 SPDLOG_DEBUG(
-                    "Both methods agree within {}%: latency={}, misses={}, final={}",
-                    config_.decision_tolerance * 100,
-                    size_latency,
-                    size_misses,
-                    final_size
+                    "Both methods agree within {}%: latency={}, misses={}, final={}", config_.decision_tolerance * 100,
+                    size_latency, size_misses, final_size
                 );
             } else {
                 final_size = size_misses;
                 SPDLOG_DEBUG(
-                    "Misses method used (more accurate), latency gave {} but misses gave {}",
-                    size_latency,
-                    size_misses
+                    "Misses method used (more accurate), latency gave {} but misses gave {}", size_latency, size_misses
                 );
             }
         } else {
@@ -185,8 +177,9 @@ void CacheMeasurer::measure_level(
     }
 }
 
-std::unique_ptr<platform::pmc::PmcGroup>
-CacheMeasurer::open_pmc_for_level(CacheLevel level, shared_types::CpuInfoData& data) const {
+std::unique_ptr<platform::pmc::PmcGroup> CacheMeasurer::open_pmc_for_level(
+    CacheLevel level, shared_types::CpuInfoData& data
+) const {
     auto events = platform::discover_cache_miss_events(level, data);
     if (events.empty()) {
         SPDLOG_DEBUG("No miss events found for {}, using latency-only", level_name(level));
@@ -208,19 +201,18 @@ CacheMeasurer::open_pmc_for_level(CacheLevel level, shared_types::CpuInfoData& d
     return pmc;
 }
 
-std::vector<CacheMeasurer::MeasurementResult>
-CacheMeasurer::measure_range(size_t min_size, size_t max_size, std::unique_ptr<platform::pmc::PmcGroup>& pmc) {
+std::vector<CacheMeasurer::MeasurementResult> CacheMeasurer::measure_range(
+    size_t min_size, size_t max_size, std::unique_ptr<platform::pmc::PmcGroup>& pmc
+) {
     if (!reusable_list_) {
         SPDLOG_DEBUG("reusable_list_ = {}", reusable_max_size_);
         if (config_.use_huge_pages) {
             reusable_list_ = std::make_unique<CacheProfilerList>(
-                cache_line_size_, reusable_max_size_,
-                CacheProfilerList::MemoryType::huge_page
+                cache_line_size_, reusable_max_size_, CacheProfilerList::MemoryType::huge_page
             );
         } else {
             reusable_list_ = std::make_unique<CacheProfilerList>(
-                cache_line_size_, reusable_max_size_,
-                CacheProfilerList::MemoryType::aligned 
+                cache_line_size_, reusable_max_size_, CacheProfilerList::MemoryType::aligned
             );
         }
     }
@@ -242,27 +234,29 @@ CacheMeasurer::measure_range(size_t min_size, size_t max_size, std::unique_ptr<p
         }
         result.size_bytes = size;
 
-        SPDLOG_INFO("Size={}, cycles/elem={}, miss_rate={:.6f}",
-                     result.size_bytes, result.cycles_per_element, result.miss_rate);
+        SPDLOG_INFO(
+            "Size={}, cycles/elem={}, miss_rate={:.6f}", result.size_bytes, result.cycles_per_element, result.miss_rate
+        );
 
         results.push_back(result);
     }
     return results;
 }
 
-CacheMeasurer::MeasurementResult
-CacheMeasurer::do_single_measurement_without_pmc(CacheProfilerList* list, size_t count) {
-    return measure_impl(list, count,
-        []() noexcept {},
-        [](uint64_t /*total_loads*/) noexcept -> std::optional<double> {
-            return std::nullopt;
-        }
+CacheMeasurer::MeasurementResult CacheMeasurer::do_single_measurement_without_pmc(
+    CacheProfilerList* list, size_t count
+) {
+    return measure_impl(
+        list, count, []() noexcept {},
+        [](uint64_t /*total_loads*/) noexcept -> std::optional<double> { return std::nullopt; }
     );
 }
 
-CacheMeasurer::MeasurementResult
-CacheMeasurer::do_single_measurement_with_pmc(CacheProfilerList* list, size_t count, platform::pmc::PmcGroup& pmc) {
-    return measure_impl(list, count,
+CacheMeasurer::MeasurementResult CacheMeasurer::do_single_measurement_with_pmc(
+    CacheProfilerList* list, size_t count, platform::pmc::PmcGroup& pmc
+) {
+    return measure_impl(
+        list, count,
         [&pmc]() {
             pmc.reset();
             pmc.enable();
@@ -294,7 +288,7 @@ CacheMeasurer::BoundaryResult CacheMeasurer::detect_latency_boundary(
     for (size_t i = 0; i < config_.refinement_samples; ++i) {
         baseline_samples.push_back(results[i].cycles_per_element);
     }
-    double baseline = statistics::compute_median(std::move(baseline_samples));
+    double baseline         = statistics::compute_median(std::move(baseline_samples));
     boundary.baseline_value = baseline;
 
     for (size_t i = 1; i < results.size(); ++i) {
@@ -347,8 +341,9 @@ size_t CacheMeasurer::detect_miss_rate_boundary(const std::vector<MeasurementRes
     return results.size();
 }
 
-size_t
-CacheMeasurer::refine_boundary_latency(const std::vector<MeasurementResult>& results, const BoundaryResult& boundary) {
+size_t CacheMeasurer::refine_boundary_latency(
+    const std::vector<MeasurementResult>& results, const BoundaryResult& boundary
+) {
     const size_t left  = results[boundary.index - 1].size_bytes;
     const size_t right = results[boundary.index].size_bytes;
 
@@ -374,17 +369,15 @@ CacheMeasurer::refine_boundary_latency(const std::vector<MeasurementResult>& res
     }
 
     return refine_boundary(
-        left,
-        right,
-        config_.precision,
-        refinement_growth_factor,
+        left, right, config_.precision, refinement_growth_factor,
         [this](size_t size) -> double {
             size_t count = size / cache_line_size_;
-            if (count == 0) count = 1;
+            if (count == 0)
+                count = 1;
             unsigned int seed = config_.seed ^ static_cast<unsigned int>(count);
             reusable_list_->prepare(count, seed);
-            auto result = measure_impl(reusable_list_.get(), count,
-                []() noexcept {},
+            auto result = measure_impl(
+                reusable_list_.get(), count, []() noexcept {},
                 [](uint64_t) noexcept -> std::optional<double> { return std::nullopt; }
             );
             return result.cycles_per_element;
@@ -394,9 +387,7 @@ CacheMeasurer::refine_boundary_latency(const std::vector<MeasurementResult>& res
 }
 
 size_t CacheMeasurer::refine_boundary_misses(
-    const std::vector<MeasurementResult>& results,
-    size_t miss_index,
-    CacheLevel level,
+    const std::vector<MeasurementResult>& results, size_t miss_index, CacheLevel level,
     std::unique_ptr<platform::pmc::PmcGroup>& pmc
 ) {
     const size_t left  = results[miss_index - 1].size_bytes;
@@ -417,7 +408,8 @@ size_t CacheMeasurer::refine_boundary_misses(
     }
 
     double baseline = statistics::compute_median(std::move(baseline_samples));
-    if (baseline < 1e-12) baseline = 1e-12;
+    if (baseline < 1e-12)
+        baseline = 1e-12;
 
     double refinement_growth_factor = 0.0;
     switch (level) {
@@ -433,16 +425,15 @@ size_t CacheMeasurer::refine_boundary_misses(
     }
 
     return refine_boundary(
-        left,
-        right,
-        config_.precision,
-        refinement_growth_factor,
+        left, right, config_.precision, refinement_growth_factor,
         [this, &pmc](size_t size) -> double {
             size_t count = size / cache_line_size_;
-            if (count == 0) count = 1;
+            if (count == 0)
+                count = 1;
             unsigned int seed = config_.seed ^ static_cast<unsigned int>(count);
             reusable_list_->prepare(count, seed);
-            auto result = measure_impl(reusable_list_.get(), count,
+            auto result = measure_impl(
+                reusable_list_.get(), count,
                 [&pmc]() {
                     pmc->reset();
                     pmc->enable();

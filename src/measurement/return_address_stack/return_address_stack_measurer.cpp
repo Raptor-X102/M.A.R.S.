@@ -14,10 +14,7 @@ ReturnAddressStackMeasurer::ReturnAddressStackMeasurer(Config config) : config_(
     validateConfig();
     SPDLOG_DEBUG(
         "[{}] configured: min_recursion_depth={}, max_recursion_depth={}, recursion_depth_step={}, iterations={}",
-        name(),
-        config_.min_recursion_depth,
-        config_.max_recursion_depth,
-        config_.recursion_depth_step,
+        name(), config_.min_recursion_depth, config_.max_recursion_depth, config_.recursion_depth_step,
         config_.iterations
     );
 }
@@ -30,8 +27,10 @@ void ReturnAddressStackMeasurer::validateConfig() {
     if (config_.max_recursion_depth < config_.min_recursion_depth)
         config_.max_recursion_depth = config_.min_recursion_depth;
     if (config_.max_recursion_depth > kMaxSafeRecursionDepth) {
-        SPDLOG_WARN("[{}] max_recursion_depth {} exceeds safe limit {}, clamping",
-                    name(), config_.max_recursion_depth, kMaxSafeRecursionDepth);
+        SPDLOG_WARN(
+            "[{}] max_recursion_depth {} exceeds safe limit {}, clamping", name(), config_.max_recursion_depth,
+            kMaxSafeRecursionDepth
+        );
         config_.max_recursion_depth = kMaxSafeRecursionDepth;
     }
     if (config_.recursion_depth_step == 0)
@@ -40,8 +39,7 @@ void ReturnAddressStackMeasurer::validateConfig() {
     if (config_.iterations == 0)
         config_.iterations = kDefaultIterations;
     if (config_.iterations > kMaxIter) {
-        SPDLOG_WARN("[{}] iterations {} too high, reducing to {}",
-                    name(), config_.iterations, kMaxIter);
+        SPDLOG_WARN("[{}] iterations {} too high, reducing to {}", name(), config_.iterations, kMaxIter);
         config_.iterations = kMaxIter;
     }
     if (config_.trim_ratio < 0.0)
@@ -66,7 +64,9 @@ void ReturnAddressStackMeasurer::validateConfig() {
     }
 }
 
-__attribute__((noinline, noclone, noipa)) void ReturnAddressStackMeasurer::recursive_func(size_t depth, size_t iteration) {
+__attribute__((noinline, noclone, noipa)) void ReturnAddressStackMeasurer::recursive_func(
+    size_t depth, size_t iteration
+) {
     if (iteration >= depth)
         return;
     recursive_func(depth, iteration + 1);
@@ -109,17 +109,12 @@ void ReturnAddressStackMeasurer::measure(shared_types::CpuInfoData& data) {
 
         uint64_t min_time = raw_exec_times.front();
         uint64_t max_time = raw_exec_times.back();
-        double avg_time = statistics::mean(raw_exec_times);
+        double avg_time   = statistics::mean(raw_exec_times);
 
         results.push_back({depth, avg_time});
 
         SPDLOG_DEBUG(
-            "[{}] depth={:3d}  min={:3d}  avg={:6.2f}  max={:3d}",
-            name(),
-            depth,
-            min_time,
-            avg_time,
-            max_time
+            "[{}] depth={:3d}  min={:3d}  avg={:6.2f}  max={:3d}", name(), depth, min_time, avg_time, max_time
         );
     }
 
@@ -134,9 +129,7 @@ void ReturnAddressStackMeasurer::measure(shared_types::CpuInfoData& data) {
         SPDLOG_INFO("[{}] Return Address Stack effective size ≈ {} addresses", name(), ras_size);
     } else {
         SPDLOG_ERROR(
-            "[{}] could not detect RAS saturation in period range [{}, {}]",
-            name(),
-            config_.min_recursion_depth,
+            "[{}] could not detect RAS saturation in period range [{}, {}]", name(), config_.min_recursion_depth,
             config_.max_recursion_depth
         );
     }
@@ -151,7 +144,8 @@ int ReturnAddressStackMeasurer::detectRASSaturation(const std::vector<Result>& r
 
     // ----- 1. Median smoothing -----
     size_t win = config_.smoothing_window;
-    if (win % 2 == 0) ++win;
+    if (win % 2 == 0)
+        ++win;
     int half = static_cast<int>(win / 2);
     std::vector<double> raw(results_size);
     for (size_t i = 0; i < results_size; ++i)
@@ -161,18 +155,22 @@ int ReturnAddressStackMeasurer::detectRASSaturation(const std::vector<Result>& r
     for (size_t i = 0; i < raw.size(); ++i) {
         int left  = static_cast<int>(i) - half;
         int right = static_cast<int>(i) + half;
-        if (left < 0) left = 0;
-        if (right >= static_cast<int>(raw.size())) right = static_cast<int>(raw.size()) - 1;
+        if (left < 0)
+            left = 0;
+        if (right >= static_cast<int>(raw.size()))
+            right = static_cast<int>(raw.size()) - 1;
         std::vector<double> window;
-        for (int j = left; j <= right; ++j) window.push_back(raw[j]);
+        for (int j = left; j <= right; ++j)
+            window.push_back(raw[j]);
         smoothed[i] = statistics::compute_median(std::move(window));
     }
 
     // ----- 2. Find depth where average time after is significantly higher than before -----
     const size_t n = smoothed.size();
-    if (n < 2) return -1;
+    if (n < 2)
+        return -1;
 
-    int best_idx = -1;
+    int best_idx      = -1;
     double best_ratio = 1.0;
 
     for (size_t i = 0; i < n - 1; ++i) {
@@ -190,7 +188,7 @@ int ReturnAddressStackMeasurer::detectRASSaturation(const std::vector<Result>& r
             double ratio = avg_after / avg_before;
             if (ratio > best_ratio) {
                 best_ratio = ratio;
-                best_idx = static_cast<int>(i);
+                best_idx   = static_cast<int>(i);
             }
         }
     }

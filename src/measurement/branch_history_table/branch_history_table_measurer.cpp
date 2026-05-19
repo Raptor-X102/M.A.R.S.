@@ -6,19 +6,17 @@
 
 namespace silicon_probe::branch_history_table {
 
-BranchHistoryTableMeasurer::BranchHistoryTableMeasurer()
-    : BranchHistoryTableMeasurer(Config{}) {}
+BranchHistoryTableMeasurer::BranchHistoryTableMeasurer() : BranchHistoryTableMeasurer(Config{}) {}
 
-BranchHistoryTableMeasurer::BranchHistoryTableMeasurer(Config config)
-    : config_(std::move(config)) {
+BranchHistoryTableMeasurer::BranchHistoryTableMeasurer(Config config) : config_(std::move(config)) {
     validateConfig();
-    SPDLOG_INFO("[{}] configured: min_period={}, max_period={}, coeff={}, iterations={}", name(),
-                config_.min_period, config_.max_period, config_.period_coeff, config_.iterations);
+    SPDLOG_INFO(
+        "[{}] configured: min_period={}, max_period={}, coeff={}, iterations={}", name(), config_.min_period,
+        config_.max_period, config_.period_coeff, config_.iterations
+    );
 }
 
-std::string_view BranchHistoryTableMeasurer::name() const noexcept {
-    return "branch history table";
-}
+std::string_view BranchHistoryTableMeasurer::name() const noexcept { return "branch history table"; }
 
 void BranchHistoryTableMeasurer::validateConfig() {
     if (config_.min_period == 0) {
@@ -65,8 +63,8 @@ void BranchHistoryTableMeasurer::measure(shared_types::CpuInfoData& data) {
 
     std::vector<BranchHistoryTableResult> results;
 
-    for (size_t period = config_.min_period; period <= config_.max_period; 
-            period = static_cast<size_t>(static_cast<double>(period) * config_.period_coeff)) {
+    for (size_t period = config_.min_period; period <= config_.max_period;
+         period        = static_cast<size_t>(static_cast<double>(period) * config_.period_coeff)) {
         std::vector<bool> pattern(period);
         for (size_t i = 0; i < period; ++i) {
             pattern[i] = (dist(rng) == 1);
@@ -95,7 +93,7 @@ void BranchHistoryTableMeasurer::measure(shared_types::CpuInfoData& data) {
             continue;
         }
 
-        uint64_t misses = values.values[0];
+        uint64_t misses      = values.values[0];
         double miss_per_iter = static_cast<double>(misses) / config_.iterations;
 
         results.push_back({period, miss_per_iter});
@@ -121,8 +119,8 @@ void BranchHistoryTableMeasurer::measure(shared_types::CpuInfoData& data) {
 }
 
 std::optional<int> BranchHistoryTableMeasurer::detectBHTSaturation(
-    const std::vector<BranchHistoryTableResult>& results) const
-{
+    const std::vector<BranchHistoryTableResult>& results
+) const {
     if (results.size() < 4) {
         SPDLOG_WARN("[{}] insufficient data points", name());
         return std::nullopt;
@@ -139,27 +137,25 @@ std::optional<int> BranchHistoryTableMeasurer::detectBHTSaturation(
     double max_delta = -1.0;
 
     for (size_t i = 1; i < results.size(); ++i) {
-        double ratio = periods[i] / periods[i-1];
-        if (ratio >= 1.9 && ratio <= 2.1) {      // period doubled (or almost)
-            double delta = misses[i] - misses[i-1];
+        double ratio = periods[i] / periods[i - 1];
+        if (ratio >= 1.9 && ratio <= 2.1) {  // period doubled (or almost)
+            double delta = misses[i] - misses[i - 1];
             if (delta > max_delta) {
                 max_delta = delta;
-                best = static_cast<int>(periods[i-1]);  // period before the jump
+                best      = static_cast<int>(periods[i - 1]);  // period before the jump
             }
         }
     }
 
     if (best.has_value()) {
-        SPDLOG_INFO("[{}] BHT detection: max delta method → period {} (delta={:.4f})",
-                    name(), *best, max_delta);
+        SPDLOG_INFO("[{}] BHT detection: max delta method → period {} (delta={:.4f})", name(), *best, max_delta);
     } else {
         // Fallback: first period where miss rate exceeds absolute threshold
         const double abs_thresh = config_.abs_threshold > 0.0 ? config_.abs_threshold : 0.2;
         for (size_t i = 0; i < results.size(); ++i) {
             if (misses[i] >= abs_thresh) {
                 best = static_cast<int>(periods[i]);
-                SPDLOG_INFO("[{}] BHT detection: absolute threshold ({}) → period {}",
-                            name(), abs_thresh, *best);
+                SPDLOG_INFO("[{}] BHT detection: absolute threshold ({}) → period {}", name(), abs_thresh, *best);
                 break;
             }
         }
@@ -168,13 +164,13 @@ std::optional<int> BranchHistoryTableMeasurer::detectBHTSaturation(
     // Last resort: use the largest period
     if (!best.has_value()) {
         best = static_cast<int>(periods.back());
-        SPDLOG_WARN("[{}] BHT detection: no reliable method, using largest period {}",
-                    name(), *best);
+        SPDLOG_WARN("[{}] BHT detection: no reliable method, using largest period {}", name(), *best);
     }
 
     // Optional: round up to nearest power of two (typical BHT sizes)
     int rounded = 1;
-    while (rounded < *best) rounded <<= 1;
+    while (rounded < *best)
+        rounded <<= 1;
     if (rounded != *best) {
         SPDLOG_INFO("[{}] rounding BHT size from {} to {} (power of two)", name(), *best, rounded);
         *best = rounded;
@@ -184,4 +180,4 @@ std::optional<int> BranchHistoryTableMeasurer::detectBHTSaturation(
     return best;
 }
 
-} // namespace silicon_probe::branch_history_table
+}  // namespace silicon_probe::branch_history_table

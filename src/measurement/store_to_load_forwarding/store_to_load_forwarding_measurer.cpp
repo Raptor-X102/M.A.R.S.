@@ -10,14 +10,8 @@ StoreToLoadForwardingMeasurer::StoreToLoadForwardingMeasurer() : StoreToLoadForw
 StoreToLoadForwardingMeasurer::StoreToLoadForwardingMeasurer(Config config) : config_(std::move(config)) {
     validateConfig();
     SPDLOG_DEBUG(
-        "[{}] cfg: offsets={}..{} step={} iter={} repeats={} growth={}",
-        name(),
-        config_.min_offset,
-        config_.max_offset,
-        config_.offset_step,
-        config_.iterations,
-        config_.repeats,
-        config_.time_growth_ratio
+        "[{}] cfg: offsets={}..{} step={} iter={} repeats={} growth={}", name(), config_.min_offset, config_.max_offset,
+        config_.offset_step, config_.iterations, config_.repeats, config_.time_growth_ratio
     );
 }
 
@@ -58,7 +52,7 @@ void StoreToLoadForwardingMeasurer::validateConfig() {
 
     // time_growth_ratio
     if (config_.time_growth_ratio < 1.0) {
-        config_.time_growth_ratio = 1.5;   // или другое разумное значение
+        config_.time_growth_ratio = 1.5;  // или другое разумное значение
     }
 
     // pmc_saturation_ratio
@@ -173,7 +167,7 @@ void StoreToLoadForwardingMeasurer::measure(shared_types::CpuInfoData& data) {
     data.s2l_fwd_max_size   = best_size;
     data.s2l_fwd_max_offset = best_offset;
 
-    if (best_size) // best_offset is set automatically if size is set
+    if (best_size)  // best_offset is set automatically if size is set
         SPDLOG_INFO("[{}] result: size={} bytes, max_offset={}", name(), *best_size, *best_offset);
     else
         SPDLOG_INFO("[{}] Store-to-load-forwarding is not supported");
@@ -181,9 +175,7 @@ void StoreToLoadForwardingMeasurer::measure(shared_types::CpuInfoData& data) {
 
 template <size_t N>
 StoreToLoadForwardingResult StoreToLoadForwardingMeasurer::run_test(
-    size_t offset,
-    platform::pmc::PmcGroup* pmc,
-    const std::vector<std::string>& ev_names
+    size_t offset, platform::pmc::PmcGroup* pmc, const std::vector<std::string>& ev_names
 ) {
     static_assert(N == 1 || N == 2 || N == 4 || N == 8, "size must be 1,2,4,8");
     constexpr size_t buffer_bytes = kDefaultBufferSize;
@@ -195,10 +187,9 @@ StoreToLoadForwardingResult StoreToLoadForwardingMeasurer::run_test(
     std::vector<std::vector<uint64_t>> all_counts;
 
     using StoreT = typename std::conditional<
-        N == 1,
-        uint8_t,
-        typename std::conditional<N == 2, uint16_t, typename std::conditional<N == 4, uint32_t, uint64_t>::type>::
-            type>::type;
+        N == 1, uint8_t,
+        typename std::conditional<
+            N == 2, uint16_t, typename std::conditional<N == 4, uint32_t, uint64_t>::type>::type>::type;
     volatile StoreT* store_ptr = reinterpret_cast<volatile StoreT*>(buffer);
     volatile StoreT* load_ptr  = reinterpret_cast<volatile StoreT*>(buffer + offset);
 
@@ -267,24 +258,16 @@ StoreToLoadForwardingResult StoreToLoadForwardingMeasurer::run_test(
 
 // Explicit template instantiations
 template StoreToLoadForwardingResult StoreToLoadForwardingMeasurer::run_test<1>(
-    size_t offset,
-    platform::pmc::PmcGroup* pmc,
-    const std::vector<std::string>& ev_names
+    size_t offset, platform::pmc::PmcGroup* pmc, const std::vector<std::string>& ev_names
 );
 template StoreToLoadForwardingResult StoreToLoadForwardingMeasurer::run_test<2>(
-    size_t offset,
-    platform::pmc::PmcGroup* pmc,
-    const std::vector<std::string>& ev_names
+    size_t offset, platform::pmc::PmcGroup* pmc, const std::vector<std::string>& ev_names
 );
 template StoreToLoadForwardingResult StoreToLoadForwardingMeasurer::run_test<4>(
-    size_t offset,
-    platform::pmc::PmcGroup* pmc,
-    const std::vector<std::string>& ev_names
+    size_t offset, platform::pmc::PmcGroup* pmc, const std::vector<std::string>& ev_names
 );
 template StoreToLoadForwardingResult StoreToLoadForwardingMeasurer::run_test<8>(
-    size_t offset,
-    platform::pmc::PmcGroup* pmc,
-    const std::vector<std::string>& ev_names
+    size_t offset, platform::pmc::PmcGroup* pmc, const std::vector<std::string>& ev_names
 );
 
 }  // namespace silicon_probe::store_to_load_forwarding

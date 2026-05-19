@@ -19,15 +19,15 @@ namespace silicon_probe::branch_target_buffer {
 
 /** @brief Branch instruction description for generated code. */
 struct InstructionData {
-    platform::arch::InstrType instr_type; ///< Instruction type for the JIT generator.
-    std::string              instr_name;  ///< Short name for logs and output.
+    platform::arch::InstrType instr_type;  ///< Instruction type for the JIT generator.
+    std::string instr_name;                ///< Short name for logs and output.
 };
 
 /** @brief Result for one BTB test point. */
 struct BranchTargetBufferResult {
-    double   avg_ticks_per_block; ///< Average cycles per block.
-    double   ticks_std;           ///< Std. dev. of cycles per block.
-    uint64_t avg_events_counts;   ///< Average BTB-related counter value.
+    double avg_ticks_per_block;  ///< Average cycles per block.
+    double ticks_std;            ///< Std. dev. of cycles per block.
+    uint64_t avg_events_counts;  ///< Average BTB-related counter value.
 };
 
 /**
@@ -48,20 +48,20 @@ class BranchTargetBufferMeasurer final : public core::Measurer {
 
     /** @brief Settings for the BTB benchmark. */
     struct Config {
-        bool   enabled                             = true;                     ///< Turn this measurer on or off.
-        platform::MeasurementEnvironmentOptions environment;                   ///< CPU and scheduler settings for the run.
-        size_t min_blocks_cnt                      = kDefaultMinBlocksCnt;     ///< Smallest block count to test.
-        size_t max_blocks_cnt                      = kDefaultMaxBlocksCnt;     ///< Largest block count to test.
-        size_t blocks_step                         = kDefaultBlocksStep;       ///< Step between block counts.
-        size_t iterations                          = kDefaultIterations;       ///< Loop count inside one generated test.
-        size_t repeats                             = kDefaultRepeats;          ///< Number of repeats for one point.
-        size_t warmup_iterations                   = kDefaultWarmupIterations; ///< Warm-up runs before timing.
-        int    alignment                           = kDefaultAlignment;        ///< Block alignment in generated code.
-        double misprediction_saturation_threshold  = 0.01;                     ///< Miss-rate limit for a clear overflow.
-        double misprediction_growth_threshold      = 0.005;                    ///< Smallest miss-rate growth to treat as a jump.
-        double time_growth_ratio                   = 1.20;                     ///< Time growth ratio for time-only mode.
-        size_t time_stability_points               = 3;                        ///< Number of points used to check stable growth.
-        size_t coarse_ignore_first                 = 2;                        ///< Number of first coarse points to ignore.
+        bool enabled = true;                                               ///< Turn this measurer on or off.
+        platform::MeasurementEnvironmentOptions environment;               ///< CPU and scheduler settings for the run.
+        size_t min_blocks_cnt                     = kDefaultMinBlocksCnt;  ///< Smallest block count to test.
+        size_t max_blocks_cnt                     = kDefaultMaxBlocksCnt;  ///< Largest block count to test.
+        size_t blocks_step                        = kDefaultBlocksStep;    ///< Step between block counts.
+        size_t iterations                         = kDefaultIterations;    ///< Loop count inside one generated test.
+        size_t repeats                            = kDefaultRepeats;       ///< Number of repeats for one point.
+        size_t warmup_iterations                  = kDefaultWarmupIterations;  ///< Warm-up runs before timing.
+        int alignment                             = kDefaultAlignment;         ///< Block alignment in generated code.
+        double misprediction_saturation_threshold = 0.01;   ///< Miss-rate limit for a clear overflow.
+        double misprediction_growth_threshold     = 0.005;  ///< Smallest miss-rate growth to treat as a jump.
+        double time_growth_ratio                  = 1.20;   ///< Time growth ratio for time-only mode.
+        size_t time_stability_points              = 3;      ///< Number of points used to check stable growth.
+        size_t coarse_ignore_first                = 2;      ///< Number of first coarse points to ignore.
     };
 
     /** @brief Builds the measurer with default settings. */
@@ -115,9 +115,7 @@ class BranchTargetBufferMeasurer final : public core::Measurer {
      * @return Rough BTB size, or `std::nullopt` if no jump was found.
      */
     std::optional<size_t> findApproxSaturation(
-        const std::vector<size_t>& counts,
-        const std::vector<BranchTargetBufferResult>& results,
-        bool use_events
+        const std::vector<size_t>& counts, const std::vector<BranchTargetBufferResult>& results, bool use_events
     );
 
     /**

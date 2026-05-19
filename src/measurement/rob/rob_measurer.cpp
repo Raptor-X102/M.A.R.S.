@@ -1,5 +1,5 @@
 #include "measurement/rob/rob_measurer.hpp"
-#include "measurement/common/statistics.hpp" 
+#include "measurement/common/statistics.hpp"
 #include <algorithm>
 #include <cmath>
 #include <numeric>
@@ -11,17 +11,11 @@ namespace statistics = silicon_probe::common::statistics;
 RobMeasurer::RobMeasurer() : RobMeasurer(Config{}) {}
 
 RobMeasurer::RobMeasurer(Config config) : config_(std::move(config)) {
-    validateConfig();  
+    validateConfig();
     SPDLOG_DEBUG(
-        "[{}] configured: min={}, max={}, step={}, inner_its={}, outer_its={}, instr_type={}, unroll={}",
-        name(),
-        config_.min_instr_cnt,
-        config_.max_instr_cnt,
-        config_.instr_cnt_step,
-        config_.inner_iterations,
-        config_.outer_iterations,
-        config_.instr_type,
-        config_.unroll
+        "[{}] configured: min={}, max={}, step={}, inner_its={}, outer_its={}, instr_type={}, unroll={}", name(),
+        config_.min_instr_cnt, config_.max_instr_cnt, config_.instr_cnt_step, config_.inner_iterations,
+        config_.outer_iterations, config_.instr_type, config_.unroll
     );
 }
 
@@ -118,9 +112,9 @@ void RobMeasurer::measure(shared_types::CpuInfoData& data) {
         }
 
         auto [min_it, max_it] = std::minmax_element(raw_cycles.begin(), raw_cycles.end());
-        uint64_t min_cycles = *min_it;
-        uint64_t max_cycles = *max_it;
-        double avg_cycles = statistics::mean(raw_cycles);
+        uint64_t min_cycles   = *min_it;
+        uint64_t max_cycles   = *max_it;
+        double avg_cycles     = statistics::mean(raw_cycles);
 
         double min_per_iter = factor * min_cycles;
         double avg_per_iter = factor * avg_cycles;
@@ -129,11 +123,7 @@ void RobMeasurer::measure(shared_types::CpuInfoData& data) {
         results.push_back({filler, min_per_iter, avg_per_iter, max_per_iter});
 
         SPDLOG_DEBUG(
-            "[{}] filler={:3d}  min={:6.2f}  avg={:6.2f}  max={:6.2f}",
-            name(),
-            filler,
-            min_per_iter,
-            avg_per_iter,
+            "[{}] filler={:3d}  min={:6.2f}  avg={:6.2f}  max={:6.2f}", name(), filler, min_per_iter, avg_per_iter,
             max_per_iter
         );
 
@@ -148,9 +138,7 @@ void RobMeasurer::measure(shared_types::CpuInfoData& data) {
     int rob_size = detectRobSaturation(results);
     if (rob_size < 0) {
         SPDLOG_ERROR(
-            "[{}] could not detect ROB saturation in range [{}, {}]",
-            name(),
-            config_.min_instr_cnt,
+            "[{}] could not detect ROB saturation in range [{}, {}]", name(), config_.min_instr_cnt,
             config_.max_instr_cnt
         );
     } else {
@@ -162,33 +150,31 @@ void RobMeasurer::measure(shared_types::CpuInfoData& data) {
 }
 
 int RobMeasurer::detectRobSaturation(const std::vector<Result>& results) {
-    if (results.size() < kMinResultsCnt) return -1;
-    
+    if (results.size() < kMinResultsCnt)
+        return -1;
+
     size_t res_cnt = results.size();
     std::vector<std::pair<size_t, double>> deltas(res_cnt - 1);
     auto curr_val = results[0].avg_cycles_per_iter;
     for (size_t idx = 1; idx < res_cnt; ++idx) {
-        auto next_val = results[idx].avg_cycles_per_iter;
-        deltas[idx - 1] = {idx, (next_val - curr_val) / curr_val };
-        curr_val = next_val;
+        auto next_val   = results[idx].avg_cycles_per_iter;
+        deltas[idx - 1] = {idx, (next_val - curr_val) / curr_val};
+        curr_val        = next_val;
     }
 
-    std::make_heap(deltas.begin(), deltas.end(),
-        [](const auto& a, const auto& b) { return a.second < b.second; });
+    std::make_heap(deltas.begin(), deltas.end(), [](const auto& a, const auto& b) { return a.second < b.second; });
 
     auto first_max_jump = deltas.front();
 
     while (!deltas.empty()) {
-        std::pop_heap(deltas.begin(), deltas.end(),
-            [](const auto& a, const auto& b) { return a.second < b.second; });
+        std::pop_heap(deltas.begin(), deltas.end(), [](const auto& a, const auto& b) { return a.second < b.second; });
         auto& [max_jump_idx, _] = deltas.back();
-        
-        bool sustained = true;
-        size_t verify_cnt = std::min<size_t>(config_.required_consecutive_points,
-                                             results.size() - max_jump_idx);
+
+        bool sustained    = true;
+        size_t verify_cnt = std::min<size_t>(config_.required_consecutive_points, results.size() - max_jump_idx);
         size_t verify_idx = max_jump_idx + verify_cnt;
         if (verify_cnt > 0) {
-            double after_jump = results[max_jump_idx].avg_cycles_per_iter;
+            double after_jump     = results[max_jump_idx].avg_cycles_per_iter;
             double drop_tolerance = config_.sustain_threshold;
             for (size_t k = max_jump_idx + 1; k < verify_idx; ++k) {
                 if (results[k].avg_cycles_per_iter < after_jump * drop_tolerance) {
@@ -204,7 +190,7 @@ int RobMeasurer::detectRobSaturation(const std::vector<Result>& results) {
         deltas.pop_back();
     }
 
-    // fallback: the largest jump 
+    // fallback: the largest jump
     return static_cast<int>(results[first_max_jump.first].filler);
 }
 

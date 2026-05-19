@@ -9,4 +9,4 @@ enum class CacheLevel {
     l3  = 2,  // L3 or last-level cache.
 };
 
-}
+}  // namespace silicon_probe::shared_types

@@ -15,15 +15,9 @@ ExecPortsMeasurer::ExecPortsMeasurer() : ExecPortsMeasurer(Config{}) {}
 ExecPortsMeasurer::ExecPortsMeasurer(Config config) : config_(std::move(config)) {
     validateConfig();
     SPDLOG_DEBUG(
-        "[{}] configured: instr_cnt={}, iterations={}, repeats={}, instr1 = [{}, {}], instr2 = [{}, {}]",
-        name(),
-        config_.instr_cnt,
-        config_.iterations,
-        config_.repeats,
-        static_cast<int>(config_.instr1.instr_type),
-        config_.instr1.instr_name,
-        static_cast<int>(config_.instr2.instr_type),
-        config_.instr2.instr_name
+        "[{}] configured: instr_cnt={}, iterations={}, repeats={}, instr1 = [{}, {}], instr2 = [{}, {}]", name(),
+        config_.instr_cnt, config_.iterations, config_.repeats, static_cast<int>(config_.instr1.instr_type),
+        config_.instr1.instr_name, static_cast<int>(config_.instr2.instr_type), config_.instr2.instr_name
     );
 }
 
@@ -87,8 +81,8 @@ void ExecPortsMeasurer::measure(shared_types::CpuInfoData& data) {
     platform::ScopedMeasurementEnvironment environment{config_.environment};
 
     // Discover port events
-    auto port_events = platform::discover_port_events(data);
-    bool has_ports   = false;
+    auto port_events  = platform::discover_port_events(data);
+    bool has_ports    = false;
     size_t num_events = port_events.size();
     if (port_events.empty()) {
         SPDLOG_WARN(
@@ -162,7 +156,7 @@ void ExecPortsMeasurer::measure(shared_types::CpuInfoData& data) {
         }
 
         // Average ticks
-        auto stats = statistics::compute_stats(ticks_samples);
+        auto stats       = statistics::compute_stats(ticks_samples);
         double avg_ticks = stats.mean;
         double ticks_std = stats.stddev;
 
@@ -175,7 +169,8 @@ void ExecPortsMeasurer::measure(shared_types::CpuInfoData& data) {
                     avg_counts[i] += static_cast<double>(counts[i]);
                 }
             }
-            for (double& v : avg_counts) v /= config_.repeats;
+            for (double& v : avg_counts)
+                v /= config_.repeats;
         }
 
         SPDLOG_DEBUG("[{}] {}: avg_ticks = {:.4g} (std={:.4g})", name(), test_name, avg_ticks, ticks_std);
@@ -203,21 +198,16 @@ void ExecPortsMeasurer::measure(shared_types::CpuInfoData& data) {
     data.execution_ports_independent = decision.different_ports;
 
     SPDLOG_INFO(
-        "[{}] decision: instruction1 ({}) and instruction2 ({}) use {} ports (confidence {:.2f}) - {}",
-        name(),
-        config_.instr1.instr_name,
-        config_.instr2.instr_name,
-        decision.different_ports ? "different" : "the same",
-        decision.confidence,
-        decision.reasoning
+        "[{}] decision: instruction1 ({}) and instruction2 ({}) use {} ports (confidence {:.2f}) - {}", name(),
+        config_.instr1.instr_name, config_.instr2.instr_name, decision.different_ports ? "different" : "the same",
+        decision.confidence, decision.reasoning
     );
 
     SPDLOG_INFO("[{}] measurement complete", name());
 }
 
 PortContentionDecision ExecPortsMeasurer::detectPortContention(
-    const std::vector<ExecPortsResult>& results,
-    const std::vector<std::string>& port_events
+    const std::vector<ExecPortsResult>& results, const std::vector<std::string>& port_events
 ) {
     if (results.size() < 3) {
         return {false, 0.0, "insufficient data"};
@@ -264,9 +254,11 @@ PortContentionDecision ExecPortsMeasurer::detectPortContention(
 
     if (!port_events.empty() && !r1.avg_port_counts.empty() && !r2.avg_port_counts.empty()) {
         auto active_ports = [&](const std::vector<double>& counts) -> std::vector<size_t> {
-            if (counts.empty()) return {};
+            if (counts.empty())
+                return {};
             double max_val = *std::max_element(counts.begin(), counts.end());
-            if (max_val == 0.0) return {};
+            if (max_val == 0.0)
+                return {};
             std::vector<size_t> ports;
             for (size_t i = 0; i < counts.size(); ++i) {
                 if (counts[i] >= max_val * config_.active_port_threshold_ratio)
@@ -298,11 +290,7 @@ PortContentionDecision ExecPortsMeasurer::detectPortContention(
 
             std::vector<size_t> inter;
             std::set_intersection(
-                ports1.begin(),
-                ports1.end(),
-                ports2.begin(),
-                ports2.end(),
-                std::back_inserter(inter)
+                ports1.begin(), ports1.end(), ports2.begin(), ports2.end(), std::back_inserter(inter)
             );
             inter_str       = port_names(inter);
             size_t inter_sz = inter.size();
@@ -360,16 +348,15 @@ PortContentionDecision ExecPortsMeasurer::detectPortContention(
             norm_time = 0.5;
             norm_pmc  = 0.5;
         }
-        
+
         double comb_indep = time_conf_indep * norm_time + pmc_conf_indep * norm_pmc;
         double comb_dep   = time_conf_dep * norm_time + pmc_conf_dep * norm_pmc;
-        
+
         final_diff = (comb_indep > comb_dep);
         final_conf = std::max(comb_indep, comb_dep);
-        reasoning  = "Combined (time " + std::to_string(config_.time_weight) + "%, PMC " + 
-                     std::to_string(config_.pmc_weight) + "%, normalized to " +
-                     std::to_string(norm_time) + "/" + std::to_string(norm_pmc) + 
-                     "): independent=" + std::to_string(comb_indep) +
+        reasoning  = "Combined (time " + std::to_string(config_.time_weight) + "%, PMC " +
+                     std::to_string(config_.pmc_weight) + "%, normalized to " + std::to_string(norm_time) + "/" +
+                     std::to_string(norm_pmc) + "): independent=" + std::to_string(comb_indep) +
                      ", dependent=" + std::to_string(comb_dep) + " -> " +
                      std::string(final_diff ? "independent" : "dependent");
     }

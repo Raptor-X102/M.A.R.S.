@@ -17,9 +17,9 @@ namespace silicon_probe::write_buffer {
 
 /** @brief Result for one write count. */
 struct WriteBufferResult {
-    double                avg_latency_ticks; ///< Average time of the final store+load pair.
-    double                latency_stddev;    ///< Std. dev. of the measured time.
-    std::vector<uint64_t> avg_events;        ///< Average counter values for this point.
+    double avg_latency_ticks;          ///< Average time of the final store+load pair.
+    double latency_stddev;             ///< Std. dev. of the measured time.
+    std::vector<uint64_t> avg_events;  ///< Average counter values for this point.
 };
 
 /**
@@ -39,27 +39,27 @@ class WriteBufferMeasurer final : public core::Measurer {
     static constexpr size_t kBufferSizeMB            = 16;
     static constexpr size_t kBytesPerEntry           = 4;
     static constexpr size_t kCacheLineSize           = 64;
-    static constexpr size_t kStride = kCacheLineSize / kBytesPerEntry;   // = 16
+    static constexpr size_t kStride                  = kCacheLineSize / kBytesPerEntry;  // = 16
 
     /** @brief Settings for the write-buffer benchmark. */
     struct Config {
-        bool   enabled                        = true;                     ///< Turn this measurer on or off.
-        platform::MeasurementEnvironmentOptions environment;              ///< CPU and scheduler settings for the run.
-        size_t max_writes                     = kDefaultMaxWrites;        ///< Largest write count to test.
-        size_t min_writes                     = kDefaultMinWrites;        ///< Smallest write count to test.
-        size_t writes_step                    = kDefaultWritesStep;       ///< Step between write counts.
-        size_t iterations                     = kDefaultIterations;       ///< Number of samples inside one repeat.
-        size_t repeats                        = kDefaultRepeats;          ///< Number of repeats for one point.
-        size_t warmup_iterations              = kDefaultWarmupIterations; ///< Warm-up runs before timing.
+        bool enabled = true;                                  ///< Turn this measurer on or off.
+        platform::MeasurementEnvironmentOptions environment;  ///< CPU and scheduler settings for the run.
+        size_t max_writes        = kDefaultMaxWrites;         ///< Largest write count to test.
+        size_t min_writes        = kDefaultMinWrites;         ///< Smallest write count to test.
+        size_t writes_step       = kDefaultWritesStep;        ///< Step between write counts.
+        size_t iterations        = kDefaultIterations;        ///< Number of samples inside one repeat.
+        size_t repeats           = kDefaultRepeats;           ///< Number of repeats for one point.
+        size_t warmup_iterations = kDefaultWarmupIterations;  ///< Warm-up runs before timing.
 
-        double latency_spike_ratio            = 2.0;                      ///< Time ratio that marks a clear jump.
-        double latency_hold_ratio             = 1.5;                      ///< Time ratio to confirm the jump.
-        double stall_fallback_ratio           = 0.9;                      ///< Stall ratio for fallback logic.
-        size_t baseline_window                = 3;                        ///< Number of first points for the base time.
-        double stall_baseline_ratio           = 10.0;                     ///< Stall growth ratio over the base level.
-        double stall_absolute_min             = 100.0;                    ///< Smallest stall value to trust.
-        double stall_gradient_ratio           = 10.0;                     ///< Smallest stall jump between two points.
-        size_t stall_median_window            = 3;                        ///< Window size for stall smoothing.
+        double latency_spike_ratio  = 2.0;    ///< Time ratio that marks a clear jump.
+        double latency_hold_ratio   = 1.5;    ///< Time ratio to confirm the jump.
+        double stall_fallback_ratio = 0.9;    ///< Stall ratio for fallback logic.
+        size_t baseline_window      = 3;      ///< Number of first points for the base time.
+        double stall_baseline_ratio = 10.0;   ///< Stall growth ratio over the base level.
+        double stall_absolute_min   = 100.0;  ///< Smallest stall value to trust.
+        double stall_gradient_ratio = 10.0;   ///< Smallest stall jump between two points.
+        size_t stall_median_window  = 3;      ///< Window size for stall smoothing.
     };
 
     /** @brief Builds the measurer with default settings. */
@@ -99,11 +99,7 @@ class WriteBufferMeasurer final : public core::Measurer {
      * @return Result for this write count.
      */
     WriteBufferResult measure_for_writes(
-        size_t num_writes,
-        int* fill_base,
-        volatile int* extra_addr,
-        volatile int& dummy,
-        platform::pmc::PmcGroup* pmc
+        size_t num_writes, int* fill_base, volatile int* extra_addr, volatile int& dummy, platform::pmc::PmcGroup* pmc
     );
 
     /**
@@ -115,9 +111,7 @@ class WriteBufferMeasurer final : public core::Measurer {
      * @return Estimated write-buffer size in 4-byte entries.
      */
     size_t analyze_buffer_capacity(
-        const std::vector<WriteBufferResult>& results,
-        const std::vector<size_t>& writes_list,
-        size_t sb_idx,
+        const std::vector<WriteBufferResult>& results, const std::vector<size_t>& writes_list, size_t sb_idx,
         size_t bound_idx
     ) const;
 };

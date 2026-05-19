@@ -15,26 +15,26 @@ namespace silicon_probe::branch_history_table {
  * It looks for the point where branch misses go up.
  */
 class BranchHistoryTableMeasurer final : public core::Measurer {
-public:
-    static constexpr size_t      kDefaultMinPeriod   = 16;
-    static constexpr size_t      kDefaultMaxPeriod   = 32 * 1024;
-    static constexpr double      kDefaultPeriodCoef  = 2.0;
-    static constexpr size_t      kDefaultIterations  = 100'000'000;
-    static constexpr unsigned int kPatternSeed       = 123;
+   public:
+    static constexpr size_t kDefaultMinPeriod  = 16;
+    static constexpr size_t kDefaultMaxPeriod  = 32 * 1024;
+    static constexpr double kDefaultPeriodCoef = 2.0;
+    static constexpr size_t kDefaultIterations = 100'000'000;
+    static constexpr unsigned int kPatternSeed = 123;
 
     /** @brief Settings for the BHT benchmark. */
     struct Config {
-        bool   enabled                           = true;               ///< Turn this measurer on or off.
-        platform::MeasurementEnvironmentOptions environment;           ///< CPU and scheduler settings for the run.
-        size_t min_period                        = kDefaultMinPeriod;  ///< Smallest pattern period to test.
-        size_t max_period                        = kDefaultMaxPeriod;  ///< Largest pattern period to test.
-        double period_coeff                      = kDefaultPeriodCoef; ///< Growth factor between test points.
-        size_t iterations                        = kDefaultIterations; ///< Number of branch steps for one test point.
-        double abs_threshold                     = 0.2;               ///< Fallback miss-rate limit.
-        double max_delta_mult                    = 0.0;               ///< Reserved for future logic.
+        bool enabled = true;                                  ///< Turn this measurer on or off.
+        platform::MeasurementEnvironmentOptions environment;  ///< CPU and scheduler settings for the run.
+        size_t min_period     = kDefaultMinPeriod;            ///< Smallest pattern period to test.
+        size_t max_period     = kDefaultMaxPeriod;            ///< Largest pattern period to test.
+        double period_coeff   = kDefaultPeriodCoef;           ///< Growth factor between test points.
+        size_t iterations     = kDefaultIterations;           ///< Number of branch steps for one test point.
+        double abs_threshold  = 0.2;                          ///< Fallback miss-rate limit.
+        double max_delta_mult = 0.0;                          ///< Reserved for future logic.
     };
 
-private:
+   private:
     /** @brief Result for one pattern period. */
     struct BranchHistoryTableResult {
         size_t period;         ///< Tested pattern period.
@@ -43,7 +43,7 @@ private:
 
     Config config_;
 
-public:
+   public:
     /** @brief Builds the measurer with default settings. */
     BranchHistoryTableMeasurer();
 
@@ -65,7 +65,7 @@ public:
      */
     void measure(shared_types::CpuInfoData& data) override;
 
-private:
+   private:
     /** @brief Fixes bad setting values before the run. */
     void validateConfig();
 
@@ -77,4 +77,4 @@ private:
     std::optional<int> detectBHTSaturation(const std::vector<BranchHistoryTableResult>& results) const;
 };
 
-} // namespace silicon_probe::branch_history_table
+}  // namespace silicon_probe::branch_history_table

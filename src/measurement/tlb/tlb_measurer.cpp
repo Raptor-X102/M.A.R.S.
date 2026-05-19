@@ -137,10 +137,7 @@ void TlbMeasurer::measure(shared_types::CpuInfoData& data) {
 
     if (data.tlb_l1_size || data.tlb_l2_size) {
         SPDLOG_INFO(
-            "[{}] result: L1={} pages, L2={} pages",
-            name(),
-            data.tlb_l1_size.value_or(0),
-            data.tlb_l2_size.value_or(0)
+            "[{}] result: L1={} pages, L2={} pages", name(), data.tlb_l1_size.value_or(0), data.tlb_l2_size.value_or(0)
         );
     }
 
@@ -189,7 +186,7 @@ __attribute__((noinline)) std::uint64_t TlbMeasurer::measure_cycles(PageNode* st
     compiler_barrier(cursor);
 
     const std::uint64_t begin = platform::arch::tick();
-    size_t remaining = config_.iterations;
+    size_t remaining          = config_.iterations;
 
     while (remaining >= 8) {
         cursor = cursor->next;
@@ -225,7 +222,7 @@ TlbMeasurer::Mapping TlbMeasurer::allocate_mapping(size_t size_bytes) const {
 
     mapping.size_bytes = size_bytes;
     SPDLOG_DEBUG("TLB size_bytes = {}", size_bytes);
-    mapping.huge       = config_.use_huge_pages;
+    mapping.huge = config_.use_huge_pages;
 
     if (config_.use_huge_pages) {
         mapping.base = platform::huge_alloc(size_bytes);

@@ -28,7 +28,7 @@ CacheProfilerList::Element* CacheProfilerList::element_at(size_t index) const no
 }
 
 void CacheProfilerList::allocate(size_t count) {
-    allocated_count_ = count;
+    allocated_count_   = count;
     const size_t bytes = count * line_size_;
 
     void* raw_memory = nullptr;
@@ -76,13 +76,19 @@ void CacheProfilerList::verify_cycle() const {
 }
 
 CacheProfilerList::CacheProfilerList(size_t cache_line_size, size_t max_count, MemoryType memory_type)
-    : line_size_(cache_line_size), element_count_(0), memory_(nullptr, MemoryDeleter{memory_type, 0}),
+    : line_size_(cache_line_size),
+      element_count_(0),
+      memory_(nullptr, MemoryDeleter{memory_type, 0}),
       memory_type_(memory_type) {
-    if (cache_line_size == 0) throw std::invalid_argument("Cache line size cannot be zero");
-    if (max_count == 0) throw std::invalid_argument("Element count cannot be zero");
+    if (cache_line_size == 0)
+        throw std::invalid_argument("Cache line size cannot be zero");
+    if (max_count == 0)
+        throw std::invalid_argument("Element count cannot be zero");
 
-    SPDLOG_DEBUG("Creating cache profiler list: max_count={}, line_size={}, total_size={}",
-                 max_count, cache_line_size, max_count * cache_line_size);
+    SPDLOG_DEBUG(
+        "Creating cache profiler list: max_count={}, line_size={}, total_size={}", max_count, cache_line_size,
+        max_count * cache_line_size
+    );
 
     allocate(max_count);
 }
@@ -92,14 +98,16 @@ CacheProfilerList::~CacheProfilerList() {
 }
 
 void CacheProfilerList::prepare(size_t count, unsigned int seed) {
-    if (count == 0) throw std::invalid_argument("Cannot prepare cycle with zero elements");
+    if (count == 0)
+        throw std::invalid_argument("Cannot prepare cycle with zero elements");
     if (count > allocated_count_) {
         throw std::out_of_range("Requested count exceeds allocated list size");
     }
 
     // Generate random permutation of indices [0, count-1]
     std::vector<size_t> indices(count);
-    for (size_t i = 0; i < count; ++i) indices[i] = i;
+    for (size_t i = 0; i < count; ++i)
+        indices[i] = i;
 
     std::mt19937 generator(seed);
     std::shuffle(indices.begin(), indices.end(), generator);
@@ -124,9 +132,10 @@ size_t CacheProfilerList::line_size() const noexcept { return line_size_; }
 size_t CacheProfilerList::total_size() const noexcept { return element_count_ * line_size_; }
 
 void CacheProfilerList::flush_from_cache() const {
-    if (!memory_) return;
+    if (!memory_)
+        return;
     char* start = memory_.get();
-    char* end = start + element_count_ * line_size_; 
+    char* end   = start + element_count_ * line_size_;
     for (char* p = start; p < end; p += line_size_) {
         platform::arch::clflush(p);
     }

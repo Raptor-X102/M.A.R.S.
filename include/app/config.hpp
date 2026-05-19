@@ -45,15 +45,8 @@ class BootstrapOptionsParser {
    private:
     static const std::map<std::string, std::string>& log_level_aliases() {
         static const std::map<std::string, std::string> aliases{
-            {"trace", "trace"},
-            {"debug", "debug"},
-            {"info", "info"},
-            {"warning", "warn"},
-            {"warn", "warn"},
-            {"error", "err"},
-            {"err", "err"},
-            {"critical", "critical"},
-            {"off", "off"},
+            {"trace", "trace"}, {"debug", "debug"}, {"info", "info"},         {"warning", "warn"}, {"warn", "warn"},
+            {"error", "err"},   {"err", "err"},     {"critical", "critical"}, {"off", "off"},
         };
         return aliases;
     }

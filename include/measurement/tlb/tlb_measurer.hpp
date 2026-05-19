@@ -54,11 +54,11 @@ class TlbMeasurer final : public core::Measurer {
 
     /** @brief Settings for the TLB benchmark. */
     struct Config {
-        bool   enabled                        = true;               ///< Turn this measurer on or off.
-        size_t max_pages                      = kDefaultMaxPages;   ///< Largest page count to test.
-        size_t iterations                     = kDefaultIterations; ///< Number of pointer steps in one sample.
-        bool   use_huge_pages                 = false;              ///< Use huge pages instead of 4 KiB pages.
-        platform::MeasurementEnvironmentOptions environment;        ///< CPU and scheduler settings for the run.
+        bool enabled        = true;                           ///< Turn this measurer on or off.
+        size_t max_pages    = kDefaultMaxPages;               ///< Largest page count to test.
+        size_t iterations   = kDefaultIterations;             ///< Number of pointer steps in one sample.
+        bool use_huge_pages = false;                          ///< Use huge pages instead of 4 KiB pages.
+        platform::MeasurementEnvironmentOptions environment;  ///< CPU and scheduler settings for the run.
     };
 
     /** @brief Builds the measurer with default settings. */
@@ -85,16 +85,16 @@ class TlbMeasurer final : public core::Measurer {
    private:
     /** @brief One node stored on a page. */
     struct PageNode {
-        PageNode*     next = nullptr; ///< Next page in the ring.
-        std::uint64_t tag  = 0;       ///< Value used to touch the page.
+        PageNode* next    = nullptr;  ///< Next page in the ring.
+        std::uint64_t tag = 0;        ///< Value used to touch the page.
     } __attribute__((aligned(64)));
 
     /** @brief Owns the mapped memory used by the benchmark. */
     struct Mapping {
-        void*  base       = nullptr; ///< Base address of the mapping.
-        size_t size_bytes = 0;       ///< Mapping size in bytes.
-        bool   huge       = false;   ///< `true` if huge pages were used.
-        bool   locked     = false;   ///< `true` if mlock worked.
+        void* base        = nullptr;  ///< Base address of the mapping.
+        size_t size_bytes = 0;        ///< Mapping size in bytes.
+        bool huge         = false;    ///< `true` if huge pages were used.
+        bool locked       = false;    ///< `true` if mlock worked.
 
         Mapping()                          = default;
         Mapping(const Mapping&)            = delete;
@@ -122,8 +122,8 @@ class TlbMeasurer final : public core::Measurer {
 
     /** @brief Rough jump positions in the TLB sweep. */
     struct Boundaries {
-        std::optional<size_t> l1; ///< First jump for L1 TLB.
-        std::optional<size_t> l2; ///< First jump for L2 TLB.
+        std::optional<size_t> l1;  ///< First jump for L1 TLB.
+        std::optional<size_t> l2;  ///< First jump for L2 TLB.
     };
 
     Config config_;
@@ -182,8 +182,9 @@ class TlbMeasurer final : public core::Measurer {
      * @param cache_line_bytes Cache line size in bytes.
      * @return Node pointers that can be shuffled for the test.
      */
-    static std::vector<PageNode*>
-    make_page_nodes(void* base, size_t page_count, size_t page_size, size_t cache_line_bytes);
+    static std::vector<PageNode*> make_page_nodes(
+        void* base, size_t page_count, size_t page_size, size_t cache_line_bytes
+    );
 
     /**
      * @brief Touches every node before timing.
@@ -228,11 +229,7 @@ class TlbMeasurer final : public core::Measurer {
      * @return Summary result for this point.
      */
     shared_types::TlbSummaryPoint measure_point(
-        std::vector<PageNode*>& pool,
-        std::vector<PageNode*>& order,
-        std::mt19937& rng,
-        size_t pages,
-        size_t page_size
+        std::vector<PageNode*>& pool, std::vector<PageNode*>& order, std::mt19937& rng, size_t pages, size_t page_size
     ) const;
     /**
      * @brief Finds jump points in the sweep.
@@ -255,8 +252,9 @@ class TlbMeasurer final : public core::Measurer {
      * @param pages Smallest page count to accept.
      * @return Index of the first match, or `points.size()`.
      */
-    static size_t
-    first_index_with_at_least_pages(const std::vector<shared_types::TlbSummaryPoint>& points, size_t pages);
+    static size_t first_index_with_at_least_pages(
+        const std::vector<shared_types::TlbSummaryPoint>& points, size_t pages
+    );
 
     /**
      * @brief Finds the first stable time jump after @p start_index.
@@ -268,11 +266,8 @@ class TlbMeasurer final : public core::Measurer {
      * @return Jump index, or `std::nullopt` if no jump was found.
      */
     static std::optional<size_t> find_latency_jump(
-        const std::vector<shared_types::TlbSummaryPoint>& points,
-        size_t start_index,
-        double reference_level,
-        double ratio_threshold,
-        double min_jump_cycles
+        const std::vector<shared_types::TlbSummaryPoint>& points, size_t start_index, double reference_level,
+        double ratio_threshold, double min_jump_cycles
     );
     /**
      * @brief Checks that a jump stays high on the next point.
