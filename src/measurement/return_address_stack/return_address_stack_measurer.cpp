@@ -10,10 +10,7 @@ ReturnAddressStackMeasurer::ReturnAddressStackMeasurer() : ReturnAddressStackMea
 ReturnAddressStackMeasurer::ReturnAddressStackMeasurer(Config config) : config_(std::move(config)) {
     SPDLOG_INFO(
         "[{}] configured: min_recursion_depth={}, max_recursion_depth={}, recursion_depth_step={}, iterations={}",
-        name(),
-        config_.min_recursion_depth,
-        config_.max_recursion_depth,
-        config_.recursion_depth_step,
+        name(), config_.min_recursion_depth, config_.max_recursion_depth, config_.recursion_depth_step,
         config_.iterations
     );
 }
@@ -76,9 +73,7 @@ void ReturnAddressStackMeasurer::measure(shared_types::CpuInfoData& data) {
         SPDLOG_INFO("[{}] Return Address Stack effective size ≈ {} addresses", name(), ras_size);
     } else {
         SPDLOG_ERROR(
-            "[{}] could not detect RAS saturation in period range [{}, {}]",
-            name(),
-            config_.min_recursion_depth,
+            "[{}] could not detect RAS saturation in period range [{}, {}]", name(), config_.min_recursion_depth,
             config_.max_recursion_depth
         );
     }

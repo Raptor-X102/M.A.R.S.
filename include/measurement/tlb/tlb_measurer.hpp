@@ -96,30 +96,25 @@ class TlbMeasurer final : public core::Measurer {
     std::vector<size_t> build_page_counts() const;
     Mapping allocate_mapping(size_t size_bytes) const;
     void advise_mapping(const Mapping& mapping) const;
-    static std::vector<PageNode*>
-    make_page_nodes(void* base, size_t page_count, size_t page_size, size_t cache_line_bytes);
+    static std::vector<PageNode*> make_page_nodes(
+        void* base, size_t page_count, size_t page_size, size_t cache_line_bytes
+    );
     static void pretouch(const std::vector<PageNode*>& nodes);
     static void link_ring(const std::vector<PageNode*>& order, size_t count);
     void warm_instruction_path(PageNode* start);
     static void warmup(PageNode* start, size_t pages);
     std::uint64_t measure_cycles(PageNode* start) const;
     shared_types::TlbSummaryPoint measure_point(
-        std::vector<PageNode*>& pool,
-        std::vector<PageNode*>& order,
-        std::mt19937& rng,
-        size_t pages,
-        size_t page_size
+        std::vector<PageNode*>& pool, std::vector<PageNode*>& order, std::mt19937& rng, size_t pages, size_t page_size
     ) const;
     static Boundaries detect_boundaries(const std::vector<shared_types::TlbSummaryPoint>& points);
     static double mean_first_points(const std::vector<shared_types::TlbSummaryPoint>& points, size_t max_count);
-    static size_t
-    first_index_with_at_least_pages(const std::vector<shared_types::TlbSummaryPoint>& points, size_t pages);
+    static size_t first_index_with_at_least_pages(
+        const std::vector<shared_types::TlbSummaryPoint>& points, size_t pages
+    );
     static std::optional<size_t> find_latency_jump(
-        const std::vector<shared_types::TlbSummaryPoint>& points,
-        size_t start_index,
-        double reference_level,
-        double ratio_threshold,
-        double min_jump_cycles
+        const std::vector<shared_types::TlbSummaryPoint>& points, size_t start_index, double reference_level,
+        double ratio_threshold, double min_jump_cycles
     );
     static bool jump_is_sustained(const std::vector<shared_types::TlbSummaryPoint>& points, size_t index);
     static double median(const std::vector<double>& sorted_values);

@@ -62,8 +62,9 @@ class ExecPortsMeasurer final : public core::Measurer {
    private:
     Config config_;
 
-    static PortContentionDecision
-    detectPortContention(const std::vector<ExecPortsResult>& results, const std::vector<std::string>& port_events);
+    static PortContentionDecision detectPortContention(
+        const std::vector<ExecPortsResult>& results, const std::vector<std::string>& port_events
+    );
 };
 
 }  // namespace silicon_probe::exec_ports

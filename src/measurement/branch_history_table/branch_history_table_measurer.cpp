@@ -10,12 +10,8 @@ BranchHistoryTableMeasurer::BranchHistoryTableMeasurer() : BranchHistoryTableMea
 
 BranchHistoryTableMeasurer::BranchHistoryTableMeasurer(Config config) : config_(std::move(config)) {
     SPDLOG_INFO(
-        "[{}] configured: min_period={}, max_period={}, coeff={}, iterations={}",
-        name(),
-        config_.min_period,
-        config_.max_period,
-        config_.period_coeff,
-        config_.iterations
+        "[{}] configured: min_period={}, max_period={}, coeff={}, iterations={}", name(), config_.min_period,
+        config_.max_period, config_.period_coeff, config_.iterations
     );
 }
 
@@ -86,9 +82,7 @@ void BranchHistoryTableMeasurer::measure(shared_types::CpuInfoData& data) {
     int bht_size = detectBHTSaturation(results);
     if (bht_size < 0) {
         SPDLOG_ERROR(
-            "[{}] could not detect BHT saturation in period range [{}, {}]",
-            name(),
-            config_.min_period,
+            "[{}] could not detect BHT saturation in period range [{}, {}]", name(), config_.min_period,
             config_.max_period
         );
     } else {
@@ -177,10 +171,8 @@ int BranchHistoryTableMeasurer::detectBHTSaturation(const std::vector<BranchHist
         // If derivative period is within factor 2 of saturation period, take the larger one.
         if (best > 0 && derivative_period > best * 1.5) {
             SPDLOG_WARN(
-                "[{}] derivative period {} is much larger than saturation period {}, using derivative",
-                name(),
-                derivative_period,
-                best
+                "[{}] derivative period {} is much larger than saturation period {}, using derivative", name(),
+                derivative_period, best
             );
             best = derivative_period;
         } else if (derivative_period > best) {
@@ -199,11 +191,7 @@ int BranchHistoryTableMeasurer::detectBHTSaturation(const std::vector<BranchHist
     }
 
     SPDLOG_INFO(
-        "[{}] BHT estimation: baseline={:.4f}, max_miss={:.4f}, threshold={:.4f}",
-        name(),
-        baseline,
-        max_miss,
-        threshold
+        "[{}] BHT estimation: baseline={:.4f}, max_miss={:.4f}, threshold={:.4f}", name(), baseline, max_miss, threshold
     );
     SPDLOG_INFO("  saturation (90% rise) period = {}", saturation_period);
     SPDLOG_INFO("  derivative (rise then plateau) period = {}", derivative_period);

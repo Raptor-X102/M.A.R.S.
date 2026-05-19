@@ -60,18 +60,11 @@ class WriteBufferMeasurer final : public core::Measurer {
     Config config_;
 
     WriteBufferResult measure_for_writes(
-        size_t num_writes,
-        int* fill_base,
-        volatile int* extra_addr,
-        volatile int& dummy,
-        platform::pmc::PmcGroup* pmc
+        size_t num_writes, int* fill_base, volatile int* extra_addr, volatile int& dummy, platform::pmc::PmcGroup* pmc
     );
     size_t analyze_buffer_capacity(
-        const std::vector<WriteBufferResult>& results,
-        const std::vector<size_t>& writes_list,
-        bool has_pmc,
-        size_t sb_idx,
-        size_t bound_idx
+        const std::vector<WriteBufferResult>& results, const std::vector<size_t>& writes_list, bool has_pmc,
+        size_t sb_idx, size_t bound_idx
     );
 };
 

@@ -57,8 +57,9 @@ class StoreToLoadForwardingMeasurer final : public core::Measurer {
     Config config_;
 
     template <size_t N>
-    StoreToLoadForwardingResult
-    run_test(size_t offset, platform::pmc::PmcGroup* pmc, const std::vector<std::string>& ev_names);
+    StoreToLoadForwardingResult run_test(
+        size_t offset, platform::pmc::PmcGroup* pmc, const std::vector<std::string>& ev_names
+    );
 };
 
 }  // namespace silicon_probe::store_to_load_forwarding

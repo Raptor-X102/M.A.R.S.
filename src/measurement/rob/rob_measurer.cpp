@@ -11,14 +11,9 @@ RobMeasurer::RobMeasurer() : RobMeasurer(Config{}) {}
 
 RobMeasurer::RobMeasurer(Config config) : config_(std::move(config)) {
     SPDLOG_INFO(
-        "[{}] configured: min={}, max={}, step={}, inner_its={}, outer_its={}, instr_type={}",
-        name(),
-        config_.min_instr_cnt,
-        config_.max_instr_cnt,
-        config_.instr_cnt_step,
-        config_.inner_iterations,
-        config_.outer_iterations,
-        config_.instr_type
+        "[{}] configured: min={}, max={}, step={}, inner_its={}, outer_its={}, instr_type={}", name(),
+        config_.min_instr_cnt, config_.max_instr_cnt, config_.instr_cnt_step, config_.inner_iterations,
+        config_.outer_iterations, config_.instr_type
     );
 }
 
@@ -76,11 +71,7 @@ void RobMeasurer::measure(shared_types::CpuInfoData& data) {
         results.push_back({filler, min_per_iter, avg_per_iter, max_per_iter});
 
         SPDLOG_INFO(
-            "[{}] filler={:3d}  min={:6.2f}  avg={:6.2f}  max={:6.2f}",
-            name(),
-            filler,
-            min_per_iter,
-            avg_per_iter,
+            "[{}] filler={:3d}  min={:6.2f}  avg={:6.2f}  max={:6.2f}", name(), filler, min_per_iter, avg_per_iter,
             max_per_iter
         );
 
@@ -95,9 +86,7 @@ void RobMeasurer::measure(shared_types::CpuInfoData& data) {
     int rob_size = detectRobSaturation(results);
     if (rob_size < 0) {
         SPDLOG_ERROR(
-            "[{}] could not detect ROB saturation in range [{}, {}]",
-            name(),
-            config_.min_instr_cnt,
+            "[{}] could not detect ROB saturation in range [{}, {}]", name(), config_.min_instr_cnt,
             config_.max_instr_cnt
         );
     } else {

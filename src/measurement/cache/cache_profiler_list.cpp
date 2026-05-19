@@ -101,9 +101,7 @@ CacheProfilerList::CacheProfilerList(size_t cache_line_size, size_t count, unsig
     }
 
     SPDLOG_DEBUG(
-        "Creating cache profiler list: count={}, line_size={}, total_size={}",
-        count,
-        cache_line_size,
+        "Creating cache profiler list: count={}, line_size={}, total_size={}", count, cache_line_size,
         count * cache_line_size
     );
 

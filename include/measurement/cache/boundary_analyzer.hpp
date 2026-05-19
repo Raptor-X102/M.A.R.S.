@@ -27,8 +27,9 @@ class BoundaryAnalyzer {
     static Statistics compute_stats(const std::vector<double>& samples);
 
     template <typename MeasureFn>
-    size_t
-    refine_boundary(size_t left, size_t right, size_t precision, MeasureFn&& measure, double baseline_mean) const {
+    size_t refine_boundary(
+        size_t left, size_t right, size_t precision, MeasureFn&& measure, double baseline_mean
+    ) const {
         SPDLOG_DEBUG("[boundary] baseline={}, threshold={}x", baseline_mean, config_.growth_factor);
 
         size_t current_left  = left;
@@ -48,12 +49,8 @@ class BoundaryAnalyzer {
             const bool out_of_cache = ratio > config_.growth_factor;
 
             SPDLOG_DEBUG(
-                "[boundary] size={}, mean={}, ratio={}, threshold={}, decision={}",
-                midpoint,
-                statistics.mean,
-                ratio,
-                config_.growth_factor,
-                out_of_cache ? "out" : "in"
+                "[boundary] size={}, mean={}, ratio={}, threshold={}, decision={}", midpoint, statistics.mean, ratio,
+                config_.growth_factor, out_of_cache ? "out" : "in"
             );
 
             if (out_of_cache) {

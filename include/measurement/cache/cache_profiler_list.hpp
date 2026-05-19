@@ -35,10 +35,7 @@ class CacheProfilerList {
     };
 
     CacheProfilerList(
-        size_t cache_line_size,
-        size_t count,
-        unsigned int seed      = 12345,
-        MemoryType memory_type = MemoryType::aligned
+        size_t cache_line_size, size_t count, unsigned int seed = 12345, MemoryType memory_type = MemoryType::aligned
     );
     ~CacheProfilerList();
 

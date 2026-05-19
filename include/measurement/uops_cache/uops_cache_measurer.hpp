@@ -70,11 +70,11 @@ class UopsCacheMeasurer final : public core::Measurer {
    private:
     Config config_;
 
-    UopsCacheResult
-    run_test(size_t instr_cnt, platform::pmc::PmcGroup* pmc, const std::vector<std::string>& uops_events);
+    UopsCacheResult run_test(
+        size_t instr_cnt, platform::pmc::PmcGroup* pmc, const std::vector<std::string>& uops_events
+    );
     size_t findApproxSaturation(
-        const std::vector<size_t>& counts,
-        const std::vector<UopsCacheResult>& results,
+        const std::vector<size_t>& counts, const std::vector<UopsCacheResult>& results,
         const std::vector<std::string>& uops_events
     );
     size_t refineSaturation(size_t approx, platform::pmc::PmcGroup* pmc, const std::vector<std::string>& uops_events);

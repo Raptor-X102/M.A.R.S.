@@ -11,14 +11,8 @@ UopsCacheMeasurer::UopsCacheMeasurer(Config config) : config_(std::move(config))
     SPDLOG_INFO(
         "[{}] configured: min_instr_cnt = {}, max_instr_cnt = {}, instr_step = {}, iterations={}, "
         "repeats={}, instr = [{}, {}]",
-        name(),
-        config_.min_instr_cnt,
-        config_.max_instr_cnt,
-        config_.instr_step,
-        config_.iterations,
-        config_.repeats,
-        static_cast<int>(config_.instr.instr_type),
-        config_.instr.instr_name
+        name(), config_.min_instr_cnt, config_.max_instr_cnt, config_.instr_step, config_.iterations, config_.repeats,
+        static_cast<int>(config_.instr.instr_type), config_.instr.instr_name
     );
 }
 
@@ -74,10 +68,7 @@ void UopsCacheMeasurer::measure(shared_types::CpuInfoData& data) {
             if (share < config_.dsb_share_stop && coarse_counts.size() >= config_.coarse_ignore_first) {
                 saturation_reached = true;
                 SPDLOG_INFO(
-                    "[{}] DSB share dropped to {:.3f} at instr_cnt={}, stopping coarse scan",
-                    name(),
-                    share,
-                    instr_cnt
+                    "[{}] DSB share dropped to {:.3f} at instr_cnt={}, stopping coarse scan", name(), share, instr_cnt
                 );
                 break;
             }
@@ -105,9 +96,7 @@ void UopsCacheMeasurer::measure(shared_types::CpuInfoData& data) {
 }
 
 UopsCacheResult UopsCacheMeasurer::run_test(
-    size_t instr_cnt,
-    platform::pmc::PmcGroup* pmc,
-    const std::vector<std::string>& uops_events
+    size_t instr_cnt, platform::pmc::PmcGroup* pmc, const std::vector<std::string>& uops_events
 ) {
     void* func = platform::arch::generate_uops_cache_code(instr_cnt, config_.iterations, {config_.instr.instr_type});
     if (!func) {
@@ -170,11 +159,7 @@ UopsCacheResult UopsCacheMeasurer::run_test(
     }
 
     SPDLOG_INFO(
-        "[{}] instr_cnt={}: avg_ticks_per_instr={:.4g} (std={:.4g})",
-        name(),
-        instr_cnt,
-        avg_ticks_per_instr,
-        ticks_std
+        "[{}] instr_cnt={}: avg_ticks_per_instr={:.4g} (std={:.4g})", name(), instr_cnt, avg_ticks_per_instr, ticks_std
     );
     if (!avg_events_counts.empty()) {
         for (size_t i = 0; i < uops_events.size(); ++i) {
@@ -191,8 +176,7 @@ UopsCacheResult UopsCacheMeasurer::run_test(
 }
 
 size_t UopsCacheMeasurer::findApproxSaturation(
-    const std::vector<size_t>& counts,
-    const std::vector<UopsCacheResult>& results,
+    const std::vector<size_t>& counts, const std::vector<UopsCacheResult>& results,
     const std::vector<std::string>& uops_events
 ) {
     if (counts.size() < 3)
@@ -235,9 +219,7 @@ size_t UopsCacheMeasurer::findApproxSaturation(
 }
 
 size_t UopsCacheMeasurer::refineSaturation(
-    size_t approx,
-    platform::pmc::PmcGroup* pmc,
-    const std::vector<std::string>& uops_events
+    size_t approx, platform::pmc::PmcGroup* pmc, const std::vector<std::string>& uops_events
 ) {
     size_t left  = (approx > config_.instr_step) ? approx - config_.instr_step : config_.min_instr_cnt;
     size_t right = approx + config_.instr_step;

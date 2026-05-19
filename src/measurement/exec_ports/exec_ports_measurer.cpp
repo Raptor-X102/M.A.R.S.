@@ -11,15 +11,9 @@ ExecPortsMeasurer::ExecPortsMeasurer() : ExecPortsMeasurer(Config{}) {}
 
 ExecPortsMeasurer::ExecPortsMeasurer(Config config) : config_(std::move(config)) {
     SPDLOG_INFO(
-        "[{}] configured: instr_cnt={}, iterations={}, repeats={}, instr1 = [{}, {}], instr2 = [{}, {}]",
-        name(),
-        config_.instr_cnt,
-        config_.iterations,
-        config_.repeats,
-        static_cast<int>(config_.instr1.instr_type),
-        config_.instr1.instr_name,
-        static_cast<int>(config_.instr2.instr_type),
-        config_.instr2.instr_name
+        "[{}] configured: instr_cnt={}, iterations={}, repeats={}, instr1 = [{}, {}], instr2 = [{}, {}]", name(),
+        config_.instr_cnt, config_.iterations, config_.repeats, static_cast<int>(config_.instr1.instr_type),
+        config_.instr1.instr_name, static_cast<int>(config_.instr2.instr_type), config_.instr2.instr_name
     );
 }
 
@@ -155,21 +149,16 @@ void ExecPortsMeasurer::measure(shared_types::CpuInfoData& data) {
     data.execution_ports_independent = decision.different_ports;
 
     SPDLOG_INFO(
-        "[{}] decision: instruction1 ({}) and instruction2 ({}) use {} ports (confidence {:.2f}) - {}",
-        name(),
-        config_.instr1.instr_name,
-        config_.instr2.instr_name,
-        decision.different_ports ? "different" : "the same",
-        decision.confidence,
-        decision.reasoning
+        "[{}] decision: instruction1 ({}) and instruction2 ({}) use {} ports (confidence {:.2f}) - {}", name(),
+        config_.instr1.instr_name, config_.instr2.instr_name, decision.different_ports ? "different" : "the same",
+        decision.confidence, decision.reasoning
     );
 
     SPDLOG_INFO("[{}] measurement complete", name());
 }
 
 PortContentionDecision ExecPortsMeasurer::detectPortContention(
-    const std::vector<ExecPortsResult>& results,
-    const std::vector<std::string>& port_events
+    const std::vector<ExecPortsResult>& results, const std::vector<std::string>& port_events
 ) {
     if (results.size() < 3) {
         return {false, 0.0, "insufficient data"};
@@ -252,11 +241,7 @@ PortContentionDecision ExecPortsMeasurer::detectPortContention(
 
             std::vector<size_t> inter;
             std::set_intersection(
-                ports1.begin(),
-                ports1.end(),
-                ports2.begin(),
-                ports2.end(),
-                std::back_inserter(inter)
+                ports1.begin(), ports1.end(), ports2.begin(), ports2.end(), std::back_inserter(inter)
             );
             inter_str       = port_names(inter);
             size_t inter_sz = inter.size();

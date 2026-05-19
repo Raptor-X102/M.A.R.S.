@@ -10,11 +10,8 @@ CacheMeasurer::CacheMeasurer() : CacheMeasurer(Config{}) {}
 CacheMeasurer::CacheMeasurer(Config config)
     : config_(std::move(config)), cache_line_size_(platform::cache_line_size()) {
     SPDLOG_INFO(
-        "[{}] configured with levels: L1={}, L2={}, L3={}",
-        name(),
-        config_.levels.test(level_index(CacheLevel::l1d)),
-        config_.levels.test(level_index(CacheLevel::l2)),
-        config_.levels.test(level_index(CacheLevel::l3))
+        "[{}] configured with levels: L1={}, L2={}, L3={}", name(), config_.levels.test(level_index(CacheLevel::l1d)),
+        config_.levels.test(level_index(CacheLevel::l2)), config_.levels.test(level_index(CacheLevel::l3))
     );
 }
 
@@ -41,10 +38,7 @@ void CacheMeasurer::measure(shared_types::CpuInfoData& data) {
 }
 
 void CacheMeasurer::measure_level(
-    shared_types::CpuInfoData& data,
-    CacheLevel level,
-    size_t min_size,
-    size_t max_size,
+    shared_types::CpuInfoData& data, CacheLevel level, size_t min_size, size_t max_size,
     std::optional<size_t> shared_types::CpuInfoData::* target_field
 ) {
     SPDLOG_INFO("=== Measuring {} ===", level_name(level));
@@ -88,18 +82,13 @@ void CacheMeasurer::measure_level(
             if (diff / avg <= config_.decision_tolerance) {
                 final_size = static_cast<size_t>(std::round(avg));
                 SPDLOG_INFO(
-                    "Both methods agree within {}%: latency={}, misses={}, final={}",
-                    config_.decision_tolerance * 100,
-                    size_latency,
-                    size_misses,
-                    final_size
+                    "Both methods agree within {}%: latency={}, misses={}, final={}", config_.decision_tolerance * 100,
+                    size_latency, size_misses, final_size
                 );
             } else {
                 final_size = size_misses;
                 SPDLOG_INFO(
-                    "Misses method used (more accurate), latency gave {} but misses gave {}",
-                    size_latency,
-                    size_misses
+                    "Misses method used (more accurate), latency gave {} but misses gave {}", size_latency, size_misses
                 );
             }
         } else {
@@ -123,8 +112,9 @@ void CacheMeasurer::measure_level(
     }
 }
 
-std::unique_ptr<platform::pmc::PmcGroup>
-CacheMeasurer::open_pmc_for_level(CacheLevel level, shared_types::CpuInfoData& data) const {
+std::unique_ptr<platform::pmc::PmcGroup> CacheMeasurer::open_pmc_for_level(
+    CacheLevel level, shared_types::CpuInfoData& data
+) const {
     auto events = platform::discover_cache_miss_events(level, data);
     if (events.empty()) {
         SPDLOG_DEBUG("No miss events found for {}, using latency-only", level_name(level));
@@ -146,17 +136,16 @@ CacheMeasurer::open_pmc_for_level(CacheLevel level, shared_types::CpuInfoData& d
     return pmc;
 }
 
-std::vector<CacheMeasurer::MeasurementResult>
-CacheMeasurer::measure_range(size_t min_size, size_t max_size, std::unique_ptr<platform::pmc::PmcGroup>& pmc) {
+std::vector<CacheMeasurer::MeasurementResult> CacheMeasurer::measure_range(
+    size_t min_size, size_t max_size, std::unique_ptr<platform::pmc::PmcGroup>& pmc
+) {
     std::vector<MeasurementResult> results;
     for (size_t size = min_size; size <= max_size; size *= 2) {
         if (pmc) {
             results.push_back(do_single_measurement_with_pmc(size, *pmc));
             SPDLOG_INFO(
-                "Size={}, cycles/elem={}, miss_rate={:.6f}",
-                results.back().size_bytes,
-                results.back().cycles_per_element,
-                results.back().miss_rate
+                "Size={}, cycles/elem={}, miss_rate={:.6f}", results.back().size_bytes,
+                results.back().cycles_per_element, results.back().miss_rate
             );
         } else {
             results.push_back(do_single_measurement_without_pmc(size));
@@ -199,8 +188,9 @@ CacheMeasurer::MeasurementResult CacheMeasurer::do_single_measurement_without_pm
     return result;
 }
 
-CacheMeasurer::MeasurementResult
-CacheMeasurer::do_single_measurement_with_pmc(size_t size, platform::pmc::PmcGroup& pmc) {
+CacheMeasurer::MeasurementResult CacheMeasurer::do_single_measurement_with_pmc(
+    size_t size, platform::pmc::PmcGroup& pmc
+) {
     const size_t count = size / cache_line_size_;
     if (count == 0) {
         throw std::invalid_argument("Measurement size must be at least one cache line");
@@ -304,8 +294,9 @@ size_t CacheMeasurer::detect_miss_rate_boundary(const std::vector<MeasurementRes
     return results.size();
 }
 
-size_t
-CacheMeasurer::refine_boundary_latency(const std::vector<MeasurementResult>& results, const BoundaryResult& boundary) {
+size_t CacheMeasurer::refine_boundary_latency(
+    const std::vector<MeasurementResult>& results, const BoundaryResult& boundary
+) {
     const size_t left  = results[boundary.index - 1].size_bytes;
     const size_t right = results[boundary.index].size_bytes;
 
@@ -337,18 +328,13 @@ CacheMeasurer::refine_boundary_latency(const std::vector<MeasurementResult>& res
     BoundaryAnalyzer analyzer(analyzer_config);
 
     return analyzer.refine_boundary(
-        left,
-        right,
-        config_.precision,
-        [this](size_t size) -> double { return do_single_measurement_without_pmc(size).cycles_per_element; },
-        baseline
+        left, right, config_.precision,
+        [this](size_t size) -> double { return do_single_measurement_without_pmc(size).cycles_per_element; }, baseline
     );
 }
 
 size_t CacheMeasurer::refine_boundary_misses(
-    const std::vector<MeasurementResult>& results,
-    size_t miss_index,
-    CacheLevel level,
+    const std::vector<MeasurementResult>& results, size_t miss_index, CacheLevel level,
     std::unique_ptr<platform::pmc::PmcGroup>& pmc
 ) {
     const size_t left  = results[miss_index - 1].size_bytes;
@@ -377,11 +363,8 @@ size_t CacheMeasurer::refine_boundary_misses(
     BoundaryAnalyzer analyzer(analyzer_config);
 
     return analyzer.refine_boundary(
-        left,
-        right,
-        config_.precision,
-        [this, &pmc](size_t size) -> double { return do_single_measurement_with_pmc(size, *pmc).miss_rate; },
-        baseline
+        left, right, config_.precision,
+        [this, &pmc](size_t size) -> double { return do_single_measurement_with_pmc(size, *pmc).miss_rate; }, baseline
     );
 }
 

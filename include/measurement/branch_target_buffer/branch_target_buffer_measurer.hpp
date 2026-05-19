@@ -68,9 +68,7 @@ class BranchTargetBufferMeasurer final : public core::Measurer {
     BranchTargetBufferResult run_test(size_t blocks_cnt, platform::pmc::PmcGroup* pmc);
     double computeMispredictionRate(const BranchTargetBufferResult& res, size_t blocks_cnt) const;
     size_t findApproxSaturation(
-        const std::vector<size_t>& counts,
-        const std::vector<BranchTargetBufferResult>& results,
-        bool use_events
+        const std::vector<size_t>& counts, const std::vector<BranchTargetBufferResult>& results, bool use_events
     );
     size_t refineSaturation(size_t good, size_t bad, platform::pmc::PmcGroup* pmc);
     size_t refineSaturationTime(size_t approx, platform::pmc::PmcGroup* pmc);

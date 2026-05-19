@@ -38,9 +38,7 @@ std::vector<std::string> discover_port_events(shared_types::CpuInfoData& data) {
 
         // Load ports (grouped)
         std::vector<std::string> load_port_names = {
-            "uops_dispatched.port_2_3_10",
-            "uops_dispatched.port_2_3",
-            "uops_dispatched.port_2",
+            "uops_dispatched.port_2_3_10", "uops_dispatched.port_2_3", "uops_dispatched.port_2",
             "uops_dispatched.port_3"
         };
         for (const auto& name : load_port_names) {
@@ -51,10 +49,7 @@ std::vector<std::string> discover_port_events(shared_types::CpuInfoData& data) {
         }
         // Store ports
         std::vector<std::string> store_port_names = {
-            "uops_dispatched.port_4_9",
-            "uops_dispatched.port_4",
-            "uops_dispatched.port_7_8",
-            "uops_dispatched.port_7"
+            "uops_dispatched.port_4_9", "uops_dispatched.port_4", "uops_dispatched.port_7_8", "uops_dispatched.port_7"
         };
         for (const auto& name : store_port_names) {
             if (event_exists(name)) {
@@ -140,8 +135,7 @@ std::optional<std::string> discover_branch_target_buffer_events(shared_types::Cp
     } else {
         if (data.cpu_vendor)
             SPDLOG_WARN(
-                "Unsupported CPU vendor ({}) for branch target buffer events discovery",
-                data.cpu_vendor->name()
+                "Unsupported CPU vendor ({}) for branch target buffer events discovery", data.cpu_vendor->name()
             );
     }
 
@@ -163,8 +157,7 @@ std::vector<std::string> discover_s2l_forwarding_events(shared_types::CpuInfoDat
     } else {
         if (data.cpu_vendor)
             SPDLOG_WARN(
-                "Unsupported CPU vendor ({}) for store to load forwarding events discovery",
-                data.cpu_vendor->name()
+                "Unsupported CPU vendor ({}) for store to load forwarding events discovery", data.cpu_vendor->name()
             );
     }
 

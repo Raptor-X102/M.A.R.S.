@@ -180,7 +180,7 @@ __attribute__((noinline)) std::uint64_t TlbMeasurer::measure_cycles(PageNode* st
     compiler_barrier(cursor);
 
     const std::uint64_t begin = platform::arch::tick();
-    size_t remaining = config_.iterations;
+    size_t remaining          = config_.iterations;
 
     while (remaining >= 8) {
         cursor = cursor->next;

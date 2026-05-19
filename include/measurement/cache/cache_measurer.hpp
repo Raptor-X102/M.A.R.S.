@@ -106,25 +106,25 @@ class CacheMeasurer final : public core::Measurer {
     Config config_;
     size_t cache_line_size_ = 0;
 
-    void measure_level(shared_types::CpuInfoData& data,
-                       CacheLevel level,
-                       size_t min_size,
-                       size_t max_size,
-                       std::optional<size_t> shared_types::CpuInfoData::* target_field);
-    std::unique_ptr<platform::pmc::PmcGroup> open_pmc_for_level(CacheLevel level,
-                                                                shared_types::CpuInfoData& data) const;
-    std::vector<MeasurementResult> measure_range(size_t min_size,
-                                                 size_t max_size,
-                                                 std::unique_ptr<platform::pmc::PmcGroup>& pmc);
+    void measure_level(
+        shared_types::CpuInfoData& data, CacheLevel level, size_t min_size, size_t max_size,
+        std::optional<size_t> shared_types::CpuInfoData::* target_field
+    );
+    std::unique_ptr<platform::pmc::PmcGroup> open_pmc_for_level(
+        CacheLevel level, shared_types::CpuInfoData& data
+    ) const;
+    std::vector<MeasurementResult> measure_range(
+        size_t min_size, size_t max_size, std::unique_ptr<platform::pmc::PmcGroup>& pmc
+    );
     MeasurementResult do_single_measurement_without_pmc(size_t size);
     MeasurementResult do_single_measurement_with_pmc(size_t size, platform::pmc::PmcGroup& pmc);
     BoundaryResult detect_latency_boundary(const std::vector<MeasurementResult>& results) const;
     size_t detect_miss_rate_boundary(const std::vector<MeasurementResult>& results, CacheLevel level) const;
     size_t refine_boundary_latency(const std::vector<MeasurementResult>& results, const BoundaryResult& boundary);
-    size_t refine_boundary_misses(const std::vector<MeasurementResult>& results,
-                                  size_t miss_index,
-                                  CacheLevel level,
-                                  std::unique_ptr<platform::pmc::PmcGroup>& pmc);
+    size_t refine_boundary_misses(
+        const std::vector<MeasurementResult>& results, size_t miss_index, CacheLevel level,
+        std::unique_ptr<platform::pmc::PmcGroup>& pmc
+    );
     void flush_cache_and_warmup(CacheProfilerList& list, size_t count) const;
     double growth_factor_for(size_t size_bytes) const noexcept;
     static size_t level_index(CacheLevel level) noexcept;

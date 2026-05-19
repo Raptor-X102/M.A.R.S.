@@ -11,13 +11,8 @@ WriteBufferMeasurer::WriteBufferMeasurer() : WriteBufferMeasurer(Config{}) {}
 
 WriteBufferMeasurer::WriteBufferMeasurer(Config config) : config_(std::move(config)) {
     SPDLOG_INFO(
-        "[{}] cfg: min_writes={} max_writes={} step={} samples_per_repeat={} repeats={}",
-        name(),
-        config_.min_writes,
-        config_.max_writes,
-        config_.writes_step,
-        config_.iterations,
-        config_.repeats
+        "[{}] cfg: min_writes={} max_writes={} step={} samples_per_repeat={} repeats={}", name(), config_.min_writes,
+        config_.max_writes, config_.writes_step, config_.iterations, config_.repeats
     );
 }
 
@@ -103,11 +98,7 @@ void WriteBufferMeasurer::measure(shared_types::CpuInfoData& data) {
 }
 
 WriteBufferResult WriteBufferMeasurer::measure_for_writes(
-    size_t num_writes,
-    int* fill_base,
-    volatile int* extra_addr,
-    volatile int& dummy,
-    platform::pmc::PmcGroup* pmc
+    size_t num_writes, int* fill_base, volatile int* extra_addr, volatile int& dummy, platform::pmc::PmcGroup* pmc
 ) {
     const size_t stride = kCacheLineSize / kBytesPerEntry;
 
@@ -187,10 +178,7 @@ WriteBufferResult WriteBufferMeasurer::measure_for_writes(
         SPDLOG_DEBUG("[{}] num_writes={}, samples: ticks={:.2f}+-{:.2f}", name(), num_writes, avg, stddev);
         for (size_t i = 0; i < avg_events.size(); ++i) {
             SPDLOG_DEBUG(
-                "[{}]   event{} = {} total, {:.2f} per iter",
-                name(),
-                i,
-                avg_events[i],
+                "[{}]   event{} = {} total, {:.2f} per iter", name(), i, avg_events[i],
                 double(avg_events[i]) / config_.iterations
             );
         }
@@ -199,11 +187,8 @@ WriteBufferResult WriteBufferMeasurer::measure_for_writes(
 }
 
 size_t WriteBufferMeasurer::analyze_buffer_capacity(
-    const std::vector<WriteBufferResult>& results,
-    const std::vector<size_t>& writes_list,
-    bool /*has_pmc*/,
-    size_t sb_idx,
-    size_t bound_idx
+    const std::vector<WriteBufferResult>& results, const std::vector<size_t>& writes_list, bool /*has_pmc*/,
+    size_t sb_idx, size_t bound_idx
 ) {
     if (results.size() < config_.baseline_window + 2)
         return writes_list.back();
@@ -257,11 +242,7 @@ size_t WriteBufferMeasurer::analyze_buffer_capacity(
     }
 
     SPDLOG_INFO(
-        "[{}] baseline = {:.2f}, threshold = {:.2f}, capacity = {}",
-        name(),
-        baseline,
-        spike_threshold,
-        capacity
+        "[{}] baseline = {:.2f}, threshold = {:.2f}, capacity = {}", name(), baseline, spike_threshold, capacity
     );
     return capacity;
 }
