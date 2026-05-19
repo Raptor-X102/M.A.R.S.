@@ -17,33 +17,32 @@ permissions:
 jobs:
   format:
     name: Format (clang-format)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    env:
+      CLANG_FORMAT_BIN: clang-format-22
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install clang-format
+      - name: Install clang-format 22
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends clang-format
+          sudo apt-get install -y --no-install-recommends ca-certificates gpg wget
+
+          wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo tee /etc/apt/trusted.gpg.d/apt.llvm.org.asc >/dev/null
+
+          . /etc/os-release
+          echo "deb http://apt.llvm.org/${VERSION_CODENAME}/ llvm-toolchain-${VERSION_CODENAME}-22 main" | \
+            sudo tee /etc/apt/sources.list.d/llvm.list >/dev/null
+
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends clang-format-22
 
       - name: Check formatting
         shell: bash
         run: |
-          mapfile -d '' files < <(
-            find include src -type f \
-              \( -name '*.cpp' -o -name '*.hpp' -o -name '*.cc' -o -name '*.cxx' -o -name '*.h' -o -name '*.hh' \) \
-              -print0 | sort -z
-          )
-
-          if [ "${#files[@]}" -eq 0 ]; then
-            echo "No C/C++ source files found to format."
-            exit 0
-          fi
-
-          clang-format -i "${files[@]}"
-          git diff --exit-code -- "${files[@]}"
+          ./scripts/clang-format-all.sh --check
 
   static-analysis:
     name: Static Analysis (cppcheck)
