@@ -2,10 +2,11 @@
 
 namespace silicon_probe::shared_types {
 
+// Cache levels used by cache benchmarks.
 enum class CacheLevel {
-    l1d = 0,
-    l2  = 1,
-    l3  = 2,
+    l1d = 0,  // L1 data cache.
+    l2  = 1,  // L2 cache.
+    l3  = 2,  // L3 or last-level cache.
 };
 
 }
