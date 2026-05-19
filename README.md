@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/assets/mars-logo.png" alt="M.A.R.S. Logo" width="100%">
+</p>
+
 # M.A.R.S. — MicroArchitecture Reconnaissance System
 
 **M.A.R.S.** — это исследовательский инструмент для определения микроархитектурных характеристик современных процессоров путём прямых измерений времени доступа к памяти и выполнения инструкций. В отличие от утилит, которые просто считывают фиксированные спецификации (например, `CPUID` или системные файлы), **M.A.R.S.** активно зондирует поведение аппаратуры, что позволяет увидеть реальные параметры, такие как латентность и размеры кэшей, глубина конвейера, характеристики предсказателя переходов и многое другое. Проект ориентирован на изучение архитектуры процессоров, оптимизацию кода и low-level исследования.
@@ -42,6 +46,117 @@
 ### 10. Размер буфера записи (Write Buffer)
 **Идея:** Буфер записи временно хранит запросы на запись, прежде чем они попадут в кэш или память. Чтобы оценить его ёмкость, мы будем выполнять серию `non-temporal` записей (минуя кэш) в разные адреса, а затем одно чтение из другого адреса. Измеряем время этого чтения. Пока число записей меньше размера буфера, чтение может начаться без задержки. Как только буфер переполняется, последующие записи блокируются, и чтение задерживается. По графику зависимости времени от числа записей можно определить глубину буфера.
 
+
+## Сборка и запуск через Docker
+
+Для контейнерного запуска в репозитории есть готовые файлы:
+
+- `Dockerfile`
+- `docker-compose.yml`
+- `docs/docker.md`
+
+### Сборка образа через Docker
+
+```bash
+docker build -t mars-cli:local .
+```
+
+### Базовый запуск через Docker
+
+Запуск с конфигом по умолчанию:
+
+```bash
+docker run --rm mars-cli:local
+```
+
+Запуск с явным конфигом:
+
+```bash
+docker run --rm mars-cli:local --config config/mars_example.yaml
+```
+
+### Запуск через Docker с CLI-опциями
+
+С подробным логом:
+
+```bash
+docker run --rm mars-cli:local --log-level debug
+```
+
+Без итоговой summary:
+
+```bash
+docker run --rm mars-cli:local --no-summary
+```
+
+Без вывода логов в консоль:
+
+```bash
+docker run --rm mars-cli:local --no-console
+```
+
+С логом в файл:
+
+```bash
+mkdir -p logs
+
+docker run --rm \
+  -v "$(pwd)/config:/opt/mars/config:ro" \
+  -v "$(pwd)/logs:/opt/mars/logs" \
+  mars-cli:local \
+  --config config/mars_example.yaml \
+  --log-level debug \
+  --log-file logs/docker.log
+```
+
+### Сборка и запуск через Docker Compose
+
+Сборка:
+
+```bash
+docker compose build
+```
+
+Обычный запуск:
+
+```bash
+docker compose run --rm mars
+```
+
+Строгий режим для более контролируемых замеров:
+
+```bash
+docker compose run --rm mars-strict
+```
+
+Запуск strict-режима на другом CPU:
+
+```bash
+MARS_CPUSET=3 docker compose run --rm mars-strict
+```
+
+### Какие CLI-опции доступны у `mars`
+
+Основные опции, которые можно передавать и при обычном запуске, и в Docker:
+
+- `--config` или `-c` — путь к YAML-конфигу
+- `--log-level` — уровень логирования
+- `--log-file` — запись лога в файл
+- `--no-console` — отключить логирование в консоль
+- `--no-summary` — не печатать итоговую сводку
+
+Пример комбинированного запуска:
+
+```bash
+docker run --rm \
+  -v "$(pwd)/config:/opt/mars/config:ro" \
+  mars-cli:local \
+  --config config/mars_example.yaml \
+  --log-level info \
+  --no-summary
+```
+
+Подробности по правам контейнера, `cpuset`, `perf_event_open`, `realtime_priority` и `lock_frequency` вынесены в `docs/docker.md`.
 
 
 ## Планируемые возможности
