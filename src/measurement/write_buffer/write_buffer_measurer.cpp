@@ -12,42 +12,50 @@ WriteBufferMeasurer::WriteBufferMeasurer() : WriteBufferMeasurer(Config{}) {}
 WriteBufferMeasurer::WriteBufferMeasurer(Config config) : config_(std::move(config)) {
     validateConfig();
     SPDLOG_DEBUG(
-        "[{}] cfg: min_writes={} max_writes={} step={} samples_per_repeat={} repeats={}",
-        name(),
-        config_.min_writes,
-        config_.max_writes,
-        config_.writes_step,
-        config_.iterations,
-        config_.repeats
+        "[{}] cfg: min_writes={} max_writes={} step={} samples_per_repeat={} repeats={}", name(), config_.min_writes,
+        config_.max_writes, config_.writes_step, config_.iterations, config_.repeats
     );
 }
 
 std::string_view WriteBufferMeasurer::name() const noexcept { return "write_buffer"; }
 
 void WriteBufferMeasurer::validateConfig() {
-    if (config_.min_writes == 0) config_.min_writes = kDefaultMinWrites;
-    if (config_.max_writes == 0) config_.max_writes = kDefaultMaxWrites;
+    if (config_.min_writes == 0)
+        config_.min_writes = kDefaultMinWrites;
+    if (config_.max_writes == 0)
+        config_.max_writes = kDefaultMaxWrites;
     if (config_.min_writes > config_.max_writes) {
         std::swap(config_.min_writes, config_.max_writes);
     }
-    if (config_.writes_step == 0) config_.writes_step = kDefaultWritesStep;
-    if (config_.iterations == 0) config_.iterations = kDefaultIterations;
-    if (config_.repeats == 0) config_.repeats = kDefaultRepeats;
-    if (config_.warmup_iterations == 0) config_.warmup_iterations = kDefaultWarmupIterations;
+    if (config_.writes_step == 0)
+        config_.writes_step = kDefaultWritesStep;
+    if (config_.iterations == 0)
+        config_.iterations = kDefaultIterations;
+    if (config_.repeats == 0)
+        config_.repeats = kDefaultRepeats;
+    if (config_.warmup_iterations == 0)
+        config_.warmup_iterations = kDefaultWarmupIterations;
 
-    if (config_.latency_spike_ratio < 1.1) config_.latency_spike_ratio = 2.0;
-    if (config_.latency_hold_ratio < 1.0) config_.latency_hold_ratio = 1.5;
+    if (config_.latency_spike_ratio < 1.1)
+        config_.latency_spike_ratio = 2.0;
+    if (config_.latency_hold_ratio < 1.0)
+        config_.latency_hold_ratio = 1.5;
     if (config_.stall_fallback_ratio < 0.0 || config_.stall_fallback_ratio > 1.0)
         config_.stall_fallback_ratio = 0.9;
-    if (config_.baseline_window < 1) config_.baseline_window = 3;
-    if (config_.stall_baseline_ratio < 1.0) config_.stall_baseline_ratio = 10.0;
-    if (config_.stall_absolute_min < 0.0) config_.stall_absolute_min = 100.0;
-    if (config_.stall_gradient_ratio < 1.0) config_.stall_gradient_ratio = 2.0;
-    if (config_.stall_median_window < 1) config_.stall_median_window = 3;
+    if (config_.baseline_window < 1)
+        config_.baseline_window = 3;
+    if (config_.stall_baseline_ratio < 1.0)
+        config_.stall_baseline_ratio = 10.0;
+    if (config_.stall_absolute_min < 0.0)
+        config_.stall_absolute_min = 100.0;
+    if (config_.stall_gradient_ratio < 1.0)
+        config_.stall_gradient_ratio = 2.0;
+    if (config_.stall_median_window < 1)
+        config_.stall_median_window = 3;
 
     const size_t buffer_bytes = kBufferSizeMB * 1024 * 1024;
     const size_t num_elements = buffer_bytes / kBytesPerEntry;
-    const size_t region_size = ((config_.max_writes * kCacheLineSize) + kCacheLineSize - 1) & ~(kCacheLineSize - 1);
+    const size_t region_size  = ((config_.max_writes * kCacheLineSize) + kCacheLineSize - 1) & ~(kCacheLineSize - 1);
     if ((config_.max_writes + 1) * region_size > num_elements * kBytesPerEntry) {
         SPDLOG_WARN("[{}] Buffer too small for max_writes={}, reducing", name(), config_.max_writes);
         config_.max_writes = (num_elements * kBytesPerEntry) / region_size - 1;
@@ -139,11 +147,7 @@ void WriteBufferMeasurer::measure(shared_types::CpuInfoData& data) {
 }
 
 WriteBufferResult WriteBufferMeasurer::measure_for_writes(
-    size_t num_writes,
-    int* fill_base,
-    volatile int* extra_addr,
-    volatile int& dummy,
-    platform::pmc::PmcGroup* pmc
+    size_t num_writes, int* fill_base, volatile int* extra_addr, volatile int& dummy, platform::pmc::PmcGroup* pmc
 ) {
     // warmup
     for (size_t w = 0; w < config_.warmup_iterations; ++w) {
@@ -186,7 +190,7 @@ WriteBufferResult WriteBufferMeasurer::measure_for_writes(
             const_cast<int*>(extra_addr)[0] = 0xdeadbeef;
             dummy                           = *extra_addr;
             platform::arch::lfence();
-            uint64_t end                    = platform::arch::tick();
+            uint64_t end = platform::arch::tick();
             total_ticks += (end - start);
         }
 
@@ -222,10 +226,7 @@ WriteBufferResult WriteBufferMeasurer::measure_for_writes(
         SPDLOG_DEBUG("[{}] num_writes={}, samples: ticks={:.2f}+-{:.2f}", name(), num_writes, avg, stddev);
         for (size_t i = 0; i < avg_events.size(); ++i) {
             SPDLOG_DEBUG(
-                "[{}]   event{} = {} total, {:.2f} per iter",
-                name(),
-                i,
-                avg_events[i],
+                "[{}]   event{} = {} total, {:.2f} per iter", name(), i, avg_events[i],
                 double(avg_events[i]) / config_.iterations
             );
         }
@@ -234,9 +235,7 @@ WriteBufferResult WriteBufferMeasurer::measure_for_writes(
 }
 
 size_t WriteBufferMeasurer::analyze_buffer_capacity(
-    const std::vector<WriteBufferResult>& results,
-    const std::vector<size_t>& writes_list,
-    size_t sb_idx,
+    const std::vector<WriteBufferResult>& results, const std::vector<size_t>& writes_list, size_t sb_idx,
     size_t bound_idx
 ) const {
     if (results.size() < config_.baseline_window + 2)
@@ -278,7 +277,7 @@ size_t WriteBufferMeasurer::analyze_buffer_capacity(
 
     // Baseline stalls from first baseline_window points
     double baseline_stalls = 0.0;
-    size_t stall_window = std::min(config_.baseline_window, results.size());
+    size_t stall_window    = std::min(config_.baseline_window, results.size());
     for (size_t i = 0; i < stall_window; ++i) {
         baseline_stalls += getStalls(results[i]);
     }
@@ -287,7 +286,7 @@ size_t WriteBufferMeasurer::analyze_buffer_capacity(
     // Absolute threshold to avoid noise when baseline_stalls is near zero
     double threshold_absolute = config_.stall_absolute_min;
     double threshold_relative = baseline_stalls * config_.stall_baseline_ratio;
-    double stall_threshold = std::max(threshold_relative, threshold_absolute);
+    double stall_threshold    = std::max(threshold_relative, threshold_absolute);
 
     // Find first point where stalls exceed threshold
     for (size_t i = 0; i < results.size(); ++i) {
@@ -307,7 +306,7 @@ size_t WriteBufferMeasurer::analyze_buffer_capacity(
                 recent.push_back(getStalls(results[j]));
             std::sort(recent.begin(), recent.end());
             double median = recent[recent.size() / 2];
-            double cur = getStalls(results[i]);
+            double cur    = getStalls(results[i]);
             if (median > 0.0 && cur / median > config_.stall_gradient_ratio) {
                 capacity = writes_list[i];
                 return capacity;
@@ -316,11 +315,7 @@ size_t WriteBufferMeasurer::analyze_buffer_capacity(
     }
 
     SPDLOG_DEBUG(
-        "[{}] baseline = {:.2f}, threshold = {:.2f}, capacity = {}",
-        name(),
-        baseline,
-        spike_threshold,
-        capacity
+        "[{}] baseline = {:.2f}, threshold = {:.2f}, capacity = {}", name(), baseline, spike_threshold, capacity
     );
     return capacity;
 }

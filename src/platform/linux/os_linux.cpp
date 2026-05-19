@@ -236,8 +236,7 @@ void disable_turbo_boost() {
 
     // Try generic path first, then vendor-specific
     const std::vector<std::string> paths = {
-        "/sys/devices/system/cpu/cpufreq/boost",
-        "/sys/devices/system/cpu/intel_pstate/no_turbo"
+        "/sys/devices/system/cpu/cpufreq/boost", "/sys/devices/system/cpu/intel_pstate/no_turbo"
     };
 
     for (const auto& p : paths) {

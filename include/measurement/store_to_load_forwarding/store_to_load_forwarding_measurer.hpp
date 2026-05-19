@@ -20,8 +20,8 @@ namespace silicon_probe::store_to_load_forwarding {
 
 /** @brief Result for one `(size, offset)` test. */
 struct StoreToLoadForwardingResult {
-    double                avg_ticks;   ///< Average cycles for one store+load pair.
-    double                ticks_std;   ///< Std. dev. of the cycles.
+    double avg_ticks;                  ///< Average cycles for one store+load pair.
+    double ticks_std;                  ///< Std. dev. of the cycles.
     std::vector<uint64_t> avg_events;  ///< Average counter values for this test.
 };
 
@@ -43,16 +43,16 @@ class StoreToLoadForwardingMeasurer final : public core::Measurer {
 
     /** @brief Settings for the store-to-load forwarding benchmark. */
     struct Config {
-        bool   enabled                        = true;                     ///< Turn this measurer on or off.
-        platform::MeasurementEnvironmentOptions environment;              ///< CPU and scheduler settings for the run.
-        size_t min_offset                     = kDefaultMinOffset;        ///< Smallest offset to test.
-        size_t max_offset                     = kDefaultMaxOffset;        ///< Largest offset to test.
-        size_t offset_step                    = kDefaultOffsetStep;       ///< Step between offsets.
-        size_t iterations                     = kDefaultIterations;       ///< Number of pairs inside one repeat.
-        size_t repeats                        = kDefaultRepeats;          ///< Number of repeats for one point.
-        size_t warmup_iterations              = kDefaultWarmupIterations; ///< Warm-up runs before timing.
-        double time_growth_ratio              = 1.5;                      ///< Max time growth that still looks good.
-        double pmc_saturation_ratio           = 0.01;                     ///< Max counter ratio that still looks good.
+        bool enabled = true;                                     ///< Turn this measurer on or off.
+        platform::MeasurementEnvironmentOptions environment;     ///< CPU and scheduler settings for the run.
+        size_t min_offset           = kDefaultMinOffset;         ///< Smallest offset to test.
+        size_t max_offset           = kDefaultMaxOffset;         ///< Largest offset to test.
+        size_t offset_step          = kDefaultOffsetStep;        ///< Step between offsets.
+        size_t iterations           = kDefaultIterations;        ///< Number of pairs inside one repeat.
+        size_t repeats              = kDefaultRepeats;           ///< Number of repeats for one point.
+        size_t warmup_iterations    = kDefaultWarmupIterations;  ///< Warm-up runs before timing.
+        double time_growth_ratio    = 1.5;                       ///< Max time growth that still looks good.
+        double pmc_saturation_ratio = 0.01;                      ///< Max counter ratio that still looks good.
     };
 
     /** @brief Builds the measurer with default settings. */
@@ -91,8 +91,9 @@ class StoreToLoadForwardingMeasurer final : public core::Measurer {
      * @return Result for this test.
      */
     template <size_t N>
-    StoreToLoadForwardingResult
-    run_test(size_t offset, platform::pmc::PmcGroup* pmc, const std::vector<std::string>& ev_names);
+    StoreToLoadForwardingResult run_test(
+        size_t offset, platform::pmc::PmcGroup* pmc, const std::vector<std::string>& ev_names
+    );
 };
 
 }  // namespace silicon_probe::store_to_load_forwarding

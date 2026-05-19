@@ -18,27 +18,27 @@ namespace silicon_probe::return_address_stack {
  */
 class ReturnAddressStackMeasurer final : public core::Measurer {
    public:
-    static constexpr size_t kDefaultMinRecursion  = 1;
-    static constexpr size_t kDefaultMaxRecursion  = 32;
-    static constexpr size_t kDefaultRecursionStep = 1;
-    static constexpr size_t kDefaultIterations    = 10'000;
+    static constexpr size_t kDefaultMinRecursion   = 1;
+    static constexpr size_t kDefaultMaxRecursion   = 32;
+    static constexpr size_t kDefaultRecursionStep  = 1;
+    static constexpr size_t kDefaultIterations     = 10'000;
     static constexpr size_t kMaxSafeRecursionDepth = 64;
 
     /** @brief Settings for the RAS benchmark. */
     struct Config {
-        bool   enabled                        = true;                 ///< Turn this measurer on or off.
-        platform::MeasurementEnvironmentOptions environment;          ///< CPU and scheduler settings for the run.
-        size_t min_recursion_depth            = kDefaultMinRecursion; ///< Smallest recursion depth to test.
-        size_t max_recursion_depth            = kDefaultMaxRecursion; ///< Largest recursion depth to test.
-        size_t recursion_depth_step           = kDefaultRecursionStep;///< Step between recursion depths.
-        size_t iterations                     = kDefaultIterations;   ///< Number of timing samples for one depth.
-        double trim_ratio                     = 0.02;                 ///< Part of extreme samples to remove.
+        bool enabled = true;                                  ///< Turn this measurer on or off.
+        platform::MeasurementEnvironmentOptions environment;  ///< CPU and scheduler settings for the run.
+        size_t min_recursion_depth  = kDefaultMinRecursion;   ///< Smallest recursion depth to test.
+        size_t max_recursion_depth  = kDefaultMaxRecursion;   ///< Largest recursion depth to test.
+        size_t recursion_depth_step = kDefaultRecursionStep;  ///< Step between recursion depths.
+        size_t iterations           = kDefaultIterations;     ///< Number of timing samples for one depth.
+        double trim_ratio           = 0.02;                   ///< Part of extreme samples to remove.
 
-        size_t smoothing_window               = 3;                    ///< Median-window size before jump search.
-        double noise_estimation_ratio         = 0.5;                  ///< Reserved for future logic.
-        double threshold_multiplier           = 5.0;                  ///< Reserved for future logic.
-        size_t sustained_window               = 3;                    ///< Reserved for future logic.
-        double sustained_ratio                = 1.15;                 ///< Min time ratio after the jump.
+        size_t smoothing_window       = 3;     ///< Median-window size before jump search.
+        double noise_estimation_ratio = 0.5;   ///< Reserved for future logic.
+        double threshold_multiplier   = 5.0;   ///< Reserved for future logic.
+        size_t sustained_window       = 3;     ///< Reserved for future logic.
+        double sustained_ratio        = 1.15;  ///< Min time ratio after the jump.
     };
 
     /** @brief Builds the measurer with default settings. */

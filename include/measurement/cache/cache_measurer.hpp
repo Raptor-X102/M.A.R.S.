@@ -25,7 +25,7 @@
 
 namespace silicon_probe::cache {
 
-using CacheLevel = silicon_probe::shared_types::CacheLevel;
+using CacheLevel     = silicon_probe::shared_types::CacheLevel;
 namespace statistics = silicon_probe::common::statistics;
 
 /**
@@ -62,43 +62,43 @@ class CacheMeasurer final : public core::Measurer {
 
     /** @brief Settings for the cache benchmark. */
     struct Config {
-        bool                               enabled                           = true;               ///< Turn this measurer on or off.
-        std::bitset<3>                     levels                            = std::bitset<3>(0b111); ///< Cache levels to test.
-        size_t                             l1_max                            = kL1MaxSize;        ///< Largest L1 test size in bytes.
-        size_t                             l2_max                            = kL2MaxSize;        ///< Largest L2 test size in bytes.
-        size_t                             l3_max                            = kL3MaxSize;        ///< Largest L3 test size in bytes.
-        size_t                             cache_min_lines                   = kDefaultCacheMinLines; ///< Smallest test size in cache lines.
-        bool                               use_huge_pages                    = false;             ///< Use huge pages for the test buffer.
-        unsigned int                       seed                              = kDefaultSeed;      ///< Seed for list generation.
-        size_t                             warmup_iterations                 = kDefaultWarmupIterations; ///< Warm-up runs before timing.
-        size_t                             precision                         = kDefaultPrecision; ///< Target precision in bytes.
-        size_t                             target_accesses                   = kDefaultTargetAccesses; ///< Target number of accesses in one sample.
-        size_t                             min_iterations                    = kDefaultMinIterations; ///< Smallest loop count for one sample.
-        size_t                             max_iterations                    = kDefaultMaxIterations; ///< Largest loop count for one sample.
-        size_t                             refinement_samples                = kBaselineSamples;  ///< Number of samples in refine mode.
-        double                             baseline_stability_threshold      = kStabilityThreshold; ///< Allowed base noise.
-        double                             l1_growth_factor                  = kL1GrowthFactor;   ///< Time growth ratio for L1.
-        double                             l2_growth_factor                  = kL2GrowthFactor;   ///< Time growth ratio for L2.
-        double                             l3_growth_factor                  = kL3GrowthFactor;   ///< Time growth ratio for L3.
-        double                             l2_refinement_growth_multiplier   = kDefaultL2RefinementGrowthMultiplier; ///< Extra L2 refine factor.
-        double                             decision_tolerance                = kDecisionTolerance; ///< Max gap between two final estimates.
+        bool enabled                           = true;                      ///< Turn this measurer on or off.
+        std::bitset<3> levels                  = std::bitset<3>(0b111);     ///< Cache levels to test.
+        size_t l1_max                          = kL1MaxSize;                ///< Largest L1 test size in bytes.
+        size_t l2_max                          = kL2MaxSize;                ///< Largest L2 test size in bytes.
+        size_t l3_max                          = kL3MaxSize;                ///< Largest L3 test size in bytes.
+        size_t cache_min_lines                 = kDefaultCacheMinLines;     ///< Smallest test size in cache lines.
+        bool use_huge_pages                    = false;                     ///< Use huge pages for the test buffer.
+        unsigned int seed                      = kDefaultSeed;              ///< Seed for list generation.
+        size_t warmup_iterations               = kDefaultWarmupIterations;  ///< Warm-up runs before timing.
+        size_t precision                       = kDefaultPrecision;         ///< Target precision in bytes.
+        size_t target_accesses                 = kDefaultTargetAccesses;  ///< Target number of accesses in one sample.
+        size_t min_iterations                  = kDefaultMinIterations;   ///< Smallest loop count for one sample.
+        size_t max_iterations                  = kDefaultMaxIterations;   ///< Largest loop count for one sample.
+        size_t refinement_samples              = kBaselineSamples;        ///< Number of samples in refine mode.
+        double baseline_stability_threshold    = kStabilityThreshold;     ///< Allowed base noise.
+        double l1_growth_factor                = kL1GrowthFactor;         ///< Time growth ratio for L1.
+        double l2_growth_factor                = kL2GrowthFactor;         ///< Time growth ratio for L2.
+        double l3_growth_factor                = kL3GrowthFactor;         ///< Time growth ratio for L3.
+        double l2_refinement_growth_multiplier = kDefaultL2RefinementGrowthMultiplier;  ///< Extra L2 refine factor.
+        double decision_tolerance              = kDecisionTolerance;  ///< Max gap between two final estimates.
 
-        double                             l1_miss_rate_threshold            = kDefaultL1MissRateThreshold; ///< Miss-rate limit for L1.
-        double                             l2_miss_rate_threshold            = kDefaultL2MissRateThreshold; ///< Miss-rate limit for L2.
-        double                             l3_miss_rate_threshold            = kDefaultL3MissRateThreshold; ///< Miss-rate limit for L3.
-        double                             l1_miss_growth_factor             = kDefaultL1MissGrowthFactor;  ///< Miss growth ratio for L1.
-        double                             l2_miss_growth_factor             = kDefaultL2MissGrowthFactor;  ///< Miss growth ratio for L2.
-        double                             l3_miss_growth_factor             = kDefaultL3MissGrowthFactor;  ///< Miss growth ratio for L3.
+        double l1_miss_rate_threshold = kDefaultL1MissRateThreshold;  ///< Miss-rate limit for L1.
+        double l2_miss_rate_threshold = kDefaultL2MissRateThreshold;  ///< Miss-rate limit for L2.
+        double l3_miss_rate_threshold = kDefaultL3MissRateThreshold;  ///< Miss-rate limit for L3.
+        double l1_miss_growth_factor  = kDefaultL1MissGrowthFactor;   ///< Miss growth ratio for L1.
+        double l2_miss_growth_factor  = kDefaultL2MissGrowthFactor;   ///< Miss growth ratio for L2.
+        double l3_miss_growth_factor  = kDefaultL3MissGrowthFactor;   ///< Miss growth ratio for L3.
 
-        platform::MeasurementEnvironmentOptions environment;                 ///< CPU and scheduler settings for the run.
+        platform::MeasurementEnvironmentOptions environment;  ///< CPU and scheduler settings for the run.
     };
 
     /** @brief Result for one cache test point. */
     struct MeasurementResult {
-        size_t size_bytes         = 0;     ///< Tested size in bytes.
-        double cycles_per_element = 0.0;   ///< Average cycles per element.
-        double miss_rate          = 0.0;   ///< Measured miss rate.
-        bool   has_pmc            = false; ///< `true` if counter data is valid.
+        size_t size_bytes         = 0;      ///< Tested size in bytes.
+        double cycles_per_element = 0.0;    ///< Average cycles per element.
+        double miss_rate          = 0.0;    ///< Measured miss rate.
+        bool has_pmc              = false;  ///< `true` if counter data is valid.
     };
 
     /** @brief Builds the measurer with default settings. */
@@ -125,8 +125,8 @@ class CacheMeasurer final : public core::Measurer {
    private:
     /** @brief Rough jump found in the first scan. */
     struct BoundaryResult {
-        size_t index          = 0;   ///< Index of the first jump candidate.
-        double baseline_value = 0.0; ///< Base time near this candidate.
+        size_t index          = 0;    ///< Index of the first jump candidate.
+        double baseline_value = 0.0;  ///< Base time near this candidate.
     };
 
     Config config_;
@@ -145,11 +145,10 @@ class CacheMeasurer final : public core::Measurer {
      * @param max_size Largest size in bytes.
      * @param target_field Field in @p data that gets the result.
      */
-    void measure_level(shared_types::CpuInfoData& data,
-                       CacheLevel level,
-                       size_t min_size,
-                       size_t max_size,
-                       std::optional<size_t> shared_types::CpuInfoData::* target_field);
+    void measure_level(
+        shared_types::CpuInfoData& data, CacheLevel level, size_t min_size, size_t max_size,
+        std::optional<size_t> shared_types::CpuInfoData::* target_field
+    );
 
     /**
      * @brief Opens miss counters for one cache level.
@@ -157,8 +156,9 @@ class CacheMeasurer final : public core::Measurer {
      * @param data Known CPU data.
      * @return Counter group, or `nullptr` for time-only mode.
      */
-    std::unique_ptr<platform::pmc::PmcGroup> open_pmc_for_level(CacheLevel level,
-                                                                shared_types::CpuInfoData& data) const;
+    std::unique_ptr<platform::pmc::PmcGroup> open_pmc_for_level(
+        CacheLevel level, shared_types::CpuInfoData& data
+    ) const;
 
     /**
      * @brief Measures many sizes in one range.
@@ -167,9 +167,9 @@ class CacheMeasurer final : public core::Measurer {
      * @param pmc Optional counter group for miss data.
      * @return Measured points in order.
      */
-    std::vector<MeasurementResult> measure_range(size_t min_size,
-                                                 size_t max_size,
-                                                 std::unique_ptr<platform::pmc::PmcGroup>& pmc);
+    std::vector<MeasurementResult> measure_range(
+        size_t min_size, size_t max_size, std::unique_ptr<platform::pmc::PmcGroup>& pmc
+    );
 
     /**
      * @brief Measures one size without counters.
@@ -186,8 +186,9 @@ class CacheMeasurer final : public core::Measurer {
      * @param pmc Counter group for cache misses.
      * @return Result with time and miss data.
      */
-    MeasurementResult do_single_measurement_with_pmc(CacheProfilerList* list, size_t count, 
-                                                     platform::pmc::PmcGroup& pmc);
+    MeasurementResult do_single_measurement_with_pmc(
+        CacheProfilerList* list, size_t count, platform::pmc::PmcGroup& pmc
+    );
 
     /**
      * @brief Finds a rough time jump.
@@ -220,10 +221,10 @@ class CacheMeasurer final : public core::Measurer {
      * @param pmc Counter group for miss data.
      * @return Refined cache size in bytes.
      */
-    size_t refine_boundary_misses(const std::vector<MeasurementResult>& results,
-                                  size_t miss_index,
-                                  CacheLevel level,
-                                  std::unique_ptr<platform::pmc::PmcGroup>& pmc);
+    size_t refine_boundary_misses(
+        const std::vector<MeasurementResult>& results, size_t miss_index, CacheLevel level,
+        std::unique_ptr<platform::pmc::PmcGroup>& pmc
+    );
 
     /**
      * @brief Flushes and warms the test buffer.
@@ -264,12 +265,11 @@ class CacheMeasurer final : public core::Measurer {
      * @return Result for the current test size.
      */
     template <typename PreFn, typename PostFn>
-    MeasurementResult
-    measure_impl(CacheProfilerList* list, size_t count, PreFn&& pre, PostFn&& post) {
+    MeasurementResult measure_impl(CacheProfilerList* list, size_t count, PreFn&& pre, PostFn&& post) {
         // Pick loop count from the target access count.
-        size_t iterations = config_.target_accesses / count;
-        iterations = std::max(iterations, config_.min_iterations);
-        iterations = std::min(iterations, config_.max_iterations);
+        size_t iterations          = config_.target_accesses / count;
+        iterations                 = std::max(iterations, config_.min_iterations);
+        iterations                 = std::min(iterations, config_.max_iterations);
         const uint64_t total_loads = static_cast<uint64_t>(count) * iterations;
 
         // Flush and warm the buffer before timing.
@@ -290,10 +290,10 @@ class CacheMeasurer final : public core::Measurer {
         std::optional<double> miss_rate_opt = post(total_loads);
 
         MeasurementResult result;
-        result.size_bytes = 0; // The caller sets the real size.
+        result.size_bytes         = 0;  // The caller sets the real size.
         result.cycles_per_element = static_cast<double>(end - start) / static_cast<double>(total_loads);
-        result.has_pmc = miss_rate_opt.has_value();
-        result.miss_rate = miss_rate_opt.value_or(0.0);
+        result.has_pmc            = miss_rate_opt.has_value();
+        result.miss_rate          = miss_rate_opt.value_or(0.0);
         return result;
     }
 
@@ -309,8 +309,9 @@ class CacheMeasurer final : public core::Measurer {
      * @return Refined limit in bytes.
      */
     template <typename MeasureFn>
-    size_t
-    refine_boundary(size_t left, size_t right, size_t precision, double growth_factor, MeasureFn&& measure, double baseline_mean) const {
+    size_t refine_boundary(
+        size_t left, size_t right, size_t precision, double growth_factor, MeasureFn&& measure, double baseline_mean
+    ) const {
         SPDLOG_INFO("[boundary] baseline={}, threshold={}x", baseline_mean, growth_factor);
 
         size_t current_left  = left;
@@ -330,12 +331,8 @@ class CacheMeasurer final : public core::Measurer {
             const bool out_of_cache = ratio > growth_factor;
 
             SPDLOG_INFO(
-                "[boundary] size={}, mean={}, ratio={}, threshold={}, decision={}",
-                midpoint,
-                statistics.mean,
-                ratio,
-                growth_factor,
-                out_of_cache ? "out" : "in"
+                "[boundary] size={}, mean={}, ratio={}, threshold={}, decision={}", midpoint, statistics.mean, ratio,
+                growth_factor, out_of_cache ? "out" : "in"
             );
 
             if (out_of_cache) {
