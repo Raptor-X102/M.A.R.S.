@@ -26,8 +26,8 @@ class CacheProfilerList {
    public:
     /** @brief Memory backend used for the pointer list buffer. */
     enum class MemoryType {
-        aligned,   ///< Regular aligned allocation.
-        huge_page, ///< Huge-page-backed allocation when supported.
+        aligned,    ///< Regular aligned allocation.
+        huge_page,  ///< Huge-page-backed allocation when supported.
     };
 
     /** @brief One node in the pointer-chasing ring. */
