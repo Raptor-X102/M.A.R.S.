@@ -1,139 +1,111 @@
 # TLB Benchmark
 
-## 1. Какую задачу рассматриваем
+## Goal
 
-В этой секции мы оцениваем ёмкость `TLB` для трансляции виртуальных адресов в физические.
+This benchmark estimates the size of the data TLB.
 
-Нас интересуют два уровня:
+It tries to find two limits:
 
 - `L1 DTLB`
 - `L2 TLB / STLB`
 
-Идея эксперимента такая:
+The benchmark does not read fixed CPU tables.
+It measures real runtime behavior.
 
-- процессор читает данные из большого числа разных виртуальных страниц;
-- пока все трансляции помещаются в `TLB`, доступ остаётся дешёвым;
-- когда число страниц становится слишком большим, latency растёт;
-- по первым двум устойчивым перегибам можно оценить размеры `L1 DTLB` и `L2/STLB`.
+## Main Idea
 
-Важно: benchmark измеряет именно поведение data-side translation, а не читает аппаратные спецификации напрямую.
+The CPU reads data from more and more virtual pages.
 
-## 2. Какой результат хотим получить
+- When all address translations fit in the TLB, access stays cheap.
+- When the page count becomes too large, latency goes up.
+- The first two stable jumps are used as estimates for `L1 DTLB` and `L2/STLB`.
 
-По итогам benchmark должен дать две основные метрики:
+The main metric is:
+
+- `median cycles per access`
+
+## Expected Result
+
+The final output has two main values:
 
 - `L1 DTLB estimate: N pages`
 - `L2/STLB estimate: M pages`
 
-Дополнительно эти же значения переводятся в coverage в байтах:
+The summary also shows coverage in bytes:
 
 - `N * page_size`
 - `M * page_size`
 
-Пример итогового вывода:
+Example:
 
 ```text
 L1 DTLB estimate: 64 pages (~262144 bytes coverage)
 L2/STLB estimate: 512 pages (~2097152 bytes coverage)
 ```
 
-Основная внутренняя метрика, по которой строится это решение:
+## Algorithm
 
-- `median cycles per access`
+### 1. Build The Workload
 
-Именно по росту `median cycles/access` при увеличении числа страниц детектор находит точки перегиба.
+The benchmark:
 
-## 3. Какой алгоритм используется
+- builds a sweep like `1, 2, 4, 8, ... max_pages`
+- allocates a page pool
+- places one `PageNode` on each page
+- spreads nodes across cache lines inside each page
+- touches pages before timing, so page faults do not pollute the result
+- warms the instruction path before the main sweep
 
-### Общая схема
-
-Алгоритм состоит из трёх частей:
-
-1. подготовить набор страниц и workload;
-2. измерить latency для разных размеров рабочего множества;
-3. найти два первых устойчивых скачка latency.
-
-### Подготовка workload
-
-Benchmark:
-
-- строит sweep по числу страниц: `1, 2, 4, 8, ... max_pages`;
-- выделяет память под расширенный пул страниц;
-- размещает по одному `PageNode` в каждой странице;
-- разносит offset внутри страницы по разным cache line, чтобы не ловить ложные `L1D` conflicts;
-- делает `pretouch`, чтобы не мерить page faults;
-- прогревает instruction path до основного sweep.
-
-Это реализовано в:
-
-- [tlb_measurer.hpp](/home/rach/rAch-kaplin/M.A.R.S./include/measurement/tlb/tlb_measurer.hpp:150)
-
-Ключевые helper-функции:
+Important helpers in [tlb_measurer.hpp](tlb_measurer.hpp):
 
 - `build_page_counts()`
 - `allocate_mapping()`
-- `page_node_views()`
-- `pretouch_pages()`
+- `make_page_nodes()`
+- `pretouch()`
 - `warm_instruction_path()`
 
-### Как выполняется измерение
+### 2. Measure One Point
 
-Для каждой точки `pages = N` benchmark:
+For each `pages = N`, the benchmark:
 
-1. случайно перемешивает подготовленный пул страниц;
-2. берёт первые `N` страниц как рабочее множество;
-3. связывает их в циклический список;
-4. делает warm-up;
-5. запускает горячий цикл pointer chasing;
-6. считает `cycles/access`;
-7. повторяет это несколько раз и сохраняет `min / median / mean / max`.
+1. shuffles the prepared page pool
+2. takes the first `N` pages
+3. links them into a ring
+4. runs warm-up
+5. runs the hot pointer-chasing loop
+6. computes `cycles/access`
+7. repeats the point several times
 
-Горячий цикл делает только зависимые загрузки:
+The hot loop uses dependent loads:
 
 ```cpp
 cursor = cursor->next;
 ```
 
-Это важно, потому что:
+This is important because the next address depends on the previous load.
+That reduces the effect of prefetching and memory-level parallelism.
 
-- следующий адрес зависит от предыдущего чтения;
-- предвыборка и параллелизм памяти влияют меньше;
-- измерение лучше отражает именно latency translation + access.
+### 3. Detect The Two Boundaries
 
-Это реализовано в:
+After the sweep is complete, the benchmark:
 
-- `measure_point()`
-- `warmup()`
-- `measure_cycles()`
+1. smooths the `median cycles/access` curve
+2. builds a baseline from the first points
+3. finds the first stable jump for `L1 DTLB`
+4. skips a small gap
+5. finds the next stable jump for `L2/STLB`
 
-Код:
+Very small points are ignored for the `L1` candidate, so early noise does not become a false result.
 
-- [tlb_measurer.hpp](/home/rach/rAch-kaplin/M.A.R.S./include/measurement/tlb/tlb_measurer.hpp:401)
-
-### Как находятся L1 и L2
-
-После того как кривая собрана, benchmark:
-
-1. строит сглаженную версию `median cycles/access`;
-2. считает baseline по первым точкам;
-3. ищет первый устойчивый скачок как кандидат в `L1 DTLB`;
-4. после небольшого зазора ищет второй устойчивый скачок как кандидат в `L2/STLB`.
-
-Чтобы не ловить слишком ранний шум, точки меньше `64 pages` не рассматриваются как кандидат на `L1`.
-
-Это реализовано в:
+Important helpers:
 
 - `detect_boundaries()`
 - `moving_average()`
 - `find_jump()`
 
-Код:
+## User Config
 
-- [tlb_measurer.hpp](/home/rach/rAch-kaplin/M.A.R.S./include/measurement/tlb/tlb_measurer.hpp:441)
-
-### Какие параметры задаёт пользователь
-
-Секция конфига специально минимальная:
+The user-facing config is intentionally small:
 
 ```yaml
 benchmarks:
@@ -145,36 +117,32 @@ benchmarks:
       huge_pages: false
 ```
 
-Смысл полей:
+Meaning:
 
-- `max_pages` — максимальная точка sweep;
-- `iterations` — сколько зависимых обращений делать в одном замере;
-- `huge_pages` — использовать ли `2 MiB` huge pages вместо обычных `4 KiB`.
+- `max_pages`: largest sweep point
+- `iterations`: number of dependent accesses in one timed sample
+- `huge_pages`: use `2 MiB` huge pages instead of normal `4 KiB` pages
 
-Парсинг:
+Config parsing is in:
 
-- [config_loader.cpp](/home/rach/rAch-kaplin/M.A.R.S./src/app/config_loader.cpp:538)
+- [src/app/config_loader.cpp](../../../src/app/config_loader.cpp)
 
-Все остальные параметры benchmark зафиксированы в коде как константы, чтобы методика оставалась стабильной и не ломалась случайной настройкой.
+## Summary Output
 
-### Что именно печатается в summary
-
-Итоговая печать делает только две оценки:
+The final summary prints:
 
 - `L1 DTLB estimate`
 - `L2/STLB estimate`
 
-Код:
+Printing code:
 
-- [summary_printer.hpp](/home/rach/rAch-kaplin/M.A.R.S./include/measurement/core/summary_printer.hpp:10)
+- [include/core/summary_printer.hpp](../../../include/core/summary_printer.hpp)
 
-## Краткий вывод
+## Short Validation Note
 
-Эта секция решает конкретную задачу: по кривой `latency vs number of pages` оценить ёмкость `L1 DTLB` и `L2/STLB`.
+This text was checked against the current implementation:
 
-В коде это выражено так:
-
-- `measure()` собирает точки;
-- `measure_point()` и `measure_cycles()` строят сам эксперимент;
-- `detect_boundaries()` превращает кривую в две итоговые оценки;
-- `SummaryPrinter` печатает результат пользователю.
+- workload building in `TlbMeasurer`
+- point measurement in `measure_point()` and `measure_cycles()`
+- boundary detection in `detect_boundaries()`
+- YAML config under `benchmarks.tlb`
